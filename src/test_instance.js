@@ -1,7 +1,5 @@
 const Jesse = require('./jesse');
 
-const SSG = new Jesse();
-
 const data = [
   {
     item: {
@@ -35,12 +33,12 @@ const data = [
   }
 ];
 
-SSG.config({
+Jesse.config({
   root: 'test',
   output: {
-    filename: 'item.fields.slug'
+    filename: 'article/[item.fields.slug].html'
   }
 });
 
-SSG.funnel(() => data);
-SSG.watch();
+Jesse.funnel(() => data);
+Jesse.watch();

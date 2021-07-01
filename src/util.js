@@ -1,3 +1,5 @@
+const path = require('path');
+
 function accessProperty(obj, key, start = 0) {
   if (!key && typeof key !== 'string') {
     throw Error('Undefined key, key must be of type string');
@@ -20,4 +22,23 @@ function accessProperty(obj, key, start = 0) {
   }
 }
 
-module.exports = { accessProperty };
+function concatObjects(target, src) {
+  return Object.assign(target, src);
+}
+
+function getDataArray(arr, current) {
+  if (!Array.isArray(arr)) throw TypeError('Data must be an array');
+  return !current.length && Array.isArray(arr) ? arr : current;
+}
+
+function safeFilePath(file) {
+  const parsedPath = path.parse(file);
+  return path.join(parsedPath.dir, parsedPath.base);
+}
+
+module.exports = {
+  accessProperty,
+  concatObjects,
+  getDataArray,
+  safeFilePath
+};
