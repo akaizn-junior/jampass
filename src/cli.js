@@ -45,8 +45,7 @@ yargs.command({
   handler: args => {
     jesse.serve(args.port);
   }
-})
-  .usage('serve [--port=3000]');
+});
 
 yargs.command({
   command: 'watch',
