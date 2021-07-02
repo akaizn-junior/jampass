@@ -173,9 +173,10 @@ function watch(cb = () => {}) {
  * Starts a development server.
  * Powered by [BrowserSync](https://browsersync.io/docs/api)
  */
-function serve() {
+function serve(port) {
   const serverRoot = path.join(globalConfig.cwd, globalConfig.output.public);
   const bs = browserSync({
+    port: port ?? 3000,
     server: {
       baseDir: serverRoot
     }

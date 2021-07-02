@@ -3,15 +3,16 @@
 const yargs = require('yargs/yargs')(process.argv.slice(2));
 
 const fs = require('fs');
+const pkg = require('../package.json');
 const jesse = require('./jesse');
 
 let settings;
 
 try {
-  const config = `${process.cwd()}/.jesse.js`;
-  const stats = fs.statSync(config);
+  const configTool = `${process.cwd()}/.jesse.js`;
+  const stats = fs.statSync(configTool);
 
-  if (stats.isFile()) settings = require(config);
+  if (stats.isFile()) settings = require(configTool);
 } catch (err) {
   throw err;
 }
@@ -20,13 +21,13 @@ settings?.config && jesse.config(settings.config);
 jesse.funnel(settings?.dataSource ?? (() => []));
 
 yargs.scriptName('jesse');
-yargs.version('0.0.1');
+yargs.version(pkg.version);
 
 yargs.command({
   command: '$0',
   description: 'Generates a static site, simply',
   handler: () => {
-    jesse.build();
+    jesse.gen();
   }
 });
 
@@ -40,11 +41,12 @@ yargs.command({
 
 yargs.command({
   command: 'serve',
-  description: 'Starts a development server and watches for changes',
-  handler: () => {
-    jesse.serve();
+  description: 'Starts a development server and watches for changes. Pass a preferred port to use, default 3000',
+  handler: args => {
+    jesse.serve(args.port);
   }
-});
+})
+  .usage('serve [--port=3000]');
 
 yargs.command({
   command: 'watch',
@@ -54,4 +56,5 @@ yargs.command({
   }
 });
 
+yargs.showHelpOnFail(true, 'jesse');
 yargs.argv;
