@@ -1,6 +1,7 @@
 const consola = require('consola');
 const chokidar = require('chokidar');
 const cons = require('consolidate');
+const browserSync = require('browser-sync');
 
 const fs = require('fs');
 const path = require('path');
@@ -23,7 +24,7 @@ let funneledData = [];
 process.on('uncaughtException', handleErrors);
 process.on('unhandledRejection', handleErrors);
 
-const defaultConfigs = {
+const globalConfig = {
   root: '.',
   input: {
     remote: false,
@@ -41,7 +42,7 @@ const defaultConfigs = {
 
 async function compileTemplate(file, data) {
   const filePath = safeFilePath(file);
-  const engine = cons[defaultConfigs.engine ?? 'swig'];
+  const engine = cons[globalConfig.engine ?? 'swig'];
 
   try {
     return await engine(filePath, data);
@@ -52,7 +53,7 @@ async function compileTemplate(file, data) {
 
 function writeHtmlFile(file, data) {
   const safeFile = safeFilePath(file);
-  const safeFolderPath = path.join(defaultConfigs.root, defaultConfigs.output.public);
+  const safeFolderPath = path.join(globalConfig.cwd, globalConfig.output.public);
 
   const write = () => fs.writeFile(safeFile, data, {
     encoding: 'utf-8',
@@ -78,13 +79,17 @@ function writeHtmlFile(file, data) {
 
 // Interface
 
+/**
+ * Sets user configurations
+ * @param {object} options User defined configurations
+ */
 function config(options = {}) {
   if (!options) throw Error('Options must be a valid object');
 
-  defaultConfigs.root = options.root ?? defaultConfigs.root;
-  defaultConfigs.engine = options.engine ?? defaultConfigs.engine;
-  defaultConfigs.output = concatObjects(defaultConfigs.output, options.output ?? {});
-  defaultConfigs.input = concatObjects(defaultConfigs.input, options.input ?? {});
+  globalConfig.cwd = options.cwd ?? globalConfig.cwd;
+  globalConfig.engine = options.engine ?? globalConfig.engine;
+  globalConfig.output = concatObjects(globalConfig.output, options.output ?? {});
+  globalConfig.input = concatObjects(globalConfig.input, options.input ?? {});
 }
 
 /**
@@ -104,16 +109,19 @@ async function funnel(dataSource) {
   const isPromise = typeof fromDataSource.then === 'function';
 
   if (isPromise) {
-    funneledData = getDataArray(await fromDataSource);
+    funneledData = getDataArray(await fromDataSource, funneledData);
   }
 
   if (!isPromise) {
-    funneledData = getDataArray(fromDataSource);
+    funneledData = getDataArray(fromDataSource, funneledData);
   }
 }
 
-async function build() {
-  const safeFolderPath = path.join(defaultConfigs.root, defaultConfigs.input.templates);
+/**
+ * Compiles all the templates according to configurations and outputs html.
+ */
+async function gen() {
+  const safeFolderPath = path.join(globalConfig.cwd, globalConfig.input.templates);
   const files = await promisify(fs.readdir)(safeFolderPath);
 
   for (let i = 0; i < files.length; i++) {
@@ -125,11 +133,11 @@ async function build() {
         const html = await compileTemplate(path.join(safeFolderPath, file), dataItem);
 
         const filenameFromData = accessProperty(dataItem,
-          defaultConfigs.output.filename
+          globalConfig.output.filename
         );
 
         writeHtmlFile(path.format({
-          dir: path.join(defaultConfigs.root, defaultConfigs.output.public),
+          dir: path.join(globalConfig.cwd, globalConfig.output.public),
           name: filenameFromData || path.parse(file).name,
           ext: '.html'
         }), html);
@@ -138,27 +146,48 @@ async function build() {
   }
 }
 
-function watch() {
-  const templatesDir = path.join(defaultConfigs.root, defaultConfigs.input.templates);
+/**
+ * Watches changes on the templates folder.
+ * Powered by [Chokidar](https://www.npmjs.com/package/chokidar)
+ * @param {Function} cb Runs on triggered events
+ */
+function watch(cb = () => {}) {
+  const templatesDir = path.join(globalConfig.cwd, globalConfig.input.templates);
   const watcher = chokidar.watch(templatesDir);
+  const _cb = cb && typeof cb === 'function' ? cb : () => {};
 
   watcher.on('ready', () => {
     consola.info('Watching', templatesDir, 'for changes');
-    build();
+    gen();
+    _cb();
   });
 
   watcher.on('change', p => {
     consola.info('compiled', p);
-    build();
+    gen();
+    _cb();
   });
 }
 
-function serve() { }
+/**
+ * Starts a development server.
+ * Powered by [BrowserSync](https://browsersync.io/docs/api)
+ */
+function serve() {
+  const serverRoot = path.join(globalConfig.cwd, globalConfig.output.public);
+  const bs = browserSync({
+    server: {
+      baseDir: serverRoot
+    }
+  });
+
+  watch(bs.reload);
+}
 
 module.exports = {
   watch,
   config,
-  build,
+  gen,
   funnel,
   serve
 };

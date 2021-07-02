@@ -26,9 +26,9 @@ function concatObjects(target, src) {
   return Object.assign(target, src);
 }
 
-function getDataArray(arr, current) {
+function getDataArray(arr, data) {
   if (!Array.isArray(arr)) throw TypeError('Data must be an array');
-  return !current.length && Array.isArray(arr) ? arr : current;
+  return !data.length && Array.isArray(arr) ? arr : data;
 }
 
 function safeFilePath(file) {
