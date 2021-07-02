@@ -26,8 +26,10 @@ yargs.version(pkg.version);
 yargs.command({
   command: '$0',
   description: 'Generates a static site, simply',
-  handler: () => {
-    jesse.gen();
+  handler: args => {
+    if (Object.keys(args).length <= 2) {
+      jesse.gen();
+    }
   }
 });
 
