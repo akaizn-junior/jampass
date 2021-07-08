@@ -9,10 +9,10 @@ const jesse = require('./jesse');
 let settings;
 
 try {
-  const configTool = `${process.cwd()}/.jesse.js`;
-  const stats = fs.statSync(configTool);
+  const userConfig = `${process.cwd()}/.jesse.js`;
+  const stats = fs.statSync(userConfig);
 
-  if (stats.isFile()) settings = require(configTool);
+  if (stats.isFile()) settings = require(userConfig);
 } catch (err) {
   throw err;
 }
