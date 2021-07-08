@@ -7,9 +7,12 @@
   <title>Jesse DEMO</title>
 </head>
 <body>
+  <h1>Jesse DEMO</h1>
   <ul>
     {{#each data}}
-    <li>{{ item.fields.title }}</li>
+    <li>
+      <a href="{{ item.fields.slug }}.html">{{ item.fields.title }}</a>
+    </li>
     {{/each}}
   </ul>
 </body>
