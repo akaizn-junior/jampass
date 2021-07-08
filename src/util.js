@@ -11,14 +11,14 @@ function accessProperty(obj, key, start = 0) {
 
   if (!value) throw Error(`Data key "${list[i]}" is undefined`);
 
-  if (list.length < 5) {
+  if (list.length < 7) {
     if (i < list.length - 1) {
       return accessProperty(value, key, ++i);
     } else {
       return value;
     }
   } else {
-    throw Error('This property is 5 levels of deep. Flatten your data for better access.');
+    throw Error('This property is 7 levels deep. Flatten your data for better access.');
   }
 }
 
