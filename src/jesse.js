@@ -126,7 +126,7 @@ async function gen() {
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    const canUseFile = file && !file.startsWith('.'); // can use if define and not hidden
+    const canUseFile = file && !file.startsWith('.'); // can use if defined and not hidden
     const name = path.parse(file).name;
     const fileOutPath = path.join(globalConfig.cwd, globalConfig.output.public);
 
