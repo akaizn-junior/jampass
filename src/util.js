@@ -26,9 +26,15 @@ function concatObjects(target, src) {
   return Object.assign(target, src);
 }
 
-function getDataArray(arr, data) {
-  if (!Array.isArray(arr)) throw TypeError('Data must be an array');
-  return !data.length && Array.isArray(arr) ? arr : data;
+function getValidData(data) {
+  const isObj = o => o && typeof o === 'object' && o.constructor === Object;
+  const isValid = Array.isArray(data) || isObj(data);
+
+  if (!isValid) {
+    throw TypeError('Data must be of type Object or Array');
+  }
+
+  return data;
 }
 
 function safeFilePath(file) {
@@ -39,6 +45,6 @@ function safeFilePath(file) {
 module.exports = {
   accessProperty,
   concatObjects,
-  getDataArray,
+  getValidData,
   safeFilePath
 };

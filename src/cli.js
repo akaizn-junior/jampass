@@ -18,7 +18,6 @@ try {
 }
 
 settings?.config && jesse.config(settings.config);
-jesse.funnel(settings?.dataSource ?? (() => []));
 
 yargs.scriptName('jesse');
 yargs.version(pkg.version);

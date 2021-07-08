@@ -1,3 +1,5 @@
+const jesse = require('./src/jesse');
+
 const testData = [{
   item: {
     fields: {
@@ -27,12 +29,15 @@ const testData = [{
   }
 }];
 
+jesse.funnel(() => testData);
+
 module.exports = {
-  dataSource: () => testData,
   config: {
     cwd: 'test',
     output: {
-      filename: 'item.fields.slug'
+      filename: {
+        'article': '-%item.fields.slug'
+      }
     }
   }
 };

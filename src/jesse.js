@@ -10,7 +10,7 @@ const promisify = require('util').promisify;
 const {
   accessProperty,
   concatObjects,
-  getDataArray,
+  getValidData,
   safeFilePath
 } = require('./util');
 
@@ -42,7 +42,7 @@ const globalConfig = {
 
 async function compileTemplate(file, data) {
   const filePath = safeFilePath(file);
-  const engine = cons[globalConfig.engine ?? 'swig'];
+  const engine = cons[globalConfig.engine ?? 'handlebars'];
 
   try {
     return await engine(filePath, data);
@@ -109,11 +109,11 @@ async function funnel(dataSource) {
   const isPromise = typeof fromDataSource.then === 'function';
 
   if (isPromise) {
-    funneledData = getDataArray(await fromDataSource, funneledData);
+    funneledData = getValidData(await fromDataSource);
   }
 
   if (!isPromise) {
-    funneledData = getDataArray(fromDataSource, funneledData);
+    funneledData = getValidData(fromDataSource);
   }
 }
 
@@ -126,22 +126,39 @@ async function gen() {
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+    const canUseFile = file && !file.startsWith('.'); // can use if define and not hidden
+    const name = path.parse(file).name;
+    const fileOutPath = path.join(globalConfig.cwd, globalConfig.output.public);
 
-    // ignore hidden files
-    if (file && !file.startsWith('.')) {
-      funneledData.forEach(async dataItem => {
-        const html = await compileTemplate(path.join(safeFolderPath, file), dataItem);
+    const outName = () => {
+      if (name === 'index') return 'index';
+      return globalConfig.output.filename[name];
+    };
 
-        const filenameFromData = accessProperty(dataItem,
-          globalConfig.output.filename
-        );
+    const remTopChar = str => str.substring(1, fileOutName.length);
+    const fileOutName = outName();
 
-        writeHtmlFile(path.format({
-          dir: path.join(globalConfig.cwd, globalConfig.output.public),
-          name: filenameFromData || path.parse(file).name,
-          ext: '.html'
-        }), html);
-      });
+    const writeHtml = async(htmlName, data) => {
+      const html = await compileTemplate(path.join(safeFolderPath, file), { data });
+      let filenameFromData;
+
+      if (htmlName.startsWith('%')) {
+        filenameFromData = accessProperty(data, remTopChar(htmlName));
+      }
+
+      writeHtmlFile(path.format({
+        dir: fileOutPath,
+        name: filenameFromData || fileOutName,
+        ext: '.html'
+      }), html);
+    };
+
+    if (canUseFile && !fileOutName.startsWith('-')) {
+      writeHtml(fileOutName, funneledData);
+    }
+
+    if (canUseFile && fileOutName.startsWith('-') && Array.isArray(funneledData)) {
+      funneledData.forEach(dataItem => writeHtml(remTopChar(fileOutName), dataItem));
     }
   }
 }
