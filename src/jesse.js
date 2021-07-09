@@ -26,7 +26,7 @@ process.on('uncaughtException', handleErrors);
 process.on('unhandledRejection', handleErrors);
 
 const globalConfig = {
-  root: '.',
+  cwd: '.',
   input: {
     remote: false,
     templates: './views'
