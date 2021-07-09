@@ -5,13 +5,14 @@ const browserSync = require('browser-sync');
 
 const fs = require('fs');
 const path = require('path');
-const promisify = require('util').promisify;
 
 const {
   accessProperty,
   concatObjects,
   getValidData,
-  safeFilePath
+  safeFilePath,
+  outputName,
+  getTemplatePaths
 } = require('./util');
 
 const handleErrors = err => {
@@ -53,7 +54,7 @@ async function compileTemplate(file, data) {
 
 function writeHtmlFile(file, data) {
   const safeFile = safeFilePath(file);
-  const safeFolderPath = path.join(globalConfig.cwd, globalConfig.output.public);
+  const safeFolderPath = path.parse(safeFile).dir;
 
   const write = () => fs.writeFile(safeFile, data, {
     encoding: 'utf-8',
@@ -69,11 +70,11 @@ function writeHtmlFile(file, data) {
     } else {
       write();
     }
-  } catch (err) {
-    fs.mkdirSync(safeFolderPath, {
-      recursive: true
+  } catch (error) {
+    fs.mkdir(safeFolderPath, { recursive: true }, err => {
+      if (err) throw err;
+      write();
     });
-    write();
   }
 }
 
@@ -122,43 +123,74 @@ async function funnel(dataSource) {
  */
 async function gen() {
   const safeFolderPath = path.join(globalConfig.cwd, globalConfig.input.templates);
-  const files = await promisify(fs.readdir)(safeFolderPath);
+  const files = getTemplatePaths(safeFolderPath);
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    const canUseFile = file && !file.startsWith('.'); // can use if defined and not hidden
-    const name = path.parse(file).name;
-    const fileOutPath = path.join(globalConfig.cwd, globalConfig.output.public);
+    const templateName = path.parse(file).name;
 
-    const outName = () => {
-      if (name === 'index') return 'index';
-      return globalConfig.output.filename[name];
-    };
+    const canProcess = file && !templateName.startsWith('.'); // can process if not hidden
+    const publicOutPath = path.join(globalConfig.cwd, globalConfig.output.public);
 
-    const remTopChar = str => str.substring(1, fileOutName.length);
-    const fileOutName = outName();
+    const fileOutPath = outputName(templateName, globalConfig.output.filename[templateName] ?? file);
+    const fileOutName = fileOutPath.name.split('/');
+    const isOutDir = fileOutPath.isDir;
 
+    const remTopChar = str => str.substring(1, str.length);
     const writeHtml = async(htmlName, data) => {
       const html = await compileTemplate(path.join(safeFolderPath, file), { data });
       let filenameFromData;
 
-      if (htmlName.startsWith('%')) {
-        filenameFromData = accessProperty(data, remTopChar(htmlName));
+      // no added output paths
+
+      if (htmlName.length === 1 && htmlName[0].startsWith('%')) {
+        if (Array.isArray(data)) filenameFromData = accessProperty(data[0], remTopChar(htmlName[0]));
+        else filenameFromData = accessProperty(data, remTopChar(htmlName[0]));
       }
 
-      writeHtmlFile(path.format({
-        dir: fileOutPath,
-        name: filenameFromData || fileOutName,
+      if (Array.isArray(htmlName) && htmlName.length > 1) {
+        filenameFromData = htmlName.map(nm => {
+          const sIndex = nm.indexOf('%');
+
+          if (sIndex !== -1) {
+            const regularStr = nm.substring(0, sIndex);
+            const dynamicStr = nm.substring(sIndex + 1, nm.length);
+
+            if (Array.isArray(data)) return regularStr.concat(accessProperty(data[0], dynamicStr));
+            return regularStr.concat(accessProperty(data, dynamicStr));
+          }
+
+          return nm;
+        });
+      }
+
+      const processedOutputPath = path.join(...filenameFromData || htmlName);
+      const parsedOutPath = path.parse(processedOutputPath);
+
+      let outPath = path.format({
+        dir: path.join(publicOutPath, parsedOutPath.dir),
+        name: parsedOutPath.name,
         ext: '.html'
-      }), html);
+      });
+
+      if (isOutDir) {
+        outPath = path.format({
+          dir: path.join(publicOutPath, parsedOutPath.dir, parsedOutPath.base),
+          name: 'index',
+          ext: '.html'
+        });
+      }
+
+      writeHtmlFile(outPath, html);
     };
 
-    if (canUseFile && !fileOutName.startsWith('-')) {
+    if (canProcess && !fileOutName[0].startsWith('-')) {
       writeHtml(fileOutName, funneledData);
     }
 
-    if (canUseFile && fileOutName.startsWith('-') && Array.isArray(funneledData)) {
-      funneledData.forEach(dataItem => writeHtml(remTopChar(fileOutName), dataItem));
+    if (canProcess && fileOutName[0].startsWith('-') && Array.isArray(funneledData)) {
+      fileOutName[0] = remTopChar(fileOutName[0]);
+      funneledData.forEach(dataItem => writeHtml(fileOutName, dataItem));
     }
   }
 }
