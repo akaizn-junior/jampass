@@ -1,6 +1,6 @@
 {
   "name": "jesse",
-  "version": "0.0.2-edge.0",
+  "version": "0.0.1-edge.0",
   "main": "src/jesse.js",
   "bin": {
     "jesse": "src/cli.js"
