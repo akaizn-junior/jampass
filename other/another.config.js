@@ -1,11 +1,11 @@
-const jesse = require('./src/jesse');
+const jesse = require('../src/jesse');
 
 const testData = [{
   item: {
     fields: {
       title: 'Laura Ipsumwich',
       subtitle: 'Writing about Laura',
-      slug: 'laura',
+      slug: 'another-laura',
       text: 'a lot of text, like a lot!'
     },
     date: '2021-06-7'
@@ -15,7 +15,7 @@ const testData = [{
     fields: {
       title: 'Bastos ypsum',
       subtitle: 'A story about Bastos!',
-      slug: 'bastos-ypsum',
+      slug: 'another-bastos-ypsum',
       text: 'a lot of text, like a lot!'
     },
     date: '2021-06-8'
@@ -25,7 +25,7 @@ const testData = [{
     fields: {
       title: 'Marky Markel fwer',
       subtitle: 'An episode of Mr. Robot',
-      slug: 'marky-markel',
+      slug: 'another-marky-markel',
       text: 'a lot of text, like a lot!'
     },
     date: '2021-06-8'
@@ -39,8 +39,8 @@ module.exports = {
     cwd: 'test',
     output: {
       filename: {
-        'article': '-blog/%item.date/%item.fields.slug/',
-        'blog': 'blog/'
+        article: '-blog/%item.fields.slug/',
+        blog: 'blog/'
       }
     }
   }

@@ -2,4 +2,4 @@ test
 node_modules
 .eslintrc
 .editorconfig
-.jesse.js
+jesse.config.js

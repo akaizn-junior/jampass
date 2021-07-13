@@ -29,5 +29,13 @@
     "@babel/core": "^7.14.6",
     "@babel/eslint-parser": "^7.14.7",
     "eslint": "^7.29.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akaizn-junior/jesse.git"
+  },
+  "bugs": {
+    "url": "https://github.com/akaizn-junior/jesse/issues"
+  },
+  "homepage": "https://github.com/akaizn-junior/jesse#readme"
 }
