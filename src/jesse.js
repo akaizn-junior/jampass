@@ -1,81 +1,180 @@
+// deps
+
 const consola = require('consola');
 const chokidar = require('chokidar');
 const cons = require('consolidate');
 const browserSync = require('browser-sync');
+const del = require('del');
 
-const fs = require('fs');
+// node
 const path = require('path');
+
+// local
+const cheers = require('./cheers');
 
 const {
   accessProperty,
   concatObjects,
   getValidData,
-  safeFilePath,
   outputName,
-  getTemplatePaths
+  getDirPaths,
+  remTopChar,
+  vpath,
+  writeFile,
+  handleErrors,
+  debugLog,
+  parseDynamicName,
+  JESSE_LOOP_DATA_TOKEN
 } = require('./util');
 
-const handleErrors = err => {
-  consola.error(err);
-  // eslint-disable-next-line no-process-exit
-  process.exit(1);
-};
+// globals
 
 let funneledData = [];
-process.on('uncaughtException', handleErrors);
-process.on('unhandledRejection', handleErrors);
-
 const globalConfig = {
   cwd: '.',
-  input: {
+  buildId: Date.now(),
+  site: {},
+  dirs: {
+    assets: 'assets',
+    style: 'style',
+    static: 'static',
+    script: 'script'
+  },
+  views: {
+    engine: 'handlebars',
     remote: false,
-    templates: './views'
+    path: 'views'
   },
   output: {
     remote: false,
-    public: './public',
-    tmp: './tmp'
+    path: 'public'
   },
-  engine: 'handlebars'
+  plugins: {
+    css: []
+  }
 };
 
 // Helpers
 
+process.on('uncaughtException', err => handleErrors(err, globalConfig));
+process.on('unhandledRejection', err => handleErrors(err, globalConfig));
+
 async function compileTemplate(file, data) {
-  const filePath = safeFilePath(file);
+  const filePath = vpath(file);
   const engine = cons[globalConfig.engine ?? 'handlebars'];
 
   try {
-    return await engine(filePath, data);
+    return await engine(filePath.full, data);
   } catch (err) {
     throw err;
   }
 }
 
-function writeHtmlFile(file, data) {
-  const safeFile = safeFilePath(file);
-  const safeFolderPath = path.parse(safeFile).dir;
+async function compile(file, outputNameArray, isOutDir, locals) {
+  const publicOutPath = vpath(globalConfig.output.path);
+  let filenameFromData;
+  let localsUsed = locals;
 
-  const write = () => fs.writeFile(safeFile, data, {
-    encoding: 'utf-8',
-    flag: 'w'
-  }, err => {
-    if (err) throw err;
-  });
-
-  try {
-    const stats = fs.statSync(safeFolderPath);
-    if (!stats.isDirectory()) {
-      throw Error('Public output must be a directory');
+  // no added output paths
+  const dynName = parseDynamicName(outputNameArray[0]);
+  if (outputNameArray.length === 1 && dynName.localKey) {
+    if (Array.isArray(locals)) {
+      localsUsed = locals[dynName.localIndex];
+      filenameFromData = [
+        dynName.place(accessProperty(localsUsed, dynName.localKey))
+      ];
     } else {
-      write();
+      filenameFromData = dynName.place(accessProperty(locals, dynName.localKey));
     }
-  } catch (error) {
-    fs.mkdir(safeFolderPath, { recursive: true }, err => {
-      if (err) throw err;
-      write();
+  }
+
+  if (Array.isArray(outputNameArray) && outputNameArray.length > 1) {
+    filenameFromData = outputNameArray.map(name => {
+      const dynamic = parseDynamicName(name);
+
+      if (dynamic.localKey) {
+        if (Array.isArray(locals)) {
+          localsUsed = locals[dynName.localIndex];
+          return dynamic.place(accessProperty(localsUsed, dynamic.localKey));
+        }
+        return dynamic.place(accessProperty(locals, dynamic.localKey));
+      }
+
+      return name;
     });
   }
+
+  // expose locals has "data" for all templates
+  const html = await compileTemplate(file, {
+    data: localsUsed,
+    jesse: {
+      year: new Date().getFullYear(),
+      buildId: globalConfig.buildId
+    },
+    site: globalConfig.site
+  });
+
+  const processedPath = path.join(...filenameFromData || outputNameArray);
+  const parsedOutPath = vpath(processedPath);
+
+  let outPath = path.format({
+    dir: publicOutPath.concat(parsedOutPath.dir),
+    name: parsedOutPath.name,
+    ext: '.html'
+  });
+
+  if (isOutDir) {
+    outPath = path.format({
+      dir: publicOutPath.concat(parsedOutPath.dir, parsedOutPath.base),
+      name: 'index',
+      ext: '.html'
+    });
+  }
+
+  return { path: outPath, html };
+}
+
+async function build() {
+  debugLog('working on templates');
+  globalConfig.buildId = Date.now();
+  debugLog('generated a new build id', globalConfig.buildId);
+
+  const safeFolderPath = vpath(globalConfig.views.path, true);
+  const files = getDirPaths(safeFolderPath.full);
+  const publicOutPath = vpath(globalConfig.output.path).full;
+
+  const resultData = [];
+
+  // clean output dir
+  const cleaned = await del([`${publicOutPath}/**`, `!${publicOutPath}`]);
+  debugLog('cleaned output dir', cleaned);
+
+  for (let i = 0; i < files.length; i++) {
+    const relativePath = files[i];
+    const templateName = vpath(relativePath).name;
+    const file = safeFolderPath.concat(relativePath);
+
+    const canProcess = relativePath && !templateName.startsWith('.'); // can process if not hidden
+    const outPath = outputName(globalConfig.output.filename[templateName] ?? relativePath);
+    const outputNameArray = outPath.name.split('/');
+
+    if (canProcess && !outputNameArray[0].startsWith(JESSE_LOOP_DATA_TOKEN)) {
+      const result = await compile(file, outputNameArray, outPath.isDir, funneledData);
+      writeFile(result.path, result.html);
+      resultData.push(result);
+    }
+
+    if (canProcess && outputNameArray[0].startsWith(JESSE_LOOP_DATA_TOKEN) && Array.isArray(funneledData)) {
+      outputNameArray[0] = remTopChar(outputNameArray[0]);
+      funneledData.forEach(async(dataItem, di) => {
+        const result = await compile(file, outputNameArray, outPath.isDir, dataItem);
+        writeFile(result.path, result.html);
+        if (di === 0) resultData.push(result);
+      });
+    }
+  }
+
+  return resultData;
 }
 
 // Interface
@@ -87,10 +186,24 @@ function writeHtmlFile(file, data) {
 function config(options = {}) {
   if (!options) throw Error('Options must be a valid object');
 
+  // update paths
   globalConfig.cwd = options.cwd ?? globalConfig.cwd;
+  globalConfig.views.path = path.join(globalConfig.cwd, globalConfig.views.path);
+  globalConfig.output.path = path.join(globalConfig.cwd, globalConfig.output.path);
+  Object.keys(globalConfig.dirs).forEach(key => {
+    const value = globalConfig.dirs[key];
+    if (value) {
+      globalConfig.dirs[key] = path.join(globalConfig.cwd, value);
+    }
+  });
+
+  // update using user configs
   globalConfig.engine = options.engine ?? globalConfig.engine;
   globalConfig.output = concatObjects(globalConfig.output, options.output ?? {});
-  globalConfig.input = concatObjects(globalConfig.input, options.input ?? {});
+  globalConfig.views = concatObjects(globalConfig.views, options.views ?? {});
+  globalConfig.dirs = concatObjects(globalConfig.dirs, options.dirs ?? {});
+  globalConfig.plugins = concatObjects(globalConfig.plugins, options.plugins ?? {});
+  globalConfig.site = concatObjects(globalConfig.site, options.site ?? {});
 }
 
 /**
@@ -119,100 +232,59 @@ async function funnel(dataSource) {
 }
 
 /**
- * Compiles all the templates according to configurations and outputs html.
+ * Compiles all templates according to configurations and outputs html.
  */
-async function gen() {
-  const safeFolderPath = path.join(globalConfig.cwd, globalConfig.input.templates);
-  const files = getTemplatePaths(safeFolderPath);
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const templateName = path.parse(file).name;
-
-    const canProcess = file && !templateName.startsWith('.'); // can process if not hidden
-    const publicOutPath = path.join(globalConfig.cwd, globalConfig.output.public);
-
-    const fileOutPath = outputName(templateName, globalConfig.output.filename[templateName] ?? file);
-    const fileOutName = fileOutPath.name.split('/');
-    const isOutDir = fileOutPath.isDir;
-
-    const remTopChar = str => str.substring(1, str.length);
-    const writeHtml = async(htmlName, data) => {
-      const html = await compileTemplate(path.join(safeFolderPath, file), { data });
-      let filenameFromData;
-
-      // no added output paths
-
-      if (htmlName.length === 1 && htmlName[0].startsWith('%')) {
-        if (Array.isArray(data)) filenameFromData = accessProperty(data[0], remTopChar(htmlName[0]));
-        else filenameFromData = accessProperty(data, remTopChar(htmlName[0]));
-      }
-
-      if (Array.isArray(htmlName) && htmlName.length > 1) {
-        filenameFromData = htmlName.map(nm => {
-          const sIndex = nm.indexOf('%');
-
-          if (sIndex !== -1) {
-            const regularStr = nm.substring(0, sIndex);
-            const dynamicStr = nm.substring(sIndex + 1, nm.length);
-
-            if (Array.isArray(data)) return regularStr.concat(accessProperty(data[0], dynamicStr));
-            return regularStr.concat(accessProperty(data, dynamicStr));
-          }
-
-          return nm;
-        });
-      }
-
-      const processedOutputPath = path.join(...filenameFromData || htmlName);
-      const parsedOutPath = path.parse(processedOutputPath);
-
-      let outPath = path.format({
-        dir: path.join(publicOutPath, parsedOutPath.dir),
-        name: parsedOutPath.name,
-        ext: '.html'
+function gen() {
+  build()
+    .then(data => {
+      cheers.config({
+        cwd: globalConfig.cwd,
+        output: globalConfig.output,
+        plugins: globalConfig.plugins,
+        buildId: globalConfig.buildId
       });
-
-      if (isOutDir) {
-        outPath = path.format({
-          dir: path.join(publicOutPath, parsedOutPath.dir, parsedOutPath.base),
-          name: 'index',
-          ext: '.html'
-        });
-      }
-
-      writeHtmlFile(outPath, html);
-    };
-
-    if (canProcess && !fileOutName[0].startsWith('-')) {
-      writeHtml(fileOutName, funneledData);
-    }
-
-    if (canProcess && fileOutName[0].startsWith('-') && Array.isArray(funneledData)) {
-      fileOutName[0] = remTopChar(fileOutName[0]);
-      funneledData.forEach(dataItem => writeHtml(fileOutName, dataItem));
-    }
-  }
+      cheers.transform(data);
+    });
 }
 
 /**
  * Watches changes on the templates folder.
  * Powered by [Chokidar](https://www.npmjs.com/package/chokidar)
  * @param {Function} cb Runs on triggered events
+ * @param {string[]} ignore paths/globs to ignore
  */
-function watch(cb = () => {}) {
-  const templatesDir = path.join(globalConfig.cwd, globalConfig.input.templates);
-  const watcher = chokidar.watch(templatesDir);
+function watch(cb = () => {}, ignore = []) {
+  const watchPath = vpath(globalConfig.views.path, true);
+
+  // sanity check
+  // the directory to watch must be inside the project cwd
+  // or at least be exactly the project cwd
+  // otherwise fail
+  const sanityCheck = watchPath.dir === globalConfig.cwd
+    || watchPath.dir.startsWith(globalConfig.cwd);
+
+  if (!sanityCheck) {
+    throw Error('"views" path fail. Confirm "views" are in a subdirectory');
+  }
+
+  const watcher = chokidar.watch([
+    `${watchPath.dir}/**/*.html`,
+    `${watchPath.dir}/**/*.css`,
+    `${watchPath.dir}/**/*.js`
+  ], {
+    cwd: globalConfig.cwd,
+    ignored: ignore
+  });
   const _cb = cb && typeof cb === 'function' ? cb : () => {};
 
   watcher.on('ready', () => {
-    consola.info('Watching', templatesDir, 'for changes');
+    consola.info('watching', watchPath.dir);
     gen();
     _cb();
   });
 
   watcher.on('change', p => {
-    consola.info('compiled', p);
+    debugLog('compiled', p);
     gen();
     _cb();
   });
@@ -222,16 +294,17 @@ function watch(cb = () => {}) {
  * Starts a development server.
  * Powered by [BrowserSync](https://browsersync.io/docs/api)
  */
-function serve(port) {
-  const serverRoot = path.join(globalConfig.cwd, globalConfig.output.public);
+function serve({ port, open = false, watchIgnore }) {
+  const serverRoot = vpath(globalConfig.output.path, true).full;
   const bs = browserSync({
     port: port ?? 3000,
+    open,
     server: {
       baseDir: serverRoot
     }
   });
 
-  watch(bs.reload);
+  watch(bs.reload, watchIgnore);
 }
 
 module.exports = {

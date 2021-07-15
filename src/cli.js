@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 
+// deps
 const yargs = require('yargs/yargs')(process.argv.slice(2));
 
+// node
 const fs = require('fs');
 const path = require('path');
+
+// local
 const pkg = require('../package.json');
 const jesse = require('./jesse');
+let validUserConfigPath = '';
 
 function loadUserSettings(otherPath = '') {
   let settings;
@@ -15,12 +20,16 @@ function loadUserSettings(otherPath = '') {
     const userConfig = path.join(process.cwd(), configPath);
     const stats = fs.statSync(userConfig);
 
-    if (stats.isFile()) settings = require(userConfig);
+    if (stats.isFile()) {
+      validUserConfigPath = userConfig;
+      settings = require(userConfig);
+      !settings.cwd && (settings.cwd = path.parse(userConfig).dir);
+    }
   } catch (err) {
     throw err;
   }
 
-  settings?.config && jesse.config(settings.config);
+  settings && jesse.config(settings);
 }
 
 yargs.scriptName('jesse');
@@ -41,14 +50,18 @@ yargs.option('port', {
   description: 'A port to serve from. Default 3000'
 });
 
+yargs.option('open', {
+  alias: 'o',
+  boolean: true,
+  description: 'open your default browser on serve'
+});
+
 yargs.command({
   command: '$0',
   description: 'Generates a static site, simply',
   handler: args => {
-    if (Object.keys(args).length <= 2) {
-      loadUserSettings(args.config);
-      jesse.gen();
-    }
+    loadUserSettings(args.config);
+    jesse.gen();
   }
 });
 
@@ -66,7 +79,11 @@ yargs.command({
   description: 'Starts a development server and watches for changes. Pass a preferred port to use, default 3000',
   handler: args => {
     loadUserSettings(args.config);
-    jesse.serve(args.port);
+    jesse.serve({
+      port: args.port,
+      open: args.open,
+      watchIgnore: [validUserConfigPath]
+    });
   }
 });
 
@@ -75,7 +92,7 @@ yargs.command({
   description: 'Watches for template changes',
   handler: args => {
     loadUserSettings(args.config);
-    jesse.watch();
+    jesse.watch(null, [validUserConfigPath]);
   }
 });
 

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ site.name }}</title>
+    <link rel="stylesheet" href="/cats/style/main.css">
+    <style>
+      h1 {
+        color: red;
+        font-size: 3em;
+      }
+
+      .dog {
+        border: 1px solid yellow;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>{{ site.name }}</h1>
+        <img src="assets/images/pexels-lina-kivaka-1741205.jpg"
+          alt="Photo of Orange Tabby Cat With Red Handkerchief by Lina Kivaka from Pexels"
+          title="Photo of Orange Tabby Cat With Red Handkerchief by Lina Kivaka from Pexels">
+      </header>
+      <main role="main">
+        <ul class="cats">
+          {{#each data}}
+            <li>
+              <div class="cat">
+                <img src="{{ photo }}" alt="{{ name }} photo" width="200">
+                <a href="{{ insertedAt }}/{{ name }}">{{ name }}</a>
+                <p class="breed">
+                  Breed: {{ breed }}
+                </p>
+              </div>
+            </li>
+          {{/each}}
+          <li>
+            <div class="cat dog">
+              <img src="{{ data.10.photo }}" alt="{{ data.10.name }} photo" width="200">
+              <a href="{{ data.10.name }}">{{ data.10.name }}</a>
+              <p class="breed">
+                Breed: {{ data.10.breed }}
+              </p>
+            </div>
+          </li>
+        </ul>
+      </main>
+    </div>
+    <footer>
+      (c) {{ jesse.year }} {{ site.name }}. Built by Jesse
+    </footer>
+  </body>
+
+</html>

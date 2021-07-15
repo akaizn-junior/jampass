@@ -6,7 +6,10 @@
     "jesse": "src/cli.js"
   },
   "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "serve": "node src/cli serve --config=test/jesse.config.js",
+    "watch": "node src/cli watch --config=test/jesse.config.js",
+    "start": "node src/cli --config=test/jesse.config.js"
   },
   "keywords": [
     "SSG",
@@ -18,17 +21,25 @@
   "license": "MIT",
   "description": "A static site generator",
   "dependencies": {
+    "autoprefixer": "^9.8.6",
     "browser-sync": "^2.27.4",
+    "cheerio": "^1.0.0-rc.10",
     "chokidar": "^3.5.2",
     "consola": "^2.15.3",
     "consolidate": "^0.16.0",
+    "cssnano": "^5.0.6",
+    "del": "^6.0.0",
     "handlebars": "^4.7.7",
+    "postcss": "^8.3.5",
+    "postcss-preset-env": "^6.7.0",
+    "webpack": "^5.44.0",
     "yargs": "^17.0.1"
   },
   "devDependencies": {
     "@babel/core": "^7.14.6",
     "@babel/eslint-parser": "^7.14.7",
-    "eslint": "^7.29.0"
+    "eslint": "^7.29.0",
+    "faker": "^5.5.3"
   },
   "repository": {
     "type": "git",

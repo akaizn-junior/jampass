@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ data.name }} - {{ site.name }}</title>
+  <link rel="stylesheet" href="/cats/style/cat.css">
+</head>
+<body>
+  <a href="/">home</a>
+  <div class="wrapper">
+    <h1>{{ site.name }}</h1>
+    <section>
+      <div class="about">
+        <h2>{{ data.name }}</h2>
+        <p>{{ data.description }}</p>
+        <p class="breed">
+          Breed: {{ data.breed }}
+        </p>
+      </div>
+      <img src="{{ data.photo }}" alt="{{ data.name }} photo">
+    </section>
+  </div>
+  <footer>
+    (c) {{ jesse.year }} {{ site.name }}. Built by Jesse
+  </footer>
+</body>
+</html>
