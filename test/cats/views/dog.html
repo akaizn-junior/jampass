@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ data.name }} - {{ site.name }}</title>
   <link rel="stylesheet" href="/cats/style/cat.css">
+  <link rel="preload" href="{{ data.photo }}" as="image" type="image/jpeg">
 </head>
 <body>
   <a href="/">home</a>
@@ -26,7 +27,7 @@
     (c) {{ jesse.year }} {{ site.name }}. Built by Jesse
     <div class="supports">
       <b>Jesse supports</b>
-      <img src="https://camo.githubusercontent.com/a2ebaaedf9af41416a2717b3a28f405b39535397f4463c5c5119146c84c240f9/68747470733a2f2f706f73746373732e6f72672f6c6f676f2e737667" alt="postcss logo">
+      <img width="100" src="https://camo.githubusercontent.com/a2ebaaedf9af41416a2717b3a28f405b39535397f4463c5c5119146c84c240f9/68747470733a2f2f706f73746373732e6f72672f6c6f676f2e737667" alt="postcss logo">
     </div>
   </footer>
 </body>

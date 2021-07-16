@@ -7,6 +7,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ site.name }}</title>
     <link rel="stylesheet" href="/cats/style/main.css">
+    {{#each data}}
+      <link rel="preload" href="{{ photo }}" as="image" type="image/jpeg">
+    {{/each}}
+    <link rel="preload" href="cats/assets/images/pexels-lina-kivaka-1741205.jpg" as="image" type="image/jpeg">
     <style>
       h1 {
         color: red;

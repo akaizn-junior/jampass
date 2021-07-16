@@ -25,7 +25,10 @@ const {
   handleErrors,
   debugLog,
   parseDynamicName,
-  JESSE_LOOP_DATA_TOKEN
+  JESSE_LOOP_DATA_TOKEN,
+  JESSE_BUILD_MODE_LAZY,
+  JESSE_BUILD_MODE_BUSY,
+  JESSE_BUILD_MODE_STRICT
 } = require('./util');
 
 // globals
@@ -34,6 +37,10 @@ let funneledData = [];
 const globalConfig = {
   cwd: '.',
   buildId: Date.now(),
+  build: {
+    mode: JESSE_BUILD_MODE_LAZY,
+    dry: false
+  },
   site: {},
   views: {
     engine: 'handlebars',
@@ -142,6 +149,7 @@ async function build() {
   const publicOutPath = vpath(globalConfig.output.path).full;
 
   const resultData = [];
+  let filesGeneratedCount = 0;
 
   // clean output dir
   const cleaned = await del([`${publicOutPath}/**`, `!${publicOutPath}`]);
@@ -158,21 +166,27 @@ async function build() {
 
     if (canProcess && !outputNameArray[0].startsWith(JESSE_LOOP_DATA_TOKEN)) {
       const result = await compile(file, outputNameArray, outPath.isDir, funneledData);
-      writeFile(result.path, result.html);
+      writeFile(result.path, result.html, globalConfig.build.dry);
       resultData.push(result);
+      filesGeneratedCount++;
     }
 
     if (canProcess && outputNameArray[0].startsWith(JESSE_LOOP_DATA_TOKEN) && Array.isArray(funneledData)) {
       outputNameArray[0] = remTopChar(outputNameArray[0]);
-      funneledData.forEach(async dataItem => {
+      filesGeneratedCount += funneledData.length;
+      funneledData.forEach(async(dataItem, di) => {
         const result = await compile(file, outputNameArray, outPath.isDir, dataItem);
-        writeFile(result.path, result.html);
-        resultData.push(result);
+        writeFile(result.path, result.html, globalConfig.build.dry);
+        if (!globalConfig.build.mode === JESSE_BUILD_MODE_LAZY) {
+          di === 0 && resultData.push(result);
+        } else {
+          resultData.push(result);
+        }
       });
     }
   }
 
-  return resultData;
+  return { data: resultData, count: filesGeneratedCount };
 }
 
 // Interface
@@ -195,6 +209,14 @@ function config(options = {}) {
   globalConfig.plugins = concatObjects(globalConfig.plugins, options.plugins ?? {});
   globalConfig.site = concatObjects(globalConfig.site, options.site ?? {});
   globalConfig.asssets = concatObjects(globalConfig.assets, options.assets ?? {});
+  globalConfig.build = concatObjects(globalConfig.build, options.build ?? {});
+
+  switch (globalConfig.build.mode) {
+  case JESSE_BUILD_MODE_BUSY: globalConfig.build.mode = JESSE_BUILD_MODE_BUSY; break;
+  case JESSE_BUILD_MODE_STRICT: globalConfig.build.mode = JESSE_BUILD_MODE_STRICT; break;
+  case JESSE_BUILD_MODE_LAZY:
+  default: globalConfig.build.mode = JESSE_BUILD_MODE_LAZY; break;
+  }
 }
 
 /**
@@ -226,20 +248,25 @@ async function funnel(dataSource) {
  * Compiles all templates according to configurations and outputs html.
  */
 function gen() {
+  globalConfig.build.dry
+    && consola.log('Dry run in', `"${globalConfig.build.mode}" mode`);
   marky.mark('generating html');
   build()
-    .then(data => {
+    .then(res => {
       cheers.config({
         cwd: globalConfig.cwd,
         output: globalConfig.output,
         plugins: globalConfig.plugins,
         buildId: globalConfig.buildId,
-        assets: globalConfig.assets
+        assets: globalConfig.assets,
+        build: globalConfig.build
       });
 
-      cheers.transform(data);
-      const end = marky.stop('generating html');
-      consola.info('generated', data.length, 'files in', Math.floor(end.duration) / 1000, 's');
+      cheers.transform(res.data)
+        .then(() => {
+          const end = Math.floor(marky.stop('generating html').duration) / 1000;
+          consola.info('generated', res.count, 'files in', end, 's');
+        });
     });
 }
 
@@ -308,5 +335,8 @@ module.exports = {
   config,
   gen,
   funnel,
-  serve
+  serve,
+  JESSE_BUILD_MODE_LAZY,
+  JESSE_BUILD_MODE_BUSY,
+  JESSE_BUILD_MODE_STRICT
 };

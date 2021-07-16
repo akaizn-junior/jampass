@@ -17,13 +17,20 @@ const {
   writeFile,
   concatObjects,
   vpath,
-  concatLists
+  concatLists,
+  debugLog,
+  JESSE_BUILD_MODE_LAZY,
+  JESSE_BUILD_MODE_STRICT
 } = require('./util');
 
 // globals
 const globalConfig = {
   buildId: null,
   cwd: '.',
+  build: {
+    mode: JESSE_BUILD_MODE_LAZY,
+    dry: false
+  },
   output: {
     remote: false,
     path: 'public'
@@ -93,7 +100,7 @@ function css(element) {
       postcss(globalConfig.plugins.css)
         .process(code, { from: cssPath.full, to: cssOutPath })
         .then(result => {
-          writeFile(cssOutPath, result.css);
+          writeFile(cssOutPath, result.css, globalConfig.build.dry);
         });
       break;
     }
@@ -115,16 +122,22 @@ function image(element) {
       const provider = source[1].substring(0, source[1].indexOf('/'));
 
       if (protocol === 'http') {
-        throw Error('Image served via "http". Confirm external assets are from secure sources');
+        debugLog('site uses images served via', protocol);
+        if (globalConfig.build.mode === JESSE_BUILD_MODE_STRICT) {
+          throw Error('Image served via "http". Confirm external assets are from secure sources');
+        }
       }
 
       if (!globalConfig.assets.whitelist.includes(provider)) {
-        throw Error(`Image served from an untrusted provider "${provider}". Provider may be whitelisted in settings`);
+        debugLog('site uses images from not whitelisted provider', provider);
+        if (globalConfig.build.mode === JESSE_BUILD_MODE_STRICT) {
+          throw Error(`Image served from an untrusted provider "${provider}". Provider may be whitelisted in settings`);
+        }
       }
     } else {
       const imagePath = vpath([globalConfig.cwd, imgSrc], true);
       const data = await promisify(fs.readFile)(imagePath.full);
-      writeFile(path.join(globalConfig.output.path, imgSrc), data);
+      writeFile(path.join(globalConfig.output.path, imgSrc), data, globalConfig.build.dry);
     }
   }, ignoreDataUrls);
 }
@@ -141,6 +154,7 @@ function config(options = {}) {
   globalConfig.buildId = options.buildId ?? globalConfig.buildId;
   globalConfig.cwd = options.cwd ?? globalConfig.cwd;
   globalConfig.output = concatObjects(globalConfig.output, options.output ?? {});
+  globalConfig.build = concatObjects(globalConfig.build, options.build ?? {});
 
   globalConfig.plugins.css = concatLists(globalConfig.plugins, options.plugins, 'css');
   globalConfig.assets.whitelist = concatLists(globalConfig.assets, options.assets, 'whitelist');
@@ -149,7 +163,7 @@ function config(options = {}) {
 /**
  * Transforms generated html
  */
-function transform(data) {
+async function transform(data) {
   if (!data || !Array.isArray(data)) {
     throw (
       TypeError('Argument must be an array of (path: string, html?: string) objects')
@@ -158,7 +172,8 @@ function transform(data) {
 
   store.new();
 
-  data.forEach(async file => {
+  for (let i = 0; i < data.length; i++) {
+    const file = data[i];
     if (!file.path) {
       throw (
         TypeError('Object must have a valid "path" key')
@@ -177,9 +192,11 @@ function transform(data) {
 
     $('img[src]').toArray()
       .forEach(img => image(img));
-  });
+  }
 
   store.clearOld();
+
+  return true;
 }
 
 module.exports = {

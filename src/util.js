@@ -10,6 +10,9 @@ const path = require('path');
 const JESSE_LOCALS_FIELD_BEGIN_TOKEN = '[';
 const JESSE_LOCALS_FIELD_END_TOKEN = ']';
 const JESSE_LOOP_DATA_TOKEN = '-';
+const JESSE_BUILD_MODE_LAZY = 'lazy';
+const JESSE_BUILD_MODE_BUSY = 'busy';
+const JESSE_BUILD_MODE_STRICT = 'strict';
 
 // lambdas
 
@@ -114,16 +117,20 @@ function handleErrors(err, { cwd }) {
   process.exit(1);
 }
 
-function writeFile(file, data) {
+function writeFile(file, data, dry = false) {
   const safeFile = vpath(file);
 
-  const done = () => fs.writeFile(safeFile.full, data, {
-    encoding: 'utf-8',
-    flag: 'w'
-  }, err => {
-    if (err) throw err;
-    debugLog('generated', safeFile.full);
-  });
+  const done = () => {
+    if (!dry) {
+      fs.writeFile(safeFile.full, data, {
+        encoding: 'utf-8',
+        flag: 'w'
+      }, err => {
+        if (err) throw err;
+        debugLog('generated', safeFile.full);
+      });
+    }
+  };
 
   try {
     const stats = fs.statSync(safeFile.dir);
@@ -133,10 +140,12 @@ function writeFile(file, data) {
       done();
     }
   } catch (error) {
-    fs.mkdir(safeFile.dir, { recursive: true }, err => {
-      if (err) throw err;
-      done();
-    });
+    if (!dry) {
+      fs.mkdir(safeFile.dir, { recursive: true }, err => {
+        if (err) throw err;
+        done();
+      });
+    }
   }
 }
 
@@ -176,6 +185,9 @@ module.exports = {
   handleErrors,
   debugLog,
   parseDynamicName,
+  concatLists,
   JESSE_LOOP_DATA_TOKEN,
-  concatLists
+  JESSE_BUILD_MODE_LAZY,
+  JESSE_BUILD_MODE_BUSY,
+  JESSE_BUILD_MODE_STRICT
 };

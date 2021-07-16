@@ -12,9 +12,9 @@ const pkg = require('../package.json');
 const jesse = require('./jesse');
 let validUserConfigPath = '';
 
-function loadUserSettings(otherPath = '') {
+function loadUserSettings(opts) {
   let settings;
-  const configPath = otherPath ?? 'jesse.config.js';
+  const configPath = opts.cpath ?? 'jesse.config.js';
 
   try {
     const userConfig = path.join(process.cwd(), configPath);
@@ -29,6 +29,8 @@ function loadUserSettings(otherPath = '') {
     throw err;
   }
 
+  settings.build.dry = opts.dry;
+  settings.build.mode = opts.mode;
   settings && jesse.config(settings);
 }
 
@@ -47,7 +49,7 @@ yargs.option('config', {
 yargs.option('port', {
   alias: 'p',
   string: true,
-  description: 'A port to serve from. Default 3000'
+  description: 'a development server is launched from this port'
 });
 
 yargs.option('open', {
@@ -56,44 +58,44 @@ yargs.option('open', {
   description: 'open your default browser on serve'
 });
 
+const withSettings = (args, done) => {
+  loadUserSettings({
+    cpath: args.config,
+    mode: args.mode,
+    dry: args.dryRun
+  });
+
+  return done();
+};
+
 yargs.command({
   command: '$0',
   description: 'Generates a static site, simply',
-  handler: args => {
-    loadUserSettings(args.config);
-    jesse.gen();
-  }
+  handler: args => withSettings(args, () => jesse.gen())
 });
 
 yargs.command({
   command: 'gen',
   description: 'Generate html from current configurations',
-  handler: args => {
-    loadUserSettings(args.config);
-    jesse.gen();
-  }
+  handler: args => withSettings(args, () => jesse.gen())
 });
 
 yargs.command({
   command: 'serve',
-  description: 'Starts a development server and watches for changes. Pass a preferred port to use, default 3000',
-  handler: args => {
-    loadUserSettings(args.config);
+  description: 'Starts a development server. Reads additional options. See help',
+  handler: args => withSettings(args, () => {
     jesse.serve({
       port: args.port,
       open: args.open,
       watchIgnore: [validUserConfigPath]
     });
-  }
+  })
 });
 
 yargs.command({
   command: 'watch',
   description: 'Watches for template changes',
-  handler: args => {
-    loadUserSettings(args.config);
-    jesse.watch(null, [validUserConfigPath]);
-  }
+  handler: args => withSettings(args, () => jesse.watch(null, [validUserConfigPath]))
 });
 
 yargs.showHelpOnFail(true, 'Generates a static site, simply');
