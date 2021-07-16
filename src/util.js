@@ -11,11 +11,18 @@ const JESSE_LOCALS_FIELD_BEGIN_TOKEN = '[';
 const JESSE_LOCALS_FIELD_END_TOKEN = ']';
 const JESSE_LOOP_DATA_TOKEN = '-';
 
-// one-liners aka lambdas
+// lambdas
 
 const debugLog = (...msg) => consola.debug(...msg);
 const remTopChar = str => str.substring(1, str.length);
+const isObj = o => o && typeof o === 'object' && o.constructor === Object;
 const concatObjects = (target, src) => Object.assign(target, src);
+const concatLists = (a, b, key) => {
+  if (b && b[key] && Array.isArray(b[key])) {
+    return a[key].concat(b[key]);
+  }
+  return a[key];
+};
 
 // functions
 
@@ -42,7 +49,6 @@ function accessProperty(obj, key, start = 0) {
 }
 
 function getValidData(data) {
-  const isObj = o => o && typeof o === 'object' && o.constructor === Object;
   const isValid = Array.isArray(data) || isObj(data);
 
   if (!isValid) {
@@ -170,5 +176,6 @@ module.exports = {
   handleErrors,
   debugLog,
   parseDynamicName,
-  JESSE_LOOP_DATA_TOKEN
+  JESSE_LOOP_DATA_TOKEN,
+  concatLists
 };

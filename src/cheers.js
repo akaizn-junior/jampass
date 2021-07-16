@@ -1,7 +1,8 @@
 // deps
 const cheerio = require('cheerio');
+
+// postcss and plugins
 const postcss = require('postcss');
-// postcss plugins
 const postcssPresetEnv = require('postcss-preset-env');
 const cssnano = require('cssnano');
 const autoprefixer = require('autoprefixer');
@@ -12,7 +13,12 @@ const path = require('path');
 const { promisify } = require('util');
 
 // local
-const { writeFile, concatObjects, vpath } = require('./util');
+const {
+  writeFile,
+  concatObjects,
+  vpath,
+  concatLists
+} = require('./util');
 
 // globals
 const globalConfig = {
@@ -28,6 +34,9 @@ const globalConfig = {
       cssnano(),
       autoprefixer()
     ]
+  },
+  assets: {
+    whitelist: []
   }
 };
 
@@ -36,19 +45,44 @@ const globalConfig = {
  */
 const keep = {};
 
+const store = {
+  new() {
+    keep[globalConfig.buildId] = {};
+  },
+  clearOld() {
+    Object.keys(keep).forEach(key => {
+      if (key && keep[key] && key !== globalConfig.buildId) {
+        delete keep[key];
+      }
+    });
+  },
+  get(key) {
+    return keep[globalConfig.buildId][key];
+  },
+  set(k, v) {
+    keep[globalConfig.buildId][k] = v;
+  }
+};
+
 // process
 
 /**
  * @param {string} elemId A unique identifier for the element process
  * @param {function} proc A callback to run as processing the element
+ * @param {boolean} skipFlag Custom flag for skipping processing
  */
-const processHelper = (elemId, proc) => {
+const processHelper = (elemId, proc, skipFlag = false) => {
   // process, if not already
-  const buildKey = elemId.concat('-', globalConfig.buildId);
-  if (!keep[buildKey]) proc(elemId); keep[buildKey] = true;
+  const buildKey = String(elemId);
+
+  if (!store.get(buildKey) && !skipFlag) {
+    proc(buildKey);
+    store.set(buildKey, true);
+  }
 };
 
-function css(cssSrc) {
+function css(element) {
+  const cssSrc = element.attribs.href;
   processHelper(cssSrc, async() => {
     const cssPath = vpath([globalConfig.cwd, cssSrc]);
     const cssOutPath = path.join(globalConfig.output.path, cssSrc);
@@ -66,6 +100,35 @@ function css(cssSrc) {
   });
 }
 
+function image(element) {
+  /**
+   * @type String
+   */
+  const imgSrc = element.attribs.src;
+  const ignoreDataUrls = imgSrc.startsWith('data:image');
+
+  processHelper(Math.random(), async() => {
+    const isExternal = imgSrc.substr(0, 10).includes('//');
+    if (isExternal) {
+      const source = imgSrc.split('://');
+      const protocol = source[0];
+      const provider = source[1].substring(0, source[1].indexOf('/'));
+
+      if (protocol === 'http') {
+        throw Error('Image served via "http". Confirm external assets are from secure sources');
+      }
+
+      if (!globalConfig.assets.whitelist.includes(provider)) {
+        throw Error(`Image served from an untrusted provider "${provider}". Provider may be whitelisted in settings`);
+      }
+    } else {
+      const imagePath = vpath([globalConfig.cwd, imgSrc], true);
+      const data = await promisify(fs.readFile)(imagePath.full);
+      writeFile(path.join(globalConfig.output.path, imgSrc), data);
+    }
+  }, ignoreDataUrls);
+}
+
 // interface
 
 /**
@@ -79,14 +142,8 @@ function config(options = {}) {
   globalConfig.cwd = options.cwd ?? globalConfig.cwd;
   globalConfig.output = concatObjects(globalConfig.output, options.output ?? {});
 
-  const concatPlugins = (a, b, key) => {
-    if (b && b[key] && Array.isArray(b[key])) {
-      return a[key].concat(b[key]);
-    }
-    return a[key];
-  };
-
-  globalConfig.plugins.css = concatPlugins(globalConfig.plugins, options.plugins, 'css');
+  globalConfig.plugins.css = concatLists(globalConfig.plugins, options.plugins, 'css');
+  globalConfig.assets.whitelist = concatLists(globalConfig.assets, options.assets, 'whitelist');
 }
 
 /**
@@ -99,7 +156,7 @@ function transform(data) {
     );
   }
 
-  let i = 0;
+  store.new();
 
   data.forEach(async file => {
     if (!file.path) {
@@ -107,9 +164,6 @@ function transform(data) {
         TypeError('Object must have a valid "path" key')
       );
     }
-
-    i++;
-    console.log(i);
 
     let html = file.html;
     if (!file.html) {
@@ -119,8 +173,13 @@ function transform(data) {
     const $ = cheerio.load(html);
 
     $('[rel=stylesheet]').toArray()
-      .forEach(linkTag => css(linkTag.attribs.href));
+      .forEach(linkTag => css(linkTag));
+
+    $('img[src]').toArray()
+      .forEach(img => image(img));
   });
+
+  store.clearOld();
 }
 
 module.exports = {

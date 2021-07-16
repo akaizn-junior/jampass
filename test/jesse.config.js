@@ -39,6 +39,9 @@ module.exports = {
   views: {
     path: path.join(__dirname, 'cats', 'views')
   },
+  assets: {
+    whitelist: ['camo.githubusercontent.com']
+  },
   output: {
     filename: {
       cat: '-[insertedAt]/[name]/',

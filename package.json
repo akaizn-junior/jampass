@@ -30,6 +30,7 @@
     "cssnano": "^5.0.6",
     "del": "^6.0.0",
     "handlebars": "^4.7.7",
+    "marky": "^1.2.2",
     "postcss": "^8.3.5",
     "postcss-preset-env": "^6.7.0",
     "webpack": "^5.44.0",

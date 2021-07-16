@@ -5,6 +5,7 @@ const chokidar = require('chokidar');
 const cons = require('consolidate');
 const browserSync = require('browser-sync');
 const del = require('del');
+const marky = require('marky');
 
 // node
 const path = require('path');
@@ -34,12 +35,6 @@ const globalConfig = {
   cwd: '.',
   buildId: Date.now(),
   site: {},
-  dirs: {
-    assets: 'assets',
-    style: 'style',
-    static: 'static',
-    script: 'script'
-  },
   views: {
     engine: 'handlebars',
     remote: false,
@@ -51,6 +46,9 @@ const globalConfig = {
   },
   plugins: {
     css: []
+  },
+  assets: {
+    whitelist: []
   }
 };
 
@@ -61,7 +59,7 @@ process.on('unhandledRejection', err => handleErrors(err, globalConfig));
 
 async function compileTemplate(file, data) {
   const filePath = vpath(file);
-  const engine = cons[globalConfig.engine ?? 'handlebars'];
+  const engine = cons[globalConfig.views.engine ?? 'handlebars'];
 
   try {
     return await engine(filePath.full, data);
@@ -166,10 +164,10 @@ async function build() {
 
     if (canProcess && outputNameArray[0].startsWith(JESSE_LOOP_DATA_TOKEN) && Array.isArray(funneledData)) {
       outputNameArray[0] = remTopChar(outputNameArray[0]);
-      funneledData.forEach(async(dataItem, di) => {
+      funneledData.forEach(async dataItem => {
         const result = await compile(file, outputNameArray, outPath.isDir, dataItem);
         writeFile(result.path, result.html);
-        if (di === 0) resultData.push(result);
+        resultData.push(result);
       });
     }
   }
@@ -190,20 +188,13 @@ function config(options = {}) {
   globalConfig.cwd = options.cwd ?? globalConfig.cwd;
   globalConfig.views.path = path.join(globalConfig.cwd, globalConfig.views.path);
   globalConfig.output.path = path.join(globalConfig.cwd, globalConfig.output.path);
-  Object.keys(globalConfig.dirs).forEach(key => {
-    const value = globalConfig.dirs[key];
-    if (value) {
-      globalConfig.dirs[key] = path.join(globalConfig.cwd, value);
-    }
-  });
 
   // update using user configs
-  globalConfig.engine = options.engine ?? globalConfig.engine;
   globalConfig.output = concatObjects(globalConfig.output, options.output ?? {});
   globalConfig.views = concatObjects(globalConfig.views, options.views ?? {});
-  globalConfig.dirs = concatObjects(globalConfig.dirs, options.dirs ?? {});
   globalConfig.plugins = concatObjects(globalConfig.plugins, options.plugins ?? {});
   globalConfig.site = concatObjects(globalConfig.site, options.site ?? {});
+  globalConfig.asssets = concatObjects(globalConfig.assets, options.assets ?? {});
 }
 
 /**
@@ -235,15 +226,20 @@ async function funnel(dataSource) {
  * Compiles all templates according to configurations and outputs html.
  */
 function gen() {
+  marky.mark('generating html');
   build()
     .then(data => {
       cheers.config({
         cwd: globalConfig.cwd,
         output: globalConfig.output,
         plugins: globalConfig.plugins,
-        buildId: globalConfig.buildId
+        buildId: globalConfig.buildId,
+        assets: globalConfig.assets
       });
+
       cheers.transform(data);
+      const end = marky.stop('generating html');
+      consola.info('generated', data.length, 'files in', Math.floor(end.duration) / 1000, 's');
     });
 }
 
