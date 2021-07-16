@@ -1,9 +1,6 @@
 const faker = require('faker');
 const path = require('path');
-
 const jesse = require('../src/jesse');
-
-console.log(jesse);
 
 jesse.funnel(() => {
   const fakeData = [];

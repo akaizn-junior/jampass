@@ -116,7 +116,11 @@ async function compile(file, outputNameArray, isOutDir, locals) {
       year: new Date().getFullYear(),
       buildId: globalConfig.buildId
     },
-    site: globalConfig.site
+    site: {
+      name: globalConfig.site.name,
+      author: globalConfig.site.author,
+      description: globalConfig.site.description
+    }
   });
 
   const processedPath = path.join(...filenameFromData || outputNameArray);
