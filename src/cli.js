@@ -9,7 +9,7 @@ const path = require('path');
 
 // local
 const pkg = require('../package.json');
-const jesse = require('./jesse');
+const jesse = require('./core');
 let validUserConfigPath = '';
 
 function loadUserSettings(opts) {
