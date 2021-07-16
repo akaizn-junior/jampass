@@ -266,11 +266,9 @@ function gen() {
         build: globalConfig.build
       });
 
-      cheers.transform(res.data)
-        .then(() => {
-          const end = Math.floor(marky.stop('generating html').duration) / 1000;
-          consola.info('generated', res.count, 'files in', end, 's');
-        });
+      cheers.transform(res.data);
+      const end = Math.floor(marky.stop('generating html').duration) / 1000;
+      consola.info('generated', res.count, 'files in', end, 's');
     });
 }
 

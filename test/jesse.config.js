@@ -4,7 +4,7 @@ const jesse = require('../src/jesse');
 
 jesse.funnel(() => {
   const fakeData = [];
-  const fakeItemsCount = 100;
+  const fakeItemsCount = 3;
 
   faker.seed(fakeItemsCount);
 
@@ -48,7 +48,7 @@ module.exports = {
   output: {
     filename: {
       cat: '-[insertedAt]/[name]/',
-      dog: '[name.10]/'
+      dog: '[name.1]/'
     }
   }
 };

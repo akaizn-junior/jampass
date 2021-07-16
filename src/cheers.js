@@ -47,6 +47,35 @@ const globalConfig = {
   }
 };
 
+const runPlugins = (plugins, code) => {
+  const plugin = plugins[0];
+
+  if (typeof plugin !== 'function' && plugins.length) {
+    return runPlugins(plugins.slice(1), code);
+  }
+
+  if (typeof plugin === 'function') {
+    const result = plugin(code);
+
+    if (!result || typeof result !== 'string' && plugins.length) {
+      return runPlugins(plugins.slice(1), code);
+    }
+
+    if (plugins.length) return runPlugins(plugins.slice(1), result);
+  }
+
+  return code;
+};
+
+const withPlugins = (kind, data) => {
+  const plugins = globalConfig.plugins[kind];
+  if (plugins && Array.isArray(plugins) && plugins.length) {
+    return runPlugins(plugins, data.code);
+  }
+
+  return data.code;
+};
+
 /**
  * A local store for processed items
  */
@@ -136,8 +165,11 @@ function image(element) {
       }
     } else {
       const imagePath = vpath([globalConfig.cwd, imgSrc], true);
-      const data = await promisify(fs.readFile)(imagePath.full);
-      writeFile(path.join(globalConfig.output.path, imgSrc), data, globalConfig.build.dry);
+
+      if (imagePath.stats.isFile()) {
+        const data = await promisify(fs.readFile)(imagePath.full);
+        writeFile(path.join(globalConfig.output.path, imgSrc), data, globalConfig.build.dry);
+      }
     }
   }, ignoreDataUrls);
 }
@@ -163,17 +195,16 @@ function config(options = {}) {
 /**
  * Transforms generated html
  */
-async function transform(data) {
+function transform(data) {
   if (!data || !Array.isArray(data)) {
     throw (
-      TypeError('Argument must be an array of (path: string, html?: string) objects')
+      TypeError('cheers.transform() expects an array of (path: string, html?: string) objects')
     );
   }
 
   store.new();
 
-  for (let i = 0; i < data.length; i++) {
-    const file = data[i];
+  data.forEach(async file => {
     if (!file.path) {
       throw (
         TypeError('Object must have a valid "path" key')
@@ -185,18 +216,23 @@ async function transform(data) {
       html = await promisify(fs.readFile)(file.path);
     }
 
-    const $ = cheerio.load(html);
+    const modHtml = withPlugins('html', {
+      code: html
+    });
+
+    const $ = cheerio.load(modHtml);
 
     $('[rel=stylesheet]').toArray()
       .forEach(linkTag => css(linkTag));
 
     $('img[src]').toArray()
       .forEach(img => image(img));
-  }
+
+    // write the new html back to src
+    writeFile(file.path, modHtml);
+  });
 
   store.clearOld();
-
-  return true;
 }
 
 module.exports = {

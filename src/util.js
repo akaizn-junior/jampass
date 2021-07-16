@@ -86,14 +86,14 @@ function getDirPaths(srcPath, dir = '') {
  * Validates and parses a path
  * @param {string|string[]} p The path to parse.
  * May also be a list of paths. The paths will be joined and used as one pathString
- * @param {boolean} withStas Indicates whether or not to verify if the path exists
+ * @param {boolean} withStats Indicates whether or not to verify if the path exists
  */
-function vpath(p, withStas = false) {
+function vpath(p, withStats = false) {
   try {
     let stats = null;
     const pathString = Array.isArray(p) ? path.join(...p) : p;
 
-    if (withStas) stats = fs.statSync(pathString);
+    if (withStats) stats = fs.statSync(pathString);
 
     return {
       ...path.parse(pathString),
