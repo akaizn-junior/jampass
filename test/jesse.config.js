@@ -5,7 +5,7 @@ const jesse = require('../src/jesse');
 
 jesse.funnel(() => {
   const fakeData = [];
-  const fakeItemsCount = 10;
+  const fakeItemsCount = 150;
 
   faker.seed(fakeItemsCount);
 
