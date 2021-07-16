@@ -47,35 +47,6 @@ const globalConfig = {
   }
 };
 
-const runPlugins = (plugins, code) => {
-  const plugin = plugins[0];
-
-  if (typeof plugin !== 'function' && plugins.length) {
-    return runPlugins(plugins.slice(1), code);
-  }
-
-  if (typeof plugin === 'function') {
-    const result = plugin(code);
-
-    if (!result || typeof result !== 'string' && plugins.length) {
-      return runPlugins(plugins.slice(1), code);
-    }
-
-    if (plugins.length) return runPlugins(plugins.slice(1), result);
-  }
-
-  return code;
-};
-
-const withPlugins = (kind, data) => {
-  const plugins = globalConfig.plugins[kind];
-  if (plugins && Array.isArray(plugins) && plugins.length) {
-    return runPlugins(plugins, data.code);
-  }
-
-  return data.code;
-};
-
 /**
  * A local store for processed items
  */
@@ -216,11 +187,7 @@ function transform(data) {
       html = await promisify(fs.readFile)(file.path);
     }
 
-    const modHtml = withPlugins('html', {
-      code: html
-    });
-
-    const $ = cheerio.load(modHtml);
+    const $ = cheerio.load(html);
 
     $('[rel=stylesheet]').toArray()
       .forEach(linkTag => css(linkTag));
@@ -229,7 +196,7 @@ function transform(data) {
       .forEach(img => image(img));
 
     // write the new html back to src
-    writeFile(file.path, modHtml);
+    writeFile(file.path, html);
   });
 
   store.clearOld();
