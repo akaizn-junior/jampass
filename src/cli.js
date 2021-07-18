@@ -29,8 +29,8 @@ function loadUserSettings(opts) {
     throw err;
   }
 
-  settings.build.dry = opts.dry;
-  settings.build.mode = opts.mode;
+  opts.dry && (settings.build.dry = opts.dry);
+  opts.mode && (settings.build.mode = opts.mode);
   settings && jesse.config(settings);
 }
 

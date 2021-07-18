@@ -246,7 +246,7 @@ function config(options = {}) {
   globalConfig.asssets = concatObjects(globalConfig.assets, options.assets ?? {});
   globalConfig.build = concatObjects(globalConfig.build, options.build ?? {});
 
-  switch (globalConfig.build.mode) {
+  switch (options.build.mode) {
   case JESSE_BUILD_MODE_BUSY: globalConfig.build.mode = JESSE_BUILD_MODE_BUSY; break;
   case JESSE_BUILD_MODE_STRICT: globalConfig.build.mode = JESSE_BUILD_MODE_STRICT; break;
   case JESSE_BUILD_MODE_LAZY:
