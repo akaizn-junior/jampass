@@ -176,17 +176,15 @@ async function build() {
 
       try {
         if (validate) {
-          const validation = await cheers.validate(result.html);
-          handleCheersValidate(validation, {
-            gen: result.path,
-            view: file
-          });
+          handleCheersValidate(await cheers.validate(result.html),
+            { gen: result.path, view: file });
         }
 
         writeFile(result.path, result.html, globalConfig.build.dry);
         resultData.push(result);
         filesGeneratedCount++;
       } catch (err) {
+        await del([publicOutPath]);
         throw err;
       }
     }
@@ -200,11 +198,8 @@ async function build() {
 
         try {
           if (validate) {
-            const validation = await cheers.validate(result.html);
-            handleCheersValidate(validation, {
-              gen: result.path,
-              view: file
-            });
+            handleCheersValidate(await cheers.validate(result.html),
+              { gen: result.path, view: file });
           }
 
           writeFile(result.path, result.html, globalConfig.build.dry);
@@ -215,6 +210,7 @@ async function build() {
             resultData.push(result);
           }
         } catch (err) {
+          await del([publicOutPath]);
           throw err;
         }
       });

@@ -177,7 +177,10 @@ function parseDynamicName(nm) {
 
 
 function handleCheersValidate(res, data) {
-  if (!res.isValid) consola.info('cheers.validate()', `"${data.gen}"`, `\ngenerated from "${data.view}"\n`);
+  if (!res.isValid) {
+    consola.info('cheers.validate()', `"${data.gen}"`, `\ngenerated from "${data.view}"\n`);
+  }
+
   res.errors.forEach(err => {
     consola.log(`${err.line}:${err.column}`, `"${err.ruleId}"`, 'error', err.message);
   });
@@ -187,6 +190,7 @@ function handleCheersValidate(res, data) {
   });
 
   if (!res.isValid) throw Error('HTML validation');
+  return res.isValid;
 }
 
 module.exports = {
