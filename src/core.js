@@ -25,6 +25,8 @@ const {
   handleErrors,
   debugLog,
   parseDynamicName,
+  genBuildId,
+  handleCheersValidate,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
@@ -36,7 +38,7 @@ const {
 let funneledData = [];
 const globalConfig = {
   cwd: '.',
-  buildId: Date.now(),
+  buildId: genBuildId(),
   build: {
     mode: JESSE_BUILD_MODE_LAZY,
     dry: false
@@ -145,7 +147,7 @@ async function compile(file, outputNameArray, isOutDir, locals) {
 
 async function build() {
   debugLog('working on templates');
-  globalConfig.buildId = Date.now();
+  globalConfig.buildId = genBuildId();
   debugLog('generated a new build id', globalConfig.buildId);
 
   const safeFolderPath = vpath(globalConfig.views.path, true);
@@ -170,9 +172,23 @@ async function build() {
 
     if (canProcess && !outputNameArray[0].startsWith(JESSE_LOOP_DATA_TOKEN)) {
       const result = await compile(file, outputNameArray, outPath.isDir, funneledData);
-      writeFile(result.path, result.html, globalConfig.build.dry);
-      resultData.push(result);
-      filesGeneratedCount++;
+      const validate = globalConfig.build.mode !== JESSE_BUILD_MODE_LAZY;
+
+      try {
+        if (validate) {
+          const validation = await cheers.validate(result.html);
+          handleCheersValidate(validation, {
+            gen: result.path,
+            view: file
+          });
+        }
+
+        writeFile(result.path, result.html, globalConfig.build.dry);
+        resultData.push(result);
+        filesGeneratedCount++;
+      } catch (err) {
+        throw err;
+      }
     }
 
     if (canProcess && outputNameArray[0].startsWith(JESSE_LOOP_DATA_TOKEN) && Array.isArray(funneledData)) {
@@ -180,11 +196,26 @@ async function build() {
       filesGeneratedCount += funneledData.length;
       funneledData.forEach(async(dataItem, di) => {
         const result = await compile(file, outputNameArray, outPath.isDir, dataItem);
-        writeFile(result.path, result.html, globalConfig.build.dry);
-        if (!globalConfig.build.mode === JESSE_BUILD_MODE_LAZY) {
-          di === 0 && resultData.push(result);
-        } else {
-          resultData.push(result);
+        const validate = di === 0 && globalConfig.build.mode !== JESSE_BUILD_MODE_LAZY;
+
+        try {
+          if (validate) {
+            const validation = await cheers.validate(result.html);
+            handleCheersValidate(validation, {
+              gen: result.path,
+              view: file
+            });
+          }
+
+          writeFile(result.path, result.html, globalConfig.build.dry);
+
+          if (!globalConfig.build.mode === JESSE_BUILD_MODE_LAZY) {
+            di === 0 && resultData.push(result);
+          } else {
+            resultData.push(result);
+          }
+        } catch (err) {
+          throw err;
         }
       });
     }
@@ -253,8 +284,11 @@ async function funnel(dataSource) {
  */
 function gen() {
   globalConfig.build.dry
-    && consola.log('Dry run in', `"${globalConfig.build.mode}" mode`);
+  && consola.log('Dry run in', `"${globalConfig.build.mode}" mode`);
+
+  // start timer
   marky.mark('generating html');
+
   build()
     .then(res => {
       cheers.config({

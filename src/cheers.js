@@ -1,11 +1,13 @@
 // deps
 const cheerio = require('cheerio');
+const htmlValidator = require('html-validator');
 
 // postcss and plugins
 const postcss = require('postcss');
 const postcssPresetEnv = require('postcss-preset-env');
 const cssnano = require('cssnano');
 const autoprefixer = require('autoprefixer');
+const postCssHash = require('postcss-hash');
 
 // node
 const fs = require('fs');
@@ -19,13 +21,14 @@ const {
   vpath,
   concatLists,
   debugLog,
+  genBuildId,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_STRICT
 } = require('./util');
 
 // globals
 const globalConfig = {
-  buildId: null,
+  buildId: genBuildId(),
   cwd: '.',
   build: {
     mode: JESSE_BUILD_MODE_LAZY,
@@ -39,11 +42,12 @@ const globalConfig = {
     css: [
       postcssPresetEnv(),
       cssnano(),
-      autoprefixer()
+      autoprefixer(),
+      postCssHash()
     ]
   },
   assets: {
-    whitelist: []
+    trust: []
   }
 };
 
@@ -88,7 +92,7 @@ const processHelper = (elemId, proc, skipFlag = false) => {
   }
 };
 
-function css(element) {
+function css(element, $) {
   const cssSrc = element.attribs.href;
   processHelper(cssSrc, async() => {
     const cssPath = vpath([globalConfig.cwd, cssSrc]);
@@ -100,7 +104,12 @@ function css(element) {
       postcss(globalConfig.plugins.css)
         .process(code, { from: cssPath.full, to: cssOutPath })
         .then(result => {
-          writeFile(cssOutPath, result.css, globalConfig.build.dry);
+          const modLinkTag = $(element)
+            .attr('href', result.opts.to)
+            .html();
+          $(element).replaceWith(modLinkTag);
+
+          writeFile(result.opts.to, result.css, globalConfig.build.dry);
         });
       break;
     }
@@ -121,17 +130,10 @@ function image(element) {
       const protocol = source[0];
       const provider = source[1].substring(0, source[1].indexOf('/'));
 
-      if (protocol === 'http') {
-        debugLog('site uses images served via', protocol);
+      if (protocol === 'http' && !globalConfig.assets.trust.includes(provider)) {
+        debugLog('site uses images served via "http" from', provider);
         if (globalConfig.build.mode === JESSE_BUILD_MODE_STRICT) {
-          throw Error('Image served via "http". Confirm external assets are from secure sources');
-        }
-      }
-
-      if (!globalConfig.assets.whitelist.includes(provider)) {
-        debugLog('site uses images from not whitelisted provider', provider);
-        if (globalConfig.build.mode === JESSE_BUILD_MODE_STRICT) {
-          throw Error(`Image served from an untrusted provider "${provider}". Provider may be whitelisted in settings`);
+          throw Error(`Image served via "http" from an untrusted provider "${provider}"`);
         }
       }
     } else {
@@ -160,7 +162,25 @@ function config(options = {}) {
   globalConfig.build = concatObjects(globalConfig.build, options.build ?? {});
 
   globalConfig.plugins.css = concatLists(globalConfig.plugins, options.plugins, 'css');
-  globalConfig.assets.whitelist = concatLists(globalConfig.assets, options.assets, 'whitelist');
+  globalConfig.assets.trust = concatLists(globalConfig.assets, options.assets, 'trust');
+}
+
+async function validate(html) {
+  if (!html || typeof html !== 'string') {
+    throw Error(`cheers.validate() takes a html string. "${html}" given`);
+  }
+
+  try {
+    const result = await htmlValidator({
+      data: html,
+      format: 'text',
+      validator: 'WHATWG'
+    });
+
+    return result;
+  } catch (err) {
+    throw err;
+  }
 }
 
 /**
@@ -188,15 +208,11 @@ function transform(data) {
     }
 
     const $ = cheerio.load(html);
-
-    $('[rel=stylesheet]').toArray()
-      .forEach(linkTag => css(linkTag));
-
-    $('img[src]').toArray()
-      .forEach(img => image(img));
+    $('[rel=stylesheet]').each((_, linkTag) => css(linkTag, $));
+    $('img[src]').each((_, img) => image(img));
 
     // write the new html back to src
-    writeFile(file.path, html);
+    writeFile(file.path, $.html());
   });
 
   store.clearOld();
@@ -204,5 +220,6 @@ function transform(data) {
 
 module.exports = {
   config,
-  transform
+  transform,
+  validate
 };

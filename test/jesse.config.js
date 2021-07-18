@@ -43,7 +43,7 @@ module.exports = {
     path: path.join(__dirname, 'cats', 'views')
   },
   assets: {
-    whitelist: ['camo.githubusercontent.com']
+    trust: ['placeimg.com']
   },
   output: {
     filename: {

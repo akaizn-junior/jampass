@@ -30,8 +30,11 @@
     "cssnano": "^5.0.6",
     "del": "^6.0.0",
     "handlebars": "^4.7.7",
+    "html-validator": "^5.1.17",
     "marky": "^1.2.2",
+    "parse5": "^6.0.1",
     "postcss": "^8.3.5",
+    "postcss-hash": "^3.0.0",
     "postcss-preset-env": "^6.7.0",
     "webpack": "^5.44.0",
     "yargs": "^17.0.1"

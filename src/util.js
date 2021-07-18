@@ -27,6 +27,8 @@ const concatLists = (a, b, key) => {
   return a[key];
 };
 
+const genBuildId = () => String(Date.now());
+
 // functions
 
 function accessProperty(obj, key, start = 0) {
@@ -173,6 +175,20 @@ function parseDynamicName(nm) {
   return nm;
 }
 
+
+function handleCheersValidate(res, data) {
+  if (!res.isValid) consola.info('cheers.validate()', `"${data.gen}"`, `\ngenerated from "${data.view}"\n`);
+  res.errors.forEach(err => {
+    consola.log(`${err.line}:${err.column}`, `"${err.ruleId}"`, 'error', err.message);
+  });
+
+  res.warnings.forEach(warn => {
+    consola.log(`${warn.line}:${warn.column}`, `"${warn.ruleId}"`, 'error', warn.message);
+  });
+
+  if (!res.isValid) throw Error('HTML validation');
+}
+
 module.exports = {
   accessProperty,
   concatObjects,
@@ -186,6 +202,8 @@ module.exports = {
   debugLog,
   parseDynamicName,
   concatLists,
+  genBuildId,
+  handleCheersValidate,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
