@@ -26,6 +26,7 @@ const {
   debugLog,
   parseDynamicName,
   genBuildId,
+  hashname,
   handleCheersValidate,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
@@ -120,8 +121,7 @@ async function compile(file, outputNameArray, isOutDir, locals) {
     },
     site: {
       name: globalConfig.site.name,
-      author: globalConfig.site.author,
-      description: globalConfig.site.description
+      author: globalConfig.site.author
     }
   });
 
@@ -293,8 +293,11 @@ function gen() {
         plugins: globalConfig.plugins,
         buildId: globalConfig.buildId,
         assets: globalConfig.assets,
-        build: globalConfig.build
+        build: globalConfig.build,
+        site: globalConfig.site
       });
+
+      // take a function that finally saves the modified code
 
       cheers.transform(res.data);
       const end = Math.floor(marky.stop('generating html').duration) / 1000;

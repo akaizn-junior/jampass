@@ -4,6 +4,7 @@ const consola = require('consola');
 // node
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 // globals
 
@@ -193,6 +194,16 @@ function handleCheersValidate(res, data) {
   return res.isValid;
 }
 
+function hashname(file, content, len) {
+  let hash = crypto
+    .createHash('md5')
+    .update(content)
+    .digest('hex');
+
+  len && (hash = hash.substr(0, len));
+  return `${file.name}.${hash}${file.ext}`;
+}
+
 module.exports = {
   accessProperty,
   concatObjects,
@@ -207,6 +218,7 @@ module.exports = {
   parseDynamicName,
   concatLists,
   genBuildId,
+  hashname,
   handleCheersValidate,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,

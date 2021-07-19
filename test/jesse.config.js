@@ -34,10 +34,18 @@ jesse.funnel(() => {
 
 module.exports = {
   site: {
-    name: 'Adopt Animals'
+    name: 'Adopt Animals',
+    shortname: 'adopta',
+    author: 'Kat McMeowsface',
+    lang: 'en-US',
+    favicons: {
+      src: './cats/assets/images/cat-walking.png',
+      background: 'cyan',
+      themeColor: 'blue'
+    }
   },
   build: {
-    mode: jesse.JESSE_BUILD_MODE_BUSY
+    mode: jesse.JESSE_BUILD_MODE_LAZY
   },
   views: {
     path: path.join(__dirname, 'cats', 'views')

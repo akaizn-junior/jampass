@@ -34,6 +34,9 @@ const globalConfig = {
     mode: JESSE_BUILD_MODE_LAZY,
     dry: false
   },
+  site: {
+    favicons: { src: '' }
+  },
   output: {
     remote: false,
     path: 'public'
@@ -105,8 +108,7 @@ function css(element, $) {
         .process(code, { from: cssPath.full, to: cssOutPath })
         .then(result => {
           const modLinkTag = $(element)
-            .attr('href', result.opts.to)
-            .html();
+            .attr('href', result.opts.to);
           $(element).replaceWith(modLinkTag);
 
           writeFile(result.opts.to, result.css, globalConfig.build.dry);
@@ -141,7 +143,8 @@ function image(element) {
 
       if (imagePath.stats.isFile()) {
         const data = await promisify(fs.readFile)(imagePath.full);
-        writeFile(path.join(globalConfig.output.path, imgSrc), data, globalConfig.build.dry);
+        const dest = path.join(globalConfig.output.path, imgSrc);
+        writeFile(dest, data, globalConfig.build.dry);
       }
     }
   }, ignoreDataUrls);
@@ -160,6 +163,7 @@ function config(options = {}) {
   globalConfig.cwd = options.cwd ?? globalConfig.cwd;
   globalConfig.output = concatObjects(globalConfig.output, options.output ?? {});
   globalConfig.build = concatObjects(globalConfig.build, options.build ?? {});
+  globalConfig.site = concatObjects(globalConfig.site, options.site ?? {});
 
   globalConfig.plugins.css = concatLists(globalConfig.plugins, options.plugins, 'css');
   globalConfig.assets.trust = concatLists(globalConfig.assets, options.assets, 'trust');
@@ -183,10 +187,14 @@ async function validate(html) {
   }
 }
 
+function genFavicons() {
+  // const favPath = vpath([globalConfig.cwd, globalConfig.site.favicons.src], true);
+}
+
 /**
  * Transforms generated html
  */
-function transform(data) {
+function transform(data, done = () => {}) {
   if (!data || !Array.isArray(data)) {
     throw (
       TypeError('cheers.transform() expects an array of (path: string, html?: string) objects')
@@ -194,6 +202,8 @@ function transform(data) {
   }
 
   store.new();
+
+  genFavicons();
 
   data.forEach(async file => {
     if (!file.path) {
@@ -211,8 +221,10 @@ function transform(data) {
     $('[rel=stylesheet]').each((_, linkTag) => css(linkTag, $));
     $('img[src]').each((_, img) => image(img));
 
-    // write the new html back to src
-    writeFile(file.path, $.html());
+    // given the async nature of the code
+    // save the final html after a few milliseconds
+    const save = () => writeFile(file.path, $.html());
+    setTimeout(save, 150);
   });
 
   store.clearOld();
