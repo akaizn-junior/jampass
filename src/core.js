@@ -26,7 +26,6 @@ const {
   debugLog,
   parseDynamicName,
   genBuildId,
-  hashname,
   handleCheersValidate,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,

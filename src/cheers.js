@@ -194,7 +194,7 @@ function genFavicons() {
 /**
  * Transforms generated html
  */
-function transform(data, done = () => {}) {
+function transform(data) {
   if (!data || !Array.isArray(data)) {
     throw (
       TypeError('cheers.transform() expects an array of (path: string, html?: string) objects')
