@@ -29,6 +29,7 @@
     "consolidate": "^0.16.0",
     "cssnano": "^5.0.6",
     "del": "^6.0.0",
+    "dotenv": "^10.0.0",
     "handlebars": "^4.7.7",
     "html-validator": "^5.1.17",
     "marky": "^1.2.2",

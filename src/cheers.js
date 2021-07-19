@@ -187,10 +187,6 @@ async function validate(html) {
   }
 }
 
-function genFavicons() {
-  // const favPath = vpath([globalConfig.cwd, globalConfig.site.favicons.src], true);
-}
-
 /**
  * Transforms generated html
  */
@@ -202,8 +198,6 @@ function transform(data) {
   }
 
   store.new();
-
-  genFavicons();
 
   data.forEach(async file => {
     if (!file.path) {
@@ -219,6 +213,9 @@ function transform(data) {
 
     const $ = cheerio.load(html);
     $('[rel=stylesheet]').each((_, linkTag) => css(linkTag, $));
+    $('[rel]').each((_, el) => () => {
+      console.log(el.attribs.rel);
+    });
     $('img[src]').each((_, img) => image(img));
 
     // given the async nature of the code

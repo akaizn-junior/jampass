@@ -29,6 +29,9 @@ const concatLists = (a, b, key) => {
 };
 
 const genBuildId = () => String(Date.now());
+const loadUserEnv = () => require('dotenv').config({
+  path: path.join(process.cwd(), '.env')
+});
 
 // functions
 
@@ -58,7 +61,7 @@ function getValidData(data) {
   const isValid = Array.isArray(data) || isObj(data);
 
   if (!isValid) {
-    throw TypeError('Data must be of type Object or Array');
+    throw TypeError('Funneled data must be of type Object or Array');
   }
 
   return data;
@@ -219,6 +222,7 @@ module.exports = {
   concatLists,
   genBuildId,
   hashname,
+  loadUserEnv,
   handleCheersValidate,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,

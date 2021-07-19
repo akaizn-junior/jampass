@@ -14,6 +14,7 @@ let validUserConfigPath = '';
 
 function loadUserSettings(opts) {
   let settings;
+  let configCwd;
   const configPath = opts.cpath ?? 'jesse.config.js';
 
   try {
@@ -23,7 +24,8 @@ function loadUserSettings(opts) {
     if (stats.isFile()) {
       validUserConfigPath = userConfig;
       settings = require(userConfig);
-      !settings.cwd && (settings.cwd = path.parse(userConfig).dir);
+      configCwd = path.parse(userConfig).dir;
+      !settings.cwd && (settings.cwd = configCwd);
     }
   } catch (err) {
     throw err;
@@ -31,7 +33,7 @@ function loadUserSettings(opts) {
 
   opts.dry && (settings.build.dry = opts.dry);
   opts.mode && (settings.build.mode = opts.mode);
-  settings && jesse.config(settings);
+  settings && jesse.config(settings, configCwd);
 }
 
 yargs.scriptName('jesse');

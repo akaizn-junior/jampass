@@ -26,6 +26,7 @@ const {
   debugLog,
   parseDynamicName,
   genBuildId,
+  loadUserEnv,
   handleCheersValidate,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
@@ -51,7 +52,8 @@ const globalConfig = {
   },
   output: {
     remote: false,
-    path: 'public'
+    path: 'public',
+    filename: {}
   },
   plugins: {
     css: []
@@ -62,6 +64,8 @@ const globalConfig = {
 };
 
 // Helpers
+
+loadUserEnv();
 
 process.on('uncaughtException', err => handleErrors(err, globalConfig));
 process.on('unhandledRejection', err => handleErrors(err, globalConfig));
@@ -225,40 +229,38 @@ async function build() {
  * Sets user configurations
  * @param {object} options User defined configurations
  */
-function config(options = {}) {
+function config(options = {}, configCwd = '') {
   if (!options) throw Error('Options must be a valid object');
 
   // update paths
-  globalConfig.cwd = options.cwd ?? globalConfig.cwd;
-  globalConfig.views.path = path.join(globalConfig.cwd, globalConfig.views.path);
-  globalConfig.output.path = path.join(globalConfig.cwd, globalConfig.output.path);
+  globalConfig.cwd = options.cwd ?? (configCwd || globalConfig.cwd);
 
   // update using user configs
   globalConfig.output = concatObjects(globalConfig.output, options.output ?? {});
   globalConfig.views = concatObjects(globalConfig.views, options.views ?? {});
+  globalConfig.views.path = path.join(globalConfig.cwd, globalConfig.views.path);
+  globalConfig.output.path = path.join(configCwd, globalConfig.output.path);
+
   globalConfig.plugins = concatObjects(globalConfig.plugins, options.plugins ?? {});
   globalConfig.site = concatObjects(globalConfig.site, options.site ?? {});
   globalConfig.asssets = concatObjects(globalConfig.assets, options.assets ?? {});
   globalConfig.build = concatObjects(globalConfig.build, options.build ?? {});
 
-  switch (options.build.mode) {
-  case JESSE_BUILD_MODE_BUSY: globalConfig.build.mode = JESSE_BUILD_MODE_BUSY; break;
-  case JESSE_BUILD_MODE_STRICT: globalConfig.build.mode = JESSE_BUILD_MODE_STRICT; break;
-  case JESSE_BUILD_MODE_LAZY:
-  default: globalConfig.build.mode = JESSE_BUILD_MODE_LAZY; break;
-  }
+  const validMode = [JESSE_BUILD_MODE_LAZY, JESSE_BUILD_MODE_BUSY, JESSE_BUILD_MODE_STRICT]
+    .includes(globalConfig.build.mode);
+  if (!validMode) throw Error('build mode must be a valid jesse mode');
 }
 
 /**
- * Funnels data through the generator. It is irrelevant how the source is
- * implemented here, only the return value matters.
- * In this case it must always be an array.
- * @param {() => Array | Promise<Array>} dataSource The source of the data to inject
+ * Funnels data/locals through the generator.
+ * @param {() => Array | Promise<Array>} dataSource The source of the data to inject.
+ * It must return an array or an object.
+ * @returns void
  */
 async function funnel(dataSource) {
   if (!dataSource || typeof dataSource !== 'function') {
     throw (
-      TypeError('DataSource must be a function that returns an Array or an Array Promise')
+      TypeError('jesse.funnel() takes a function. "dataSource" must be a function that returns locals')
     );
   }
 
