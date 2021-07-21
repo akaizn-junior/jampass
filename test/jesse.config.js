@@ -33,6 +33,7 @@ jesse.funnel(() => {
 });
 
 module.exports = {
+  cwd: path.join(__dirname, 'cats'),
   site: {
     name: 'Adopt Animals',
     shortname: 'adopta',
@@ -46,9 +47,6 @@ module.exports = {
   },
   build: {
     mode: jesse.JESSE_BUILD_MODE_LAZY
-  },
-  views: {
-    path: path.join(__dirname, 'cats', 'views')
   },
   assets: {
     trust: ['placeimg.com']

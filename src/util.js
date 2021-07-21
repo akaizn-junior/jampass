@@ -1,5 +1,7 @@
 // deps
 const consola = require('consola');
+const cacache = require('cacache');
+const findCacheDir = require('find-cache-dir');
 
 // node
 const fs = require('fs');
@@ -14,6 +16,15 @@ const JESSE_LOOP_DATA_TOKEN = '-';
 const JESSE_BUILD_MODE_LAZY = 'lazy';
 const JESSE_BUILD_MODE_BUSY = 'busy';
 const JESSE_BUILD_MODE_STRICT = 'strict';
+
+// quick setup
+
+const cachePath = findCacheDir({ name: 'jesse' });
+
+const CACHE = {
+  get: k => cacache.get(cachePath, k),
+  set: (k, v) => cacache.put(cachePath, k, v)
+};
 
 // lambdas
 
@@ -75,16 +86,18 @@ function outputName(outName) {
   };
 }
 
-function getDirPaths(srcPath, dir = '') {
+function getDirPaths(srcPath, dirType = 'sub', dir = '') {
   const dirents = fs.readdirSync(srcPath, {
     withFileTypes: true
   });
 
   return dirents.flatMap(dirent => {
     if (dirent.isDirectory()) {
-      return getDirPaths(path.join(srcPath, dirent.name), dirent.name);
+      return getDirPaths(path.join(srcPath, dirent.name), dirType, dirent.name);
     }
-    return path.join(path.parse(dir).base, dirent.name);
+
+    return dirType === 'full' ? path.join(srcPath, dirent.name)
+      : path.join(path.parse(dir).base, dirent.name);
   });
 }
 
@@ -224,6 +237,7 @@ module.exports = {
   hashname,
   loadUserEnv,
   handleCheersValidate,
+  CACHE,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,

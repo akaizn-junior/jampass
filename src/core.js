@@ -28,6 +28,7 @@ const {
   genBuildId,
   loadUserEnv,
   handleCheersValidate,
+  CACHE,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
@@ -63,12 +64,14 @@ const globalConfig = {
   }
 };
 
-// Helpers
+// Quick setup
 
 loadUserEnv();
 
 process.on('uncaughtException', err => handleErrors(err, globalConfig));
 process.on('unhandledRejection', err => handleErrors(err, globalConfig));
+
+// Helpers
 
 async function compileTemplate(file, data) {
   const filePath = vpath(file);
@@ -116,7 +119,7 @@ async function compile(file, outputNameArray, isOutDir, locals) {
   }
 
   // expose locals has "data" for all templates
-  const html = await compileTemplate(file, {
+  let html = await compileTemplate(file, {
     data: localsUsed,
     jesse: {
       year: new Date().getFullYear(),
@@ -145,29 +148,26 @@ async function compile(file, outputNameArray, isOutDir, locals) {
     });
   }
 
-  return { path: outPath, html };
+  html = Buffer.from(html);
+
+  CACHE.set(outPath, Buffer.from(JSON.stringify({ path: outPath, code: html })));
+  return { path: outPath, code: html };
 }
 
 async function build() {
   debugLog('working on templates');
-  globalConfig.buildId = genBuildId();
-  debugLog('generated a new build id', globalConfig.buildId);
 
-  const safeFolderPath = vpath(globalConfig.views.path, true);
-  const files = getDirPaths(safeFolderPath.full);
+  const viewsPath = vpath(globalConfig.views.path, true);
+  const files = getDirPaths(viewsPath.full);
   const publicOutPath = vpath(globalConfig.output.path).full;
 
   const resultData = [];
   let filesGeneratedCount = 0;
 
-  // clean output dir
-  const cleaned = await del([`${publicOutPath}/**`, `!${publicOutPath}`]);
-  debugLog('cleaned output dir', cleaned);
-
   for (let i = 0; i < files.length; i++) {
     const relativePath = files[i];
     const templateName = vpath(relativePath).name;
-    const file = safeFolderPath.concat(relativePath);
+    const file = viewsPath.concat(relativePath);
 
     const canProcess = relativePath && !templateName.startsWith('.'); // can process if not hidden
     const outPath = outputName(globalConfig.output.filename[templateName] ?? relativePath);
@@ -179,11 +179,11 @@ async function build() {
 
       try {
         if (validate) {
-          handleCheersValidate(await cheers.validate(result.html),
+          handleCheersValidate(await cheers.validate(result.code),
             { gen: result.path, view: file });
         }
 
-        writeFile(result.path, result.html, globalConfig.build.dry);
+        writeFile(result.path, result.code, globalConfig.build.dry);
         resultData.push(result);
         filesGeneratedCount++;
       } catch (err) {
@@ -201,11 +201,11 @@ async function build() {
 
         try {
           if (validate) {
-            handleCheersValidate(await cheers.validate(result.html),
+            handleCheersValidate(await cheers.validate(result.code),
               { gen: result.path, view: file });
           }
 
-          writeFile(result.path, result.html, globalConfig.build.dry);
+          writeFile(result.path, result.code, globalConfig.build.dry);
 
           if (!globalConfig.build.mode === JESSE_BUILD_MODE_LAZY) {
             di === 0 && resultData.push(result);
@@ -248,7 +248,7 @@ function config(options = {}, configCwd = '') {
 
   const validMode = [JESSE_BUILD_MODE_LAZY, JESSE_BUILD_MODE_BUSY, JESSE_BUILD_MODE_STRICT]
     .includes(globalConfig.build.mode);
-  if (!validMode) throw Error('build mode must be a valid jesse mode');
+  if (!validMode) throw Error('build mode is not valid');
 }
 
 /**
@@ -279,31 +279,45 @@ async function funnel(dataSource) {
 /**
  * Compiles all templates according to configurations and outputs html.
  */
-function gen() {
+async function gen() {
+  globalConfig.buildId = genBuildId();
+  debugLog('generated a new build id', globalConfig.buildId);
+
   globalConfig.build.dry
   && consola.log('Dry run in', `"${globalConfig.build.mode}" mode`);
+
+  // clean output dir
+  const publicOutPath = vpath(globalConfig.output.path).full;
+  const cleaned = await del([`${publicOutPath}/**`, `!${publicOutPath}`]);
+  debugLog('cleaned output dir', cleaned);
 
   // start timer
   marky.mark('generating html');
 
-  build()
-    .then(res => {
-      cheers.config({
-        cwd: globalConfig.cwd,
-        output: globalConfig.output,
-        plugins: globalConfig.plugins,
-        buildId: globalConfig.buildId,
-        assets: globalConfig.assets,
-        build: globalConfig.build,
-        site: globalConfig.site
-      });
+  const assetsPath = vpath([globalConfig.cwd, 'assets'], true);
+  const stylePath = vpath([globalConfig.cwd, 'style'], true);
 
-      // take a function that finally saves the modified code
+  const assets = getDirPaths(assetsPath.full, 'full');
+  const styles = getDirPaths(stylePath.full, 'full');
 
-      cheers.transform(res.data);
-      const end = Math.floor(marky.stop('generating html').duration) / 1000;
-      consola.info('generated', res.count, 'files in', end, 's');
-    });
+  cheers.config({
+    cwd: globalConfig.cwd,
+    output: globalConfig.output,
+    plugins: globalConfig.plugins,
+    buildId: globalConfig.buildId,
+    assets: globalConfig.assets,
+    build: globalConfig.build,
+    site: globalConfig.site
+  });
+
+  cheers.transform('assets', assets.map(p => ({ path: p })));
+  cheers.transform('style', styles.map(p => ({ path: p })));
+
+  const res = await build();
+  cheers.transform('html', res.data);
+
+  const end = Math.floor(marky.stop('generating html').duration) / 1000;
+  consola.info('generated', res.count, 'files in', end, 's');
 }
 
 /**

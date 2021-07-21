@@ -22,6 +22,7 @@ const {
   concatLists,
   debugLog,
   genBuildId,
+  CACHE,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_STRICT
 } = require('./util');
@@ -54,100 +55,114 @@ const globalConfig = {
   }
 };
 
-/**
- * A local store for processed items
- */
-const keep = {};
+function handleExternalUrls(src) {
+  const source = src.split('//');
+  const protocol = source[0];
+  const provider = source[1].substring(0, source[1].indexOf('/'));
 
-const store = {
-  new() {
-    keep[globalConfig.buildId] = {};
-  },
-  clearOld() {
-    Object.keys(keep).forEach(key => {
-      if (key && keep[key] && key !== globalConfig.buildId) {
-        delete keep[key];
-      }
-    });
-  },
-  get(key) {
-    return keep[globalConfig.buildId][key];
-  },
-  set(k, v) {
-    keep[globalConfig.buildId][k] = v;
+  if (protocol === 'http' && !globalConfig.assets.trust.includes(provider)) {
+    debugLog('site uses images served via "http" from', provider);
+    if (globalConfig.build.mode === JESSE_BUILD_MODE_STRICT) {
+      throw Error(`Image served via "http" from an untrusted provider "${provider}"`);
+    }
   }
-};
+}
 
-// process
-
-/**
- * @param {string} elemId A unique identifier for the element process
- * @param {function} proc A callback to run as processing the element
- * @param {boolean} skipFlag Custom flag for skipping processing
- */
-const processHelper = (elemId, proc, skipFlag = false) => {
-  // process, if not already
-  const buildKey = String(elemId);
-
-  if (!store.get(buildKey) && !skipFlag) {
-    proc(buildKey);
-    store.set(buildKey, true);
-  }
-};
-
-function css(element, $) {
+function updateCssSrc(element, $) {
   const cssSrc = element.attribs.href;
-  processHelper(cssSrc, async() => {
-    const cssPath = vpath([globalConfig.cwd, cssSrc]);
-    const cssOutPath = path.join(globalConfig.output.path, cssSrc);
-    const code = await promisify(fs.readFile)(cssPath.full);
+  const isExternal = cssSrc.substr(0, 10).includes('//');
+  const hasExtName = path.extname(cssSrc).startsWith('.');
 
-    switch (cssPath.ext) {
-    case '.css':
+  if (isExternal) handleExternalUrls(cssSrc);
+
+  if (!isExternal && hasExtName) {
+    const cssPath = vpath([globalConfig.cwd, cssSrc], true);
+    const cached = CACHE.get(cssPath.full);
+
+    cached
+      .then(found => {
+        const { path: p } = JSON.parse(found.data.toString());
+        const base = p.split('style')[1];
+
+        const out = path.join('style', base);
+        const modded = $(element).attr('href', out);
+        $(element).replaceWith(modded);
+      }).catch(() => {});
+  }
+}
+
+function updateImageSrc(element, $, attr = 'src') {
+  const imgSrc = element.attribs.src || element.attribs.href;
+  const isDataUrl = imgSrc.startsWith('data:image');
+  const isExternal = imgSrc.substr(0, 10).includes('//');
+  const hasExtName = path.extname(imgSrc).startsWith('.');
+
+  if (isExternal) handleExternalUrls(imgSrc);
+
+  if (!isExternal && !isDataUrl && hasExtName) {
+    const imagePath = vpath([globalConfig.cwd, imgSrc], true);
+    const cached = CACHE.get(imagePath.full);
+
+    cached
+      .then(found => {
+        const { path: p } = JSON.parse(found.data.toString());
+        const base = p.split('assets')[1];
+
+        const out = path.join('assets', base);
+        const modded = $(element).attr(attr, out);
+        $(element).replaceWith(modded);
+      })
+      .catch(() => {});
+  }
+}
+
+// helpers
+
+async function handleCss(file) {
+  const cssPath = vpath(file.path);
+  const cached = CACHE.get(file.path);
+
+  cached
+    .then(found => {
+      const { path: p, code } = JSON.parse(found.data.toString());
+      writeFile(p, Buffer.from(code.data), globalConfig.build.dry);
+    })
+    .catch(() => {
+      const fullPathBase = file.path.split('style')[1];
+      const cssOutPath = path.join(globalConfig.output.path, 'style', fullPathBase);
+
       postcss(globalConfig.plugins.css)
-        .process(code, { from: cssPath.full, to: cssOutPath })
+        .process(file.code, { from: cssPath.full, to: cssOutPath })
         .then(result => {
-          const modLinkTag = $(element)
-            .attr('href', result.opts.to);
-          $(element).replaceWith(modLinkTag);
+          CACHE.set(file.path, Buffer.from(JSON.stringify({
+            path: result.opts.to,
+            code: result.css
+          })));
 
           writeFile(result.opts.to, result.css, globalConfig.build.dry);
         });
-      break;
-    }
-  });
+    });
 }
 
-function image(element) {
-  /**
-   * @type String
-   */
-  const imgSrc = element.attribs.src;
-  const ignoreDataUrls = imgSrc.startsWith('data:image');
+async function handleAssets(file) {
+  const cached = CACHE.get(file.path);
 
-  processHelper(Math.random(), async() => {
-    const isExternal = imgSrc.substr(0, 10).includes('//');
-    if (isExternal) {
-      const source = imgSrc.split('://');
-      const protocol = source[0];
-      const provider = source[1].substring(0, source[1].indexOf('/'));
+  cached
+    .then(found => {
+      const { path: p, code } = JSON.parse(found.data.toString());
+      writeFile(p, Buffer.from(code.data), globalConfig.build.dry);
+    })
+    .catch(() => {
+      const fullPathBase = file.path.split('assets')[1];
+      const dest = path.join(globalConfig.output.path, 'assets', fullPathBase);
 
-      if (protocol === 'http' && !globalConfig.assets.trust.includes(provider)) {
-        debugLog('site uses images served via "http" from', provider);
-        if (globalConfig.build.mode === JESSE_BUILD_MODE_STRICT) {
-          throw Error(`Image served via "http" from an untrusted provider "${provider}"`);
-        }
-      }
-    } else {
-      const imagePath = vpath([globalConfig.cwd, imgSrc], true);
+      CACHE.set(file.path, Buffer.from(JSON.stringify({
+        path: dest,
+        code: Buffer.from(file.code)
+      })));
 
-      if (imagePath.stats.isFile()) {
-        const data = await promisify(fs.readFile)(imagePath.full);
-        const dest = path.join(globalConfig.output.path, imgSrc);
-        writeFile(dest, data, globalConfig.build.dry);
-      }
-    }
-  }, ignoreDataUrls);
+      writeFile(dest, file.code, globalConfig.build.dry);
+    });
 }
 
 // interface
@@ -188,16 +203,16 @@ async function validate(html) {
 }
 
 /**
- * Transforms generated html
+ * Transforms static sources described by type
+ * @param {string} type type of file to transform
+ * @param {{path: string, code?: string}[]} data sources relevant data
  */
-function transform(data) {
+function transform(type, data) {
   if (!data || !Array.isArray(data)) {
     throw (
       TypeError('cheers.transform() expects an array of (path: string, html?: string) objects')
     );
   }
-
-  store.new();
 
   data.forEach(async file => {
     if (!file.path) {
@@ -206,25 +221,35 @@ function transform(data) {
       );
     }
 
-    let html = file.html;
-    if (!file.html) {
-      html = await promisify(fs.readFile)(file.path);
+    let code = file.code;
+    if (!file.code) {
+      code = await promisify(fs.readFile)(file.path);
     }
 
-    const $ = cheerio.load(html);
-    $('[rel=stylesheet]').each((_, linkTag) => css(linkTag, $));
-    $('[rel]').each((_, el) => () => {
-      console.log(el.attribs.rel);
-    });
-    $('img[src]').each((_, img) => image(img));
+    switch (type) {
+    case 'html':
+      const $ = cheerio.load(code);
 
-    // given the async nature of the code
-    // save the final html after a few milliseconds
-    const save = () => writeFile(file.path, $.html());
-    setTimeout(save, 150);
+      $('link[rel]').each((_, el) => {
+        switch (el.attribs.rel) {
+        case 'stylesheet': updateCssSrc(el, $); break;
+        case 'preload':
+          path.extname(el.attribs.href) === '.css' && updateCssSrc(el, $);
+          path.extname(el.attribs.href) !== '.css' && updateImageSrc(el, $, 'href');
+          break;
+        }
+      });
+
+      $('img[src]').each((_, img) => updateImageSrc(img, $));
+
+      const save = () => writeFile(file.path, $.html());
+      setTimeout(save, 200);
+      // save();
+      break;
+    case 'style': handleCss({ path: file.path, code }); break;
+    case 'assets': handleAssets({ path: file.path, code }); break;
+    }
   });
-
-  store.clearOld();
 }
 
 module.exports = {
