@@ -119,7 +119,7 @@ async function compile(file, outputNameArray, isOutDir, locals) {
   }
 
   // expose locals has "data" for all templates
-  let html = await compileTemplate(file, {
+  const html = await compileTemplate(file, {
     data: localsUsed,
     jesse: {
       year: new Date().getFullYear(),
@@ -148,9 +148,6 @@ async function compile(file, outputNameArray, isOutDir, locals) {
     });
   }
 
-  html = Buffer.from(html);
-
-  CACHE.set(outPath, Buffer.from(JSON.stringify({ path: outPath, code: html })));
   return { path: outPath, code: html };
 }
 
@@ -313,11 +310,23 @@ async function gen() {
   cheers.transform('assets', assets.map(p => ({ path: p })));
   cheers.transform('style', styles.map(p => ({ path: p })));
 
-  const res = await build();
-  cheers.transform('html', res.data);
+  const markyStop = count => {
+    const end = Math.floor(marky.stop('generating html').duration) / 1000;
+    consola.info('generated', count, 'files in', end, 's');
+  };
 
-  const end = Math.floor(marky.stop('generating html').duration) / 1000;
-  consola.info('generated', res.count, 'files in', end, 's');
+  CACHE.get('manifest')
+    .then(found => {
+      const res = JSON.parse(found.data.toString());
+      cheers.transform('save', res.data);
+      markyStop(res.count);
+    })
+    .catch(async() => {
+      const res = await build();
+      CACHE.set('manifest', Buffer.from(JSON.stringify(res)));
+      cheers.transform('html', res.data);
+      markyStop(res.count);
+    });
 }
 
 /**

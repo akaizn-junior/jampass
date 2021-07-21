@@ -227,6 +227,9 @@ function transform(type, data) {
     }
 
     switch (type) {
+    case 'save':
+      writeFile(file.path, file.code);
+      break;
     case 'html':
       const $ = cheerio.load(code);
 
@@ -244,7 +247,6 @@ function transform(type, data) {
 
       const save = () => writeFile(file.path, $.html());
       setTimeout(save, 200);
-      // save();
       break;
     case 'style': handleCss({ path: file.path, code }); break;
     case 'assets': handleAssets({ path: file.path, code }); break;
