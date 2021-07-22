@@ -29,6 +29,7 @@ const {
   loadUserEnv,
   handleCheersValidate,
   CACHE,
+  getHash,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
@@ -276,7 +277,9 @@ async function funnel(dataSource) {
 /**
  * Compiles all templates according to configurations and outputs html.
  */
-async function gen() {
+async function gen(opts = {}) {
+  const { watchMode } = opts;
+
   globalConfig.buildId = genBuildId();
   debugLog('generated a new build id', globalConfig.buildId);
 
@@ -310,23 +313,37 @@ async function gen() {
   cheers.transform('assets', assets.map(p => ({ path: p })));
   cheers.transform('style', styles.map(p => ({ path: p })));
 
-  const markyStop = count => {
-    const end = Math.floor(marky.stop('generating html').duration) / 1000;
+  const markyStop = (label, count) => {
+    const end = Math.floor(marky.stop(label).duration) / 1000;
     consola.info('generated', count, 'files in', end, 's');
   };
 
+  const genBuildHash = () => getHash(JSON.stringify(funneledData));
+
+  const buildStarter = result => {
+    result.buildHash = genBuildHash();
+    CACHE.set('manifest', Buffer.from(JSON.stringify(result)));
+    cheers.transform('html', result.data);
+    markyStop('generating html', result.count);
+  };
+
   CACHE.get('manifest')
-    .then(found => {
+    .then(async found => {
       const res = JSON.parse(found.data.toString());
-      cheers.transform('save', res.data);
-      markyStop(res.count);
+      const buildHash = genBuildHash();
+
+      debugLog('Build hash', buildHash, 'Last build', res.buildHash);
+      debugLog('Build hash == Cached build Hash', buildHash === res.buildHash);
+      console.log('Watch mode', Boolean(watchMode));
+
+      if (buildHash === res.buildHash && !watchMode) {
+        cheers.transform('save', res.data);
+        markyStop('generating html', res.count);
+      } else {
+        buildStarter(await build());
+      }
     })
-    .catch(async() => {
-      const res = await build();
-      CACHE.set('manifest', Buffer.from(JSON.stringify(res)));
-      cheers.transform('html', res.data);
-      markyStop(res.count);
-    });
+    .catch(async() => buildStarter(await build()));
 }
 
 /**
@@ -337,6 +354,7 @@ async function gen() {
  */
 function watch(cb = () => {}, ignore = []) {
   const watchPath = vpath(globalConfig.views.path, true);
+  const _cb = cb && typeof cb === 'function' ? cb : () => {};
 
   // sanity check
   // the directory to watch must be inside the project cwd
@@ -357,17 +375,16 @@ function watch(cb = () => {}, ignore = []) {
     cwd: globalConfig.cwd,
     ignored: ignore
   });
-  const _cb = cb && typeof cb === 'function' ? cb : () => {};
 
   watcher.on('ready', () => {
     consola.info('watching', watchPath.dir);
-    gen();
+    gen({ watchMode: true });
     _cb();
   });
 
   watcher.on('change', p => {
     debugLog('compiled', p);
-    gen();
+    gen({ watchMode: true });
     _cb();
   });
 }

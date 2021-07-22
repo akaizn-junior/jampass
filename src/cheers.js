@@ -7,7 +7,7 @@ const postcss = require('postcss');
 const postcssPresetEnv = require('postcss-preset-env');
 const cssnano = require('cssnano');
 const autoprefixer = require('autoprefixer');
-const postCssHash = require('postcss-hash');
+// const postCssHash = require('postcss-hash');
 
 // node
 const fs = require('fs');
@@ -23,6 +23,7 @@ const {
   debugLog,
   genBuildId,
   CACHE,
+  getHash,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_STRICT
 } = require('./util');
@@ -46,8 +47,8 @@ const globalConfig = {
     css: [
       postcssPresetEnv(),
       cssnano(),
-      autoprefixer(),
-      postCssHash()
+      autoprefixer()
+      // postCssHash()
     ]
   },
   assets: {
@@ -84,7 +85,7 @@ function updateCssSrc(element, $) {
         const { path: p } = JSON.parse(found.data.toString());
         const base = p.split('style')[1];
 
-        const out = path.join('style', base);
+        const out = path.join('/style', base);
         const modded = $(element).attr('href', out);
         $(element).replaceWith(modded);
       }).catch(() => {});
@@ -108,7 +109,7 @@ function updateImageSrc(element, $, attr = 'src') {
         const { path: p } = JSON.parse(found.data.toString());
         const base = p.split('assets')[1];
 
-        const out = path.join('assets', base);
+        const out = path.join('/assets', base);
         const modded = $(element).attr(attr, out);
         $(element).replaceWith(modded);
       })
@@ -118,51 +119,81 @@ function updateImageSrc(element, $, attr = 'src') {
 
 // helpers
 
-async function handleCss(file) {
+async function handleCss(file, data) {
   const cssPath = vpath(file.path);
   const cached = CACHE.get(file.path);
 
+  const re = () => {
+    const fullPathBase = file.path.split('style')[1];
+    const cssOutPath = path.join(globalConfig.output.path, 'style', fullPathBase);
+
+    postcss(globalConfig.plugins.css)
+      .process(file.code, { from: cssPath.full, to: cssOutPath })
+      .then(result => {
+        const buildHash = getHash(result.css.concat('+build hash', data.length));
+
+        CACHE.set(file.path, Buffer.from(JSON.stringify({
+          path: result.opts.to,
+          code: result.css,
+          buildHash
+        })));
+
+        writeFile(result.opts.to, result.css, globalConfig.build.dry);
+      });
+  };
+
   cached
     .then(found => {
-      const { path: p, code } = JSON.parse(found.data.toString());
-      writeFile(p, Buffer.from(code.data), globalConfig.build.dry);
+      const { path: p, code, buildHash: cachedHash } = JSON.parse(found.data.toString());
+      const c = Buffer.from(code.data);
+      const buildHash = getHash(c.toString().concat('+build hash', data.length));
+
+      debugLog('Build hash', buildHash, 'Last build', cachedHash);
+      debugLog('Build hash == Cached build Hash', buildHash === cachedHash);
+
+      if (buildHash === cachedHash) {
+        writeFile(p, c, globalConfig.build.dry);
+      } else {
+        re();
+      }
     })
-    .catch(() => {
-      const fullPathBase = file.path.split('style')[1];
-      const cssOutPath = path.join(globalConfig.output.path, 'style', fullPathBase);
-
-      postcss(globalConfig.plugins.css)
-        .process(file.code, { from: cssPath.full, to: cssOutPath })
-        .then(result => {
-          CACHE.set(file.path, Buffer.from(JSON.stringify({
-            path: result.opts.to,
-            code: result.css
-          })));
-
-          writeFile(result.opts.to, result.css, globalConfig.build.dry);
-        });
-    });
+    .catch(re);
 }
 
-async function handleAssets(file) {
+async function handleAssets(file, data) {
   const cached = CACHE.get(file.path);
+
+  const re = () => {
+    const fullPathBase = file.path.split('assets')[1];
+    const dest = path.join(globalConfig.output.path, 'assets', fullPathBase);
+    const code = Buffer.from(file.code);
+    const buildHash = getHash(code.toString().concat('+build hash', data.length));
+
+    CACHE.set(file.path, Buffer.from(JSON.stringify({
+      path: dest,
+      code,
+      buildHash
+    })));
+
+    writeFile(dest, file.code, globalConfig.build.dry);
+  };
 
   cached
     .then(found => {
-      const { path: p, code } = JSON.parse(found.data.toString());
-      writeFile(p, Buffer.from(code.data), globalConfig.build.dry);
+      const { path: p, code, buildHash: cachedHash } = JSON.parse(found.data.toString());
+      const c = Buffer.from(code.data);
+      const buildHash = getHash(c.toString().concat('+build hash', data.length));
+
+      debugLog('Build hash', buildHash, 'Last build', cachedHash);
+      debugLog('Build hash == Cached build Hash', buildHash === cachedHash);
+
+      if (buildHash === cachedHash) {
+        writeFile(p, c, globalConfig.build.dry);
+      } else {
+        re();
+      }
     })
-    .catch(() => {
-      const fullPathBase = file.path.split('assets')[1];
-      const dest = path.join(globalConfig.output.path, 'assets', fullPathBase);
-
-      CACHE.set(file.path, Buffer.from(JSON.stringify({
-        path: dest,
-        code: Buffer.from(file.code)
-      })));
-
-      writeFile(dest, file.code, globalConfig.build.dry);
-    });
+    .catch(re);
 }
 
 // interface
@@ -248,8 +279,8 @@ function transform(type, data) {
       const save = () => writeFile(file.path, $.html());
       setTimeout(save, 200);
       break;
-    case 'style': handleCss({ path: file.path, code }); break;
-    case 'assets': handleAssets({ path: file.path, code }); break;
+    case 'style': handleCss({ path: file.path, code }, data); break;
+    case 'assets': handleAssets({ path: file.path, code }, data); break;
     }
   });
 }

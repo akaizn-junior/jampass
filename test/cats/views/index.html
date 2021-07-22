@@ -6,11 +6,11 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ site.name }}</title>
-    <link rel="stylesheet" href="style/main.css">
+    <link rel="stylesheet" href="/style/main.css">
     {{#each data}}
     <link rel="preload" href="{{ photo }}" as="image" type="image/jpeg">
     {{/each}}
-    <link rel="preload" href="assets/images/pexels-lina-kivaka-1741205.jpg" as="image" type="image/jpeg">
+    <link rel="preload" href="/assets/images/pexels-lina-kivaka-1741205.jpg" as="image" type="image/jpeg">
     <style>
       h1 {
         color: red;
@@ -27,7 +27,7 @@
     <div class="wrapper">
       <header>
         <h1>{{ site.name }}</h1>
-        <img src="assets/images/pexels-lina-kivaka-1741205.jpg"
+        <img src="/assets/images/pexels-lina-kivaka-1741205.jpg"
           alt="Photo of Orange Tabby Cat With Red Handkerchief by Lina Kivaka from Pexels"
           title="Photo of Orange Tabby Cat With Red Handkerchief by Lina Kivaka from Pexels"
           width="300"

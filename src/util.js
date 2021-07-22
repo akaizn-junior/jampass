@@ -210,14 +210,14 @@ function handleCheersValidate(res, data) {
   return res.isValid;
 }
 
-function hashname(file, content, len) {
+function getHash(content, len) {
   let hash = crypto
     .createHash('md5')
     .update(content)
     .digest('hex');
 
   len && (hash = hash.substr(0, len));
-  return `${file.name}.${hash}${file.ext}`;
+  return hash;
 }
 
 module.exports = {
@@ -234,7 +234,7 @@ module.exports = {
   parseDynamicName,
   concatLists,
   genBuildId,
-  hashname,
+  getHash,
   loadUserEnv,
   handleCheersValidate,
   CACHE,
