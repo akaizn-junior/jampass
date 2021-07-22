@@ -36,15 +36,15 @@ module.exports = {
   cwd: path.join(__dirname, 'cats'),
   site: {
     name: 'Adopt Animals',
-    shortname: 'adopta',
-    author: 'Kat McMeowsface',
-    lang: 'en-US',
-    favicons: {
-      src: './cats/assets/images/cat-walking.png',
-      background: 'cyan',
-      themeColor: 'blue'
-    }
+    author: 'Kat McMeowsface'
   },
+  locales: [{
+    lang: 'en-US',
+    contents: 'locales/en_US.json'
+  }, {
+    lang: 'pt-AO',
+    contents: 'locales/pt_AO.json'
+  }],
   build: {
     mode: jesse.JESSE_BUILD_MODE_LAZY
   },
@@ -54,7 +54,9 @@ module.exports = {
   output: {
     filename: {
       cat: '-[insertedAt]/[name]/',
-      dog: '[name.1]/'
+      dog: '[name.1]/',
+      'index.en_US': 'en_US/',
+      'index.pt_AO': 'pt_AO/'
     }
   }
 };

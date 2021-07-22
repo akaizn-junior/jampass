@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang={{ locales.enUS.lang }}>
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -9,21 +9,26 @@
   <link rel="preload" href="{{ data.photo }}" as="image" type="image/jpeg">
 </head>
 <body>
-  <a href="/">home</a>
+  <a href="/">{{ locales.enUS.home }}</a>
+  <select>
+    {{#each locales}}
+    <option value={{ lang }}>{{ lang }}</option>
+    {{/each}}
+  </select>
   <div class="wrapper">
     <h1>{{ site.name }}</h1>
     <section>
       <div class="about">
         <h2>{{ data.name }}</h2>
         <p class="breed">
-          Breed: {{ data.breed }}
+          {{ locales.enUS.breed }} {{ data.breed }}
         </p>
       </div>
-      <img src="{{ data.photo }}" alt="{{ data.name }} photo" title="{{ data.name }} looking great">
+      <img src="{{ data.photo }}" alt="{{ data.name }} {{ locales.enUS.img_title }}" title="{{ data.name }} {{ locales.enUS.img_title }}">
     </section>
   </div>
   <footer>
-    (c) {{ jesse.year }} {{ site.name }}. Built by Jesse
+    (c) {{ jesse.year }} {{ site.name }}. {{ locales.enUS.builtBy }}
   </footer>
 </body>
 </html>

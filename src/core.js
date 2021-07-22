@@ -8,6 +8,7 @@ const del = require('del');
 const marky = require('marky');
 
 // node
+const fs = require('fs');
 const path = require('path');
 
 // local
@@ -39,6 +40,7 @@ const {
 // globals
 
 let funneledData = [];
+let globalLocales = [];
 const globalConfig = {
   cwd: '.',
   buildId: genBuildId(),
@@ -47,6 +49,7 @@ const globalConfig = {
     dry: false
   },
   site: {},
+  locales: [],
   views: {
     engine: 'handlebars',
     remote: false,
@@ -129,7 +132,8 @@ async function compile(file, outputNameArray, isOutDir, locals) {
     site: {
       name: globalConfig.site.name,
       author: globalConfig.site.author
-    }
+    },
+    locales: globalConfig.locales
   });
 
   const processedPath = path.join(...filenameFromData || outputNameArray);
@@ -243,6 +247,7 @@ function config(options = {}, configCwd = '') {
   globalConfig.site = concatObjects(globalConfig.site, options.site ?? {});
   globalConfig.asssets = concatObjects(globalConfig.assets, options.assets ?? {});
   globalConfig.build = concatObjects(globalConfig.build, options.build ?? {});
+  globalLocales = options.locales ?? [];
 
   const validMode = [JESSE_BUILD_MODE_LAZY, JESSE_BUILD_MODE_BUSY, JESSE_BUILD_MODE_STRICT]
     .includes(globalConfig.build.mode);
@@ -278,7 +283,16 @@ async function funnel(dataSource) {
  * Compiles all templates according to configurations and outputs html.
  */
 async function gen(opts = {}) {
-  const { watchMode } = opts;
+  const { watchMode = true } = opts;
+
+  const locales = {};
+  globalLocales.forEach(loc => {
+    const locale = vpath([globalConfig.cwd, loc.contents], true);
+    const content = fs.readFileSync(locale.full);
+    locales[loc.lang.replace(/-/gm, '')] = { lang: loc.lang, ...JSON.parse(content) };
+  });
+
+  globalConfig.locales = locales;
 
   globalConfig.buildId = genBuildId();
   debugLog('generated a new build id', globalConfig.buildId);
@@ -296,9 +310,11 @@ async function gen(opts = {}) {
 
   const assetsPath = vpath([globalConfig.cwd, 'assets'], true);
   const stylePath = vpath([globalConfig.cwd, 'style'], true);
+  const viewsPath = vpath(globalConfig.views.path, true);
 
   const assets = getDirPaths(assetsPath.full, 'full');
   const styles = getDirPaths(stylePath.full, 'full');
+  const views = getDirPaths(viewsPath.full, 'full');
 
   cheers.config({
     cwd: globalConfig.cwd,
@@ -318,7 +334,10 @@ async function gen(opts = {}) {
     consola.info('generated', count, 'files in', end, 's');
   };
 
-  const genBuildHash = () => getHash(JSON.stringify(funneledData));
+  const genBuildHash = () => getHash(JSON.stringify([
+    funneledData,
+    views.length
+  ]));
 
   const buildStarter = result => {
     result.buildHash = genBuildHash();
