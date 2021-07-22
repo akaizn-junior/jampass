@@ -334,7 +334,7 @@ async function gen(opts = {}) {
 
       debugLog('Build hash', buildHash, 'Last build', res.buildHash);
       debugLog('Build hash == Cached build Hash', buildHash === res.buildHash);
-      console.log('Watch mode', Boolean(watchMode));
+      debugLog('Watch mode', Boolean(watchMode));
 
       if (buildHash === res.buildHash && !watchMode) {
         cheers.transform('save', res.data);
