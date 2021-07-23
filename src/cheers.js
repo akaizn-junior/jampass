@@ -160,6 +160,42 @@ async function handleCss(file, data) {
     .catch(re);
 }
 
+function handleJs(file, data) {
+  const cached = CACHE.get(file.path);
+
+  const re = () => {
+    const fullPathBase = file.path.split('script')[1];
+    const dest = path.join(globalConfig.output.path, 'script', fullPathBase);
+    const code = Buffer.from(file.code);
+    const buildHash = getHash(code.toString().concat('+build hash', data.length));
+
+    CACHE.set(file.path, Buffer.from(JSON.stringify({
+      path: dest,
+      code,
+      buildHash
+    })));
+
+    writeFile(dest, file.code, globalConfig.build.dry);
+  };
+
+  cached
+    .then(found => {
+      const { path: p, code, buildHash: cachedHash } = JSON.parse(found.data.toString());
+      const c = Buffer.from(code.data);
+      const buildHash = getHash(c.toString().concat('+build hash', data.length));
+
+      debugLog('Build hash', buildHash, 'Last build', cachedHash);
+      debugLog('Build hash == Cached build Hash', buildHash === cachedHash);
+
+      if (buildHash === cachedHash) {
+        writeFile(p, c, globalConfig.build.dry);
+      } else {
+        re();
+      }
+    })
+    .catch(re);
+}
+
 async function handleAssets(file, data) {
   const cached = CACHE.get(file.path);
 
@@ -268,18 +304,23 @@ function transform(type, data) {
         switch (el.attribs.rel) {
         case 'stylesheet': updateCssSrc(el, $); break;
         case 'preload':
-          path.extname(el.attribs.href) === '.css' && updateCssSrc(el, $);
-          path.extname(el.attribs.href) !== '.css' && updateImageSrc(el, $, 'href');
-          break;
+          switch (el.attribs.as) {
+          case 'style': updateCssSrc(el, $); break;
+          case 'image': updateImageSrc(el, $, 'href'); break;
+          }
         }
       });
 
       $('img[src]').each((_, img) => updateImageSrc(img, $));
+      $('script').each((_, el) => {
+        console.log(el.attribs);
+      });
 
       const save = () => writeFile(file.path, $.html());
       setTimeout(save, 200);
       break;
     case 'style': handleCss({ path: file.path, code }, data); break;
+    case 'script': handleJs({ path: file.path, code }, data); break;
     case 'assets': handleAssets({ path: file.path, code }, data); break;
     }
   });

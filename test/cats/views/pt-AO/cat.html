@@ -12,7 +12,7 @@
   <a href="{{ locales.pt_ao.entry }}">{{ locales.pt_ao.home }}</a>
   <div class="langs">
     {{#each locales}}
-    <a href="{{ entry }}">{{ lang }}</a>
+    <a href="{{ entry }}/{{ jesse.urlPath.short }}">{{ lang }}</a>
     {{/each}}
   </div>
   <div class="wrapper">
@@ -21,6 +21,7 @@
     <section>
       <div class="about">
         <h2>{{ data.name }}</h2>
+        <p>{{ data.description }}</p>
         <p class="breed">
           {{ locales.pt_ao.breed }} {{ data.breed }}
         </p>

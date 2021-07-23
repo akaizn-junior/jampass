@@ -122,12 +122,31 @@ async function compile(file, outputNameArray, isOutDir, locals) {
     });
   }
 
-  // expose locals has "data" for all templates
+  const processedPath = path.join(...filenameFromData || outputNameArray);
+  const parsedOutPath = vpath(processedPath);
+
+  let outPath = path.format({
+    dir: parsedOutPath.dir,
+    name: parsedOutPath.name,
+    ext: '.html'
+  });
+
+  if (isOutDir) {
+    outPath = path.format({
+      dir: path.join(parsedOutPath.dir, parsedOutPath.base),
+      name: 'index',
+      ext: '.html'
+    });
+  }
+
   const html = await compileTemplate(file, {
     data: localsUsed,
     jesse: {
       year: new Date().getFullYear(),
-      buildId: globalConfig.buildId
+      urlPath: {
+        short: path.parse(outPath).dir,
+        full: outPath
+      }
     },
     site: {
       name: globalConfig.site.name,
@@ -136,24 +155,7 @@ async function compile(file, outputNameArray, isOutDir, locals) {
     locales: globalConfig.locales
   });
 
-  const processedPath = path.join(...filenameFromData || outputNameArray);
-  const parsedOutPath = vpath(processedPath);
-
-  let outPath = path.format({
-    dir: publicOutPath.concat(parsedOutPath.dir),
-    name: parsedOutPath.name,
-    ext: '.html'
-  });
-
-  if (isOutDir) {
-    outPath = path.format({
-      dir: publicOutPath.concat(parsedOutPath.dir, parsedOutPath.base),
-      name: 'index',
-      ext: '.html'
-    });
-  }
-
-  return { path: outPath, code: html };
+  return { path: publicOutPath.concat(outPath), code: html };
 }
 
 async function build() {
@@ -316,10 +318,12 @@ async function gen(opts = {}) {
 
   const assetsPath = vpath([globalConfig.cwd, 'assets'], true);
   const stylePath = vpath([globalConfig.cwd, 'style'], true);
+  const scriptPath = vpath([globalConfig.cwd, 'script'], true);
   const viewsPath = vpath(globalConfig.views.path, true);
 
   const assets = getDirPaths(assetsPath.full, 'full');
   const styles = getDirPaths(stylePath.full, 'full');
+  const script = getDirPaths(scriptPath.full, 'full');
   const views = getDirPaths(viewsPath.full, 'full');
 
   cheers.config({
@@ -334,6 +338,7 @@ async function gen(opts = {}) {
 
   cheers.transform('assets', assets.map(p => ({ path: p })));
   cheers.transform('style', styles.map(p => ({ path: p })));
+  cheers.transform('script', script.map(p => ({ path: p })));
 
   const markyStop = (label, count) => {
     const end = Math.floor(marky.stop(label).duration) / 1000;
@@ -407,10 +412,19 @@ function watch(cb = () => {}, ignore = []) {
     _cb();
   });
 
-  watcher.on('change', p => {
+  const run = p => {
     debugLog('compiled', p);
     gen({ watchMode: true });
     _cb();
+  };
+
+  watcher.on('change', run);
+  watcher.on('add', run);
+  watcher.on('addDir', run);
+  watcher.on('unlink', run);
+  watcher.on('unlinkDir', run);
+  watcher.on('error', err => {
+    throw err;
   });
 }
 

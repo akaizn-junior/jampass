@@ -44,7 +44,7 @@ module.exports = {
     contents: 'locales/en_US.json'
   }, {
     lang: 'pt-AO',
-    entry: '/pt_ao',
+    entry: '/pt-AO',
     contents: 'locales/pt_AO.json'
   }],
   build: {
@@ -56,8 +56,7 @@ module.exports = {
   output: {
     filename: {
       'cat.html': '-[insertedAt]/[name]/',
-      'pt_ao/cat.html': '-pt_ao/[insertedAt]/[name]/',
-      dog: '[name.1]/'
+      'pt-AO/cat.html': '-pt-AO/[insertedAt]/[name]/'
     }
   }
 };

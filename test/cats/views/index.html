@@ -16,10 +16,6 @@
         color: red;
         font-size: 3em;
       }
-
-      .dog {
-        border: 1px solid yellow;
-      }
     </style>
   </head>
 
@@ -52,15 +48,6 @@
             </div>
           </li>
           {{/each}}
-          <li>
-            <div class="cat dog">
-              <img src="{{ data.1.photo }}" alt="{{ data.1.name }}" title="{{ data.1.name }} {{ locales.en_us.img_title }}" width="200">
-              <p><a href="{{ data.1.name }}">{{ data.1.name }}</a></p>
-              <p class="breed">
-                {{ locales.en_us.breed }} {{ data.1.breed }}
-              </p>
-            </div>
-          </li>
         </ul>
       </main>
     </div>
