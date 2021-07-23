@@ -168,11 +168,13 @@ async function build() {
 
   for (let i = 0; i < files.length; i++) {
     const relativePath = files[i];
-    const templateName = vpath(relativePath).name;
-    const file = viewsPath.concat(relativePath);
 
-    const canProcess = relativePath && !templateName.startsWith('.'); // can process if not hidden
-    const outPath = outputName(globalConfig.output.filename[templateName] ?? relativePath);
+    const tmpl = vpath(relativePath);
+    const file = viewsPath.concat(relativePath);
+    const outName = globalConfig.output.filename[tmpl.name] || globalConfig.output.filename[path.join(tmpl.full)];
+
+    const canProcess = relativePath && !tmpl.name.startsWith('.'); // can process if not hidden
+    const outPath = outputName(outName ?? relativePath);
     const outputNameArray = outPath.name.split('/');
 
     if (canProcess && !outputNameArray[0].startsWith(JESSE_LOOP_DATA_TOKEN)) {

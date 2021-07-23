@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ locales.ptAO.lang }}">
+<html lang="{{ locales.enUS.lang }}">
 
   <head>
     <meta charset="UTF-8">
@@ -27,9 +27,10 @@
     <div class="wrapper">
       <header>
         <h1>{{ site.name }}</h1>
+        <p>{{ locales.enUS.tag }}</p>
         <img src="/assets/images/pexels-lina-kivaka-1741205.jpg"
-          alt="{{ locales.ptAO.img_alt }}"
-          title="{{ locales.ptAO.img_alt }}"
+          alt="{{ locales.enUS.img_alt }}"
+          title="{{ locales.enUS.img_alt }}"
           width="300"
         >
       </header>
@@ -38,20 +39,20 @@
           {{#each data}}
           <li>
             <div class="cat">
-              <img src="{{ photo }}" alt="{{ name }}" title="{{ locales.ptAO.img_title }} {{ name }}" width="200">
+              <img src="{{ photo }}" alt="{{ name }}" title="{{ name }} {{ locales.enUS.img_title }}" width="200">
               <p><a href="{{ insertedAt }}/{{ name }}">{{ name }}</a></p>
               <p class="breed">
-                {{ locales.ptAO.breed }} {{ breed }}
+                {{ locales.enUS.breed }} {{ breed }}
               </p>
             </div>
           </li>
           {{/each}}
           <li>
             <div class="cat dog">
-              <img src="{{ data.1.photo }}" alt="{{ data.1.name }}" title="{{ locales.ptAO.img_title }} {{ data.1.name }}" width="200">
+              <img src="{{ data.1.photo }}" alt="{{ data.1.name }}" title="{{ data.1.name }} {{ locales.enUS.img_title }}" width="200">
               <p><a href="{{ data.1.name }}">{{ data.1.name }}</a></p>
               <p class="breed">
-                {{ locales.ptAO.breed }} {{ data.1.breed }}
+                {{ locales.enUS.breed }} {{ data.1.breed }}
               </p>
             </div>
           </li>
@@ -59,7 +60,7 @@
       </main>
     </div>
     <footer>
-      (c) {{ jesse.year }} {{ site.name }}. {{ locales.ptAO.builtBy }}
+      (c) {{ jesse.year }} {{ site.name }}. {{ locales.enUS.builtBy }}
     </footer>
   </body>
 

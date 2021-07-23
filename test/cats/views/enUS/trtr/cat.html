@@ -1,22 +1,26 @@
 <!DOCTYPE html>
-<html lang="{{ locales.enUS.lang }}">
+<html lang={{ locales.enUS.lang }}>
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ data.name }} - {{ site.name }}</title>
-  <link rel="stylesheet" href="style/cat.css">
+  <link rel="stylesheet" href="/style/cat.css">
   <link rel="preload" href="{{ data.photo }}" as="image" type="image/jpeg">
 </head>
 <body>
   <a href="/">{{ locales.enUS.home }}</a>
+  <select>
+    {{#each locales}}
+    <option value={{ lang }}>{{ lang }}</option>
+    {{/each}}
+  </select>
   <div class="wrapper">
     <h1>{{ site.name }}</h1>
     <p>{{ locales.enUS.tag }}</p>
     <section>
       <div class="about">
         <h2>{{ data.name }}</h2>
-        <p>{{ data.description }}</p>
         <p class="breed">
           {{ locales.enUS.breed }} {{ data.breed }}
         </p>

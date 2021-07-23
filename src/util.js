@@ -93,11 +93,10 @@ function getDirPaths(srcPath, dirType = 'sub', dir = '') {
 
   return dirents.flatMap(dirent => {
     if (dirent.isDirectory()) {
-      return getDirPaths(path.join(srcPath, dirent.name), dirType, dirent.name);
+      return getDirPaths(path.join(srcPath, dirent.name), dirType, path.join(dir, dirent.name));
     }
-
     return dirType === 'full' ? path.join(srcPath, dirent.name)
-      : path.join(path.parse(dir).base, dirent.name);
+      : path.join(path.parse(dir).dir, path.parse(dir).base, dirent.name);
   });
 }
 

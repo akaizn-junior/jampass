@@ -53,7 +53,7 @@ module.exports = {
   },
   output: {
     filename: {
-      cat: '-[insertedAt]/[name]/',
+      'enUS/cat.html': '-[insertedAt]/[name]/',
       dog: '[name.1]/',
       'index.en_US': 'en_US/',
       'index.pt_AO': 'pt_AO/'
