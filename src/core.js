@@ -291,7 +291,11 @@ async function gen(opts = {}) {
   globalLocales.forEach(loc => {
     const locale = vpath([globalConfig.cwd, loc.contents], true);
     const content = fs.readFileSync(locale.full);
-    locales[loc.lang.replace(/-/gm, '')] = { lang: loc.lang, ...JSON.parse(content) };
+    locales[loc.lang.toLowerCase().replace(/-/g, '_')] = {
+      lang: loc.lang,
+      entry: loc.entry,
+      ...JSON.parse(content)
+    };
   });
 
   globalConfig.locales = locales;

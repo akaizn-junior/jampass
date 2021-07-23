@@ -40,9 +40,11 @@ module.exports = {
   },
   locales: [{
     lang: 'en-US',
+    entry: '/',
     contents: 'locales/en_US.json'
   }, {
     lang: 'pt-AO',
+    entry: '/pt_ao',
     contents: 'locales/pt_AO.json'
   }],
   build: {
@@ -53,10 +55,9 @@ module.exports = {
   },
   output: {
     filename: {
-      'enUS/cat.html': '-[insertedAt]/[name]/',
-      dog: '[name.1]/',
-      'index.en_US': 'en_US/',
-      'index.pt_AO': 'pt_AO/'
+      'cat.html': '-[insertedAt]/[name]/',
+      'pt_ao/cat.html': '-pt_ao/[insertedAt]/[name]/',
+      dog: '[name.1]/'
     }
   }
 };

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang={{ locales.enUS.lang }}>
+<html lang={{ locales.pt_ao.lang }}>
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -9,27 +9,27 @@
   <link rel="preload" href="{{ data.photo }}" as="image" type="image/jpeg">
 </head>
 <body>
-  <a href="/">{{ locales.enUS.home }}</a>
-  <select>
+  <a href="{{ locales.pt_ao.entry }}">{{ locales.pt_ao.home }}</a>
+  <div class="langs">
     {{#each locales}}
-    <option value={{ lang }}>{{ lang }}</option>
+    <a href="{{ entry }}">{{ lang }}</a>
     {{/each}}
-  </select>
+  </div>
   <div class="wrapper">
     <h1>{{ site.name }}</h1>
-    <p>{{ locales.enUS.tag }}</p>
+    <p>{{ locales.pt_ao.tag }}</p>
     <section>
       <div class="about">
         <h2>{{ data.name }}</h2>
         <p class="breed">
-          {{ locales.enUS.breed }} {{ data.breed }}
+          {{ locales.pt_ao.breed }} {{ data.breed }}
         </p>
       </div>
-      <img src="{{ data.photo }}" alt="{{ data.name }} {{ locales.enUS.img_title }}" title="{{ data.name }} {{ locales.enUS.img_title }}">
+      <img src="{{ data.photo }}" alt="{{ data.name }} {{ locales.pt_ao.img_title }}" title="{{ data.name }} {{ locales.pt_ao.img_title }}">
     </section>
   </div>
   <footer>
-    (c) {{ jesse.year }} {{ site.name }}. {{ locales.enUS.builtBy }}
+    (c) {{ jesse.year }} {{ site.name }}. {{ locales.pt_ao.builtBy }}
   </footer>
 </body>
 </html>

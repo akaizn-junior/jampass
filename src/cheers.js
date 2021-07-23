@@ -264,15 +264,15 @@ function transform(type, data) {
     case 'html':
       const $ = cheerio.load(code);
 
-      // $('link[rel]').each((_, el) => {
-      //   switch (el.attribs.rel) {
-      //   case 'stylesheet': updateCssSrc(el, $); break;
-      //   case 'preload':
-      //     path.extname(el.attribs.href) === '.css' && updateCssSrc(el, $);
-      //     path.extname(el.attribs.href) !== '.css' && updateImageSrc(el, $, 'href');
-      //     break;
-      //   }
-      // });
+      $('link[rel]').each((_, el) => {
+        switch (el.attribs.rel) {
+        case 'stylesheet': updateCssSrc(el, $); break;
+        case 'preload':
+          path.extname(el.attribs.href) === '.css' && updateCssSrc(el, $);
+          path.extname(el.attribs.href) !== '.css' && updateImageSrc(el, $, 'href');
+          break;
+        }
+      });
 
       $('img[src]').each((_, img) => updateImageSrc(img, $));
 

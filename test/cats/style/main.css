@@ -40,3 +40,7 @@ footer {
 .cat .breed {
   font-size: 14px;
 }
+
+.langs {
+  display: inline-block;
+}

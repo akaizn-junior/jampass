@@ -9,6 +9,10 @@ body {
   margin: 0 auto;
 }
 
+.langs {
+  display: inline-block;
+}
+
 h1 {
   color: red;
   font-size: 3em;
