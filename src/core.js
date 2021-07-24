@@ -287,7 +287,7 @@ async function funnel(dataSource) {
  * Compiles all templates according to configurations and outputs html.
  */
 async function gen(opts = {}) {
-  const { watchMode = true } = opts;
+  const { watching = '' } = opts;
 
   const locales = {};
   globalLocales.forEach(loc => {
@@ -345,9 +345,14 @@ async function gen(opts = {}) {
     consola.info('generated', count, 'files in', end, 's');
   };
 
+  const watchingContent = ['', 'ready'].includes(watching)
+    ? watching
+    : fs.readFileSync(path.join(globalConfig.cwd, watching));
+
   const genBuildHash = () => getHash(JSON.stringify([
     funneledData,
-    views.length
+    views.length,
+    watchingContent
   ]));
 
   const buildStarter = result => {
@@ -364,9 +369,9 @@ async function gen(opts = {}) {
 
       debugLog('Build hash', buildHash, 'Last build', res.buildHash);
       debugLog('Build hash == Cached build Hash', buildHash === res.buildHash);
-      debugLog('Watch mode', Boolean(watchMode));
+      console.log('Watching', `"${watching}"`);
 
-      if (buildHash === res.buildHash && !watchMode) {
+      if (buildHash === res.buildHash) {
         cheers.transform('save', res.data);
         markyStop('generating html', res.count);
       } else {
@@ -408,24 +413,24 @@ function watch(cb = () => {}, ignore = []) {
 
   watcher.on('ready', () => {
     consola.info('watching', watchPath.dir);
-    gen({ watchMode: true });
+    gen({ watching: 'ready' });
     _cb();
   });
 
   const run = p => {
     debugLog('compiled', p);
-    gen({ watchMode: true });
+    gen({ watching: p });
     _cb();
   };
 
-  watcher.on('change', run);
-  watcher.on('add', run);
-  watcher.on('addDir', run);
-  watcher.on('unlink', run);
-  watcher.on('unlinkDir', run);
-  watcher.on('error', err => {
-    throw err;
-  });
+  watcher
+    .on('change', run)
+    .on('addDir', run)
+    .on('unlink', run)
+    .on('unlinkDir', run)
+    .on('error', err => {
+      throw err;
+    });
 }
 
 /**
