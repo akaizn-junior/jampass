@@ -166,25 +166,26 @@ function processJs(code, filename, cb) {
     presets: [],
     sourceMaps: false,
     sourceType: 'unambiguous'
-  }, result => {
+  }, (err, result) => {
+    if (err) throw err;
     safeFun(cb)(result);
   });
 }
 
 async function handleCss(file, data) {
-  const cssPath = vpath(file.path);
   const cached = CACHE.get(file.path);
+  const code = Buffer.from(file.code);
+  const genHash = () => getHash(code.toString().concat('+build hash', data.length));
 
   const re = () => {
     const fullPathBase = file.path.split('style')[1];
     const cssOutPath = path.join(globalConfig.output.path, 'style', fullPathBase);
 
-    processCss(file.code, cssPath.full, cssOutPath, result => {
-      const buildHash = getHash(result.css.concat('+build hash', data.length));
+    processCss(file.code, file.path, cssOutPath, result => {
       CACHE.set(file.path, Buffer.from(JSON.stringify({
         path: result.opts.to,
         code: result.css,
-        buildHash
+        buildHash: genHash()
       })));
 
       writeFile(result.opts.to, result.css, globalConfig.build.dry);
@@ -193,14 +194,19 @@ async function handleCss(file, data) {
 
   cached
     .then(found => {
-      const { path: p, code, buildHash: cachedHash } = JSON.parse(found.data.toString());
-      const c = Buffer.from(code.data);
-      const buildHash = getHash(c.toString().concat('+build hash', data.length));
+      const {
+        path: p,
+        code: cCode,
+        buildHash: cHash
+      } = JSON.parse(found.data.toString());
 
-      debugLog('Build hash', buildHash, 'Last build', cachedHash);
-      debugLog('Build hash == Cached build Hash', buildHash === cachedHash);
+      const buildHash = genHash();
+      const c = Buffer.from(cCode.data);
 
-      if (buildHash === cachedHash) {
+      debugLog('Build hash', buildHash, 'Last build', cHash);
+      debugLog('Build hash == Cached build Hash', buildHash === cHash);
+
+      if (buildHash === cHash) {
         writeFile(p, c, globalConfig.build.dry);
       } else {
         re();
@@ -211,18 +217,19 @@ async function handleCss(file, data) {
 
 function handleJs(file, data) {
   const cached = CACHE.get(file.path);
+  const code = Buffer.from(file.code);
+
+  const genHash = () => getHash(code.toString().concat('+build hash', data.length));
 
   const re = () => {
     const fullPathBase = file.path.split('script')[1];
     const dest = path.join(globalConfig.output.path, 'script', fullPathBase);
-    const code = Buffer.from(file.code);
-    const buildHash = getHash(code.toString().concat('+build hash', data.length));
 
     processJs(code, file.path, result => {
       CACHE.set(file.path, Buffer.from(JSON.stringify({
         path: dest,
         code: result.code,
-        buildHash
+        buildHash: genHash()
       })));
 
       writeFile(dest, result.code, globalConfig.build.dry);
@@ -231,14 +238,19 @@ function handleJs(file, data) {
 
   cached
     .then(found => {
-      const { path: p, code, buildHash: cachedHash } = JSON.parse(found.data.toString());
-      const c = Buffer.from(code.data);
-      const buildHash = getHash(c.toString().concat('+build hash', data.length));
+      const {
+        path: p,
+        code: cCode,
+        buildHash: cHash
+      } = JSON.parse(found.data.toString());
 
-      debugLog('Build hash', buildHash, 'Last build', cachedHash);
-      debugLog('Build hash == Cached build Hash', buildHash === cachedHash);
+      const c = Buffer.from(cCode.data);
+      const buildHash = genHash();
 
-      if (buildHash === cachedHash) {
+      debugLog('Build hash', buildHash, 'Last build', cHash);
+      debugLog('Build hash == Cached build Hash', buildHash === cHash);
+
+      if (buildHash === cHash) {
         writeFile(p, c, globalConfig.build.dry);
       } else {
         re();
