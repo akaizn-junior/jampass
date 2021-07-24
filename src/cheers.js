@@ -9,6 +9,9 @@ const cssnano = require('cssnano');
 const autoprefixer = require('autoprefixer');
 // const postCssHash = require('postcss-hash');
 
+// babel and plugins
+const babel = require('@babel/core');
+
 // node
 const fs = require('fs');
 const path = require('path');
@@ -152,6 +155,22 @@ function processCss(code, src, out, cb) {
     });
 }
 
+function processJs(code, filename, cb) {
+  babel.transform(code, {
+    envName: process.env.NODE_ENV ?? 'production',
+    comments: false,
+    compact: true,
+    filename,
+    minified: true,
+    plugins: [],
+    presets: [],
+    sourceMaps: false,
+    sourceType: 'unambiguous'
+  }, result => {
+    safeFun(cb)(result);
+  });
+}
+
 async function handleCss(file, data) {
   const cssPath = vpath(file.path);
   const cached = CACHE.get(file.path);
@@ -199,13 +218,15 @@ function handleJs(file, data) {
     const code = Buffer.from(file.code);
     const buildHash = getHash(code.toString().concat('+build hash', data.length));
 
-    CACHE.set(file.path, Buffer.from(JSON.stringify({
-      path: dest,
-      code,
-      buildHash
-    })));
+    processJs(code, file.path, result => {
+      CACHE.set(file.path, Buffer.from(JSON.stringify({
+        path: dest,
+        code: result.code,
+        buildHash
+      })));
 
-    writeFile(dest, file.code, globalConfig.build.dry);
+      writeFile(dest, result.code, globalConfig.build.dry);
+    });
   };
 
   cached
@@ -343,8 +364,14 @@ function transform(type, data) {
 
       $('img[src]').each((_, img) => updateImageSrc(img, $));
 
+      const scriptsWithSrc = $('script[src]');
+      scriptsWithSrc.each((_, el) => updateScriptSrc(el, $));
+
       const scripts = $('script');
-      scripts.each((_, el) => updateScriptSrc(el, $));
+      scripts.each((_, el) => {
+        const scriptJs = $(el).html();
+        processJs(scriptJs, file.path, result => $(el).html(result.code));
+      });
 
       const styles = $('style');
       styles.each((_, el) => {
