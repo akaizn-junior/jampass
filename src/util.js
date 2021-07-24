@@ -44,6 +44,9 @@ const loadUserEnv = () => require('dotenv').config({
   path: path.join(process.cwd(), '.env')
 });
 
+// eslint-disable-next-line no-extra-parens
+const safeFun = cb => (cb !== void 0 && typeof cb === 'function' ? cb : () => {});
+
 // functions
 
 function accessProperty(obj, key, start = 0) {
@@ -237,6 +240,7 @@ module.exports = {
   loadUserEnv,
   handleCheersValidate,
   CACHE,
+  safeFun,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,

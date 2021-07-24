@@ -31,6 +31,7 @@ const {
   handleCheersValidate,
   CACHE,
   getHash,
+  safeFun,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
@@ -369,7 +370,7 @@ async function gen(opts = {}) {
 
       debugLog('Build hash', buildHash, 'Last build', res.buildHash);
       debugLog('Build hash == Cached build Hash', buildHash === res.buildHash);
-      console.log('Watching', `"${watching}"`);
+      debugLog('Watching', `"${watching}"`);
 
       if (buildHash === res.buildHash) {
         cheers.transform('save', res.data);
@@ -389,7 +390,7 @@ async function gen(opts = {}) {
  */
 function watch(cb = () => {}, ignore = []) {
   const watchPath = vpath(globalConfig.views.path, true);
-  const _cb = cb && typeof cb === 'function' ? cb : () => {};
+  const _cb = safeFun(cb);
 
   // sanity check
   // the directory to watch must be inside the project cwd

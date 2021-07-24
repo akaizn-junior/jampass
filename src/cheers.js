@@ -24,6 +24,7 @@ const {
   genBuildId,
   CACHE,
   getHash,
+  safeFun,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_STRICT
 } = require('./util');
@@ -62,9 +63,9 @@ function handleExternalUrls(src) {
   const provider = source[1].substring(0, source[1].indexOf('/'));
 
   if (protocol === 'http' && !globalConfig.assets.trust.includes(provider)) {
-    debugLog('site uses images served via "http" from', provider);
+    debugLog('site connects to unsecure service from', provider);
     if (globalConfig.build.mode === JESSE_BUILD_MODE_STRICT) {
-      throw Error(`Image served via "http" from an untrusted provider "${provider}"`);
+      throw Error(`Content served via "http" from an untrusted provider "${provider}"`);
     }
   }
 }
@@ -117,7 +118,39 @@ function updateImageSrc(element, $, attr = 'src') {
   }
 }
 
+function updateScriptSrc(element, $) {
+  const scriptSrc = element.attribs.src;
+  const isExternal = scriptSrc.substr(0, 10).includes('//');
+  const hasExtName = path.extname(scriptSrc).startsWith('.');
+
+  if (isExternal) handleExternalUrls(scriptSrc);
+
+  if (!isExternal && hasExtName) {
+    const scriptPath = vpath([globalConfig.cwd, scriptSrc], true);
+    const cached = CACHE.get(scriptPath.full);
+
+    cached
+      .then(found => {
+        const { path: p } = JSON.parse(found.data.toString());
+        const base = p.split('script')[1];
+
+        const out = path.join('/script', base);
+        const modded = $(element).attr('src', out);
+        $(element).replaceWith(modded);
+      })
+      .catch(() => {});
+  }
+}
+
 // helpers
+
+function processCss(code, src, out, cb) {
+  postcss(globalConfig.plugins.css)
+    .process(code, { from: src, to: out })
+    .then(result => {
+      safeFun(cb)(result);
+    });
+}
 
 async function handleCss(file, data) {
   const cssPath = vpath(file.path);
@@ -127,19 +160,16 @@ async function handleCss(file, data) {
     const fullPathBase = file.path.split('style')[1];
     const cssOutPath = path.join(globalConfig.output.path, 'style', fullPathBase);
 
-    postcss(globalConfig.plugins.css)
-      .process(file.code, { from: cssPath.full, to: cssOutPath })
-      .then(result => {
-        const buildHash = getHash(result.css.concat('+build hash', data.length));
+    processCss(file.code, cssPath.full, cssOutPath, result => {
+      const buildHash = getHash(result.css.concat('+build hash', data.length));
+      CACHE.set(file.path, Buffer.from(JSON.stringify({
+        path: result.opts.to,
+        code: result.css,
+        buildHash
+      })));
 
-        CACHE.set(file.path, Buffer.from(JSON.stringify({
-          path: result.opts.to,
-          code: result.css,
-          buildHash
-        })));
-
-        writeFile(result.opts.to, result.css, globalConfig.build.dry);
-      });
+      writeFile(result.opts.to, result.css, globalConfig.build.dry);
+    });
   };
 
   cached
@@ -312,8 +342,14 @@ function transform(type, data) {
       });
 
       $('img[src]').each((_, img) => updateImageSrc(img, $));
-      $('script').each((_, el) => {
-        console.log(el.attribs);
+
+      const scripts = $('script');
+      scripts.each((_, el) => updateScriptSrc(el, $));
+
+      const styles = $('style');
+      styles.each((_, el) => {
+        const styleCss = $(el).html();
+        processCss(styleCss, '', '', result => $(el).html(result.css));
       });
 
       const save = () => writeFile(file.path, $.html());
