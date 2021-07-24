@@ -21,6 +21,7 @@
   "license": "MIT",
   "description": "A static site generator",
   "dependencies": {
+    "@babel/core": "^7.14.8",
     "autoprefixer": "^9.8.6",
     "browser-sync": "^2.27.4",
     "cacache": "^15.2.0",
@@ -42,7 +43,6 @@
     "yargs": "^17.0.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.14.8",
     "@babel/eslint-parser": "^7.14.7",
     "eslint": "^7.29.0",
     "faker": "^5.5.3"
