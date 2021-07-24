@@ -140,13 +140,24 @@ async function compile(file, outputNameArray, isOutDir, locals) {
     });
   }
 
+  // locales will have an entry attribute
+  // that should match the directory where locale specific pages are rendered to
+  // try to get said entry from the output path here
+  // to separate sub directory inside a locale directory
+  const outParts = outPath.split('/');
+  const possibleLocaleEntry = outParts[0];
+  const locale = globalConfig.locales[possibleLocaleEntry.toLowerCase().replace(/-/g, '_')];
+  let here = outPath;
+  if (locale) here = outParts.splice(1, outParts.length).join('/');
+
   const html = await compileTemplate(file, {
     data: localsUsed,
     jesse: {
       year: new Date().getFullYear(),
       urlPath: {
         short: path.parse(outPath).dir,
-        full: outPath
+        full: outPath,
+        here
       }
     },
     site: {
@@ -292,7 +303,7 @@ async function gen(opts = {}) {
 
   const locales = {};
   globalLocales.forEach(loc => {
-    const locale = vpath([globalConfig.cwd, loc.contents], true);
+    const locale = vpath([globalConfig.cwd, loc.json], true);
     const content = fs.readFileSync(locale.full);
     locales[loc.lang.toLowerCase().replace(/-/g, '_')] = {
       lang: loc.lang,
@@ -302,7 +313,6 @@ async function gen(opts = {}) {
   });
 
   globalConfig.locales = locales;
-
   globalConfig.buildId = genBuildId();
   debugLog('generated a new build id', globalConfig.buildId);
 

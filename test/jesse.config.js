@@ -40,12 +40,12 @@ module.exports = {
   },
   locales: [{
     lang: 'en-US',
-    entry: '/',
-    contents: 'locales/en_US.json'
+    entry: '',
+    json: 'locales/en_US.json'
   }, {
     lang: 'pt-AO',
     entry: '/pt-AO',
-    contents: 'locales/pt_AO.json'
+    json: 'locales/pt_AO.json'
   }],
   build: {
     mode: jesse.JESSE_BUILD_MODE_LAZY
