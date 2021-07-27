@@ -13,6 +13,13 @@ body {
   display: inline-block;
 }
 
+.pagination {
+  text-align: center;
+  font-size: 15px;
+  font-weight: bold;
+  padding: 4px;
+}
+
 h1 {
   color: red;
   font-size: 3em;

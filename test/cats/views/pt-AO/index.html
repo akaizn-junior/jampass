@@ -7,9 +7,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ site.name }}</title>
     <link rel="stylesheet" href="/style/main.css">
-    {{#each data}}
-    <link rel="preload" href="{{ photo }}" as="image" type="image/jpeg">
-    {{/each}}
     <link rel="preload" href="/assets/images/pexels-lina-kivaka-1741205.jpg" as="image" type="image/jpeg">
     <style>
       h1 {
@@ -50,6 +47,29 @@
           {{/each}}
         </ul>
       </main>
+    </div>
+    <div class="pagination">
+      {{#if (neq (dec jesse.page.current 1) 1)}}
+      <a href="{{ dec jesse.page.current 1 }}">
+        {{ locales.pt_ao.prev }}
+      </a>
+      {{else if (neq jesse.page.current 1)}}
+      <a href="/{{ ../locales.pt_ao.entry }}">{{ locales.pt_ao.prev }}</a>
+      {{/if}}
+      {{#each pages}}
+      {{#if (eq ../jesse.page.current page)}}
+      <i>{{ page }}</i>
+      {{else if (neq page 1)}} <a href="{{ page }}">{{ page }}</a>
+      {{/if}}
+      {{#if (and (neq ../jesse.page.current page) (eq page 1))}}
+      <a href="/{{ ../locales.pt_ao.entry }}">{{ page }}</a>
+      {{/if}}
+      {{/each}}
+      {{#if (neq jesse.page.current pages.length)}}
+      <a href="{{ inc jesse.page.current pages.length }}">
+        {{ locales.pt_ao.next }}
+      </a>
+      {{/if}}
     </div>
     <footer>
       (c) {{ jesse.year }} {{ site.name }}. {{ locales.pt_ao.builtBy }}

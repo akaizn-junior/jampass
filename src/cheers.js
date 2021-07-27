@@ -340,7 +340,7 @@ async function validate(html) {
 function transform(type, data) {
   if (!data || !Array.isArray(data)) {
     throw (
-      TypeError('cheers.transform() expects an array of (path: string, html?: string) objects')
+      TypeError(`cheers.transform() expects an array of (path: string, html?: string) objects. Received "${data}"`)
     );
   }
 
@@ -392,7 +392,7 @@ function transform(type, data) {
       });
 
       const save = () => writeFile(file.path, $.html());
-      setTimeout(save, 200);
+      setTimeout(save, 250);
       break;
     case 'style': handleCss({ path: file.path, code }, data); break;
     case 'script': handleJs({ path: file.path, code }, data); break;

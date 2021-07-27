@@ -28,10 +28,10 @@ const {
   parseDynamicName,
   genBuildId,
   loadUserEnv,
-  handleCheersValidate,
   CACHE,
   getHash,
   safeFun,
+  isObj,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
@@ -40,7 +40,7 @@ const {
 
 // globals
 
-let funneledData = [];
+const pagination = [];
 let globalLocales = [];
 const globalConfig = {
   cwd: '.',
@@ -78,6 +78,8 @@ process.on('unhandledRejection', err => handleErrors(err, globalConfig));
 
 // Helpers
 
+const uxLocaleName = name => name.toLowerCase().replace(/-/g, '_');
+
 async function compileTemplate(file, data) {
   const filePath = vpath(file);
   const engine = cons[globalConfig.views.engine ?? 'handlebars'];
@@ -89,14 +91,14 @@ async function compileTemplate(file, data) {
   }
 }
 
-async function compile(file, outputNameArray, isOutDir, locals) {
+async function compileDataAndPaths(file, outputNameParts, isOutAsDir, locals, pageIndex) {
   const publicOutPath = vpath(globalConfig.output.path);
   let filenameFromData;
   let localsUsed = locals;
 
   // no added output paths
-  const dynName = parseDynamicName(outputNameArray[0]);
-  if (outputNameArray.length === 1 && dynName.localKey) {
+  const dynName = parseDynamicName(outputNameParts[0]);
+  if (outputNameParts.length === 1 && dynName.localKey) {
     if (Array.isArray(locals)) {
       localsUsed = locals[dynName.localIndex];
       filenameFromData = [
@@ -107,8 +109,8 @@ async function compile(file, outputNameArray, isOutDir, locals) {
     }
   }
 
-  if (Array.isArray(outputNameArray) && outputNameArray.length > 1) {
-    filenameFromData = outputNameArray.map(name => {
+  if (Array.isArray(outputNameParts) && outputNameParts.length > 1) {
+    filenameFromData = outputNameParts.map(name => {
       const dynamic = parseDynamicName(name);
 
       if (dynamic.localKey) {
@@ -123,7 +125,7 @@ async function compile(file, outputNameArray, isOutDir, locals) {
     });
   }
 
-  const processedPath = path.join(...filenameFromData || outputNameArray);
+  const processedPath = path.join(...filenameFromData || outputNameParts);
   const parsedOutPath = vpath(processedPath);
 
   let outPath = path.format({
@@ -132,7 +134,7 @@ async function compile(file, outputNameArray, isOutDir, locals) {
     ext: '.html'
   });
 
-  if (isOutDir) {
+  if (isOutAsDir) {
     outPath = path.format({
       dir: path.join(parsedOutPath.dir, parsedOutPath.base),
       name: 'index',
@@ -146,18 +148,23 @@ async function compile(file, outputNameArray, isOutDir, locals) {
   // to separate sub directory inside a locale directory
   const outParts = outPath.split('/');
   const possibleLocaleEntry = outParts[0];
-  const locale = globalConfig.locales[possibleLocaleEntry.toLowerCase().replace(/-/g, '_')];
+  const locale = globalConfig.locales[uxLocaleName(possibleLocaleEntry)];
   let here = outPath;
   if (locale) here = outParts.splice(1, outParts.length).join('/');
 
   const html = await compileTemplate(file, {
     data: localsUsed,
+    pages: pagination,
     jesse: {
       year: new Date().getFullYear(),
       urlPath: {
         short: path.parse(outPath).dir,
         full: outPath,
         here
+      },
+      page: {
+        current: pageIndex,
+        count: pagination.length
       }
     },
     site: {
@@ -167,32 +174,51 @@ async function compile(file, outputNameArray, isOutDir, locals) {
     locales: globalConfig.locales
   });
 
-  return { path: publicOutPath.concat(outPath), code: html };
+  return {
+    path: publicOutPath.concat(pageIndex > 1 ? String(pageIndex) : '', outPath),
+    code: html
+  };
 }
 
-async function build() {
+function handleCheersValidate(res, data) {
+  if (!res.isValid) {
+    consola.info('cheers.validate()', `"${data.gen}"`, `\ngenerated from "${data.view}"\n`);
+  }
+
+  res.errors.forEach(err => {
+    consola.log(`${err.line}:${err.column}`, `"${err.ruleId}"`, 'error', err.message);
+  });
+
+  res.warnings.forEach(warn => {
+    consola.log(`${warn.line}:${warn.column}`, `"${warn.ruleId}"`, 'error', warn.message);
+  });
+
+  if (!res.isValid) throw Error('HTML validation');
+  return res.isValid;
+}
+
+async function build(page, index) {
   debugLog('working on templates');
 
   const viewsPath = vpath(globalConfig.views.path, true);
-  const files = getDirPaths(viewsPath.full);
-  const publicOutPath = vpath(globalConfig.output.path).full;
+  const views = getDirPaths(viewsPath.full);
 
-  const resultData = [];
-  let filesGeneratedCount = 0;
-
-  for (let i = 0; i < files.length; i++) {
-    const relativePath = files[i];
-
-    const tmpl = vpath(relativePath);
-    const file = viewsPath.concat(relativePath);
+  async function transformView(viewPath) {
+    const tmpl = vpath(viewPath); // a template view
+    const file = viewsPath.concat(viewPath);
     const outName = globalConfig.output.filename[tmpl.name] || globalConfig.output.filename[path.join(tmpl.full)];
 
-    const canProcess = relativePath && !tmpl.name.startsWith('.'); // can process if not hidden
-    const outPath = outputName(outName ?? relativePath);
-    const outputNameArray = outPath.name.split('/');
+    const publicOutPath = vpath(globalConfig.output.path).full;
+    const resultData = [];
+    let genFilesCount = 0; // count all generated files
 
-    if (canProcess && !outputNameArray[0].startsWith(JESSE_LOOP_DATA_TOKEN)) {
-      const result = await compile(file, outputNameArray, outPath.isDir, funneledData);
+    const canProcess = viewPath && !tmpl.name.startsWith('.'); // can process if not a hidden file
+    const outPath = outputName(outName ?? viewPath);
+
+    const outputNameParts = outPath.name.split('/');
+
+    if (canProcess && !outputNameParts[0].startsWith(JESSE_LOOP_DATA_TOKEN)) {
+      const result = await compileDataAndPaths(file, outputNameParts, outPath.isDir, page, index);
       const validate = globalConfig.build.mode !== JESSE_BUILD_MODE_LAZY;
 
       try {
@@ -203,18 +229,18 @@ async function build() {
 
         writeFile(result.path, result.code, globalConfig.build.dry);
         resultData.push(result);
-        filesGeneratedCount++;
+        genFilesCount++;
       } catch (err) {
         await del([publicOutPath]);
         throw err;
       }
     }
 
-    if (canProcess && outputNameArray[0].startsWith(JESSE_LOOP_DATA_TOKEN) && Array.isArray(funneledData)) {
-      outputNameArray[0] = remTopChar(outputNameArray[0]);
-      filesGeneratedCount += funneledData.length;
-      funneledData.forEach(async(dataItem, di) => {
-        const result = await compile(file, outputNameArray, outPath.isDir, dataItem);
+    if (canProcess && outputNameParts[0].startsWith(JESSE_LOOP_DATA_TOKEN) && Array.isArray(page)) {
+      outputNameParts[0] = remTopChar(outputNameParts[0]);
+      genFilesCount += page.length;
+      page.forEach(async(dataItem, di) => {
+        const result = await compileDataAndPaths(file, outputNameParts, outPath.isDir, dataItem, index);
         const validate = di === 0 && globalConfig.build.mode !== JESSE_BUILD_MODE_LAZY;
 
         try {
@@ -236,9 +262,89 @@ async function build() {
         }
       });
     }
+
+    return { data: resultData, view: viewPath, count: genFilesCount };
   }
 
-  return { data: resultData, count: filesGeneratedCount };
+  const promises = views.map(transformView);
+  return await Promise.all(promises);
+}
+
+function setupLocales() {
+  const locales = {};
+  globalLocales.forEach(loc => {
+    const locale = vpath([globalConfig.cwd, loc.json], true);
+    const content = fs.readFileSync(locale.full);
+    locales[uxLocaleName(loc.lang)] = {
+      lang: loc.lang,
+      entry: loc.entry,
+      ...JSON.parse(content)
+    };
+  });
+
+  globalConfig.locales = locales;
+}
+
+function pageTransform(views, cacheBust) {
+  return async item => {
+    const index = item.page;
+    const page = item.data;
+
+    const cacheName = `page-${index}-manifest`;
+    const markName = suffix => `page ${index} ${suffix}`;
+
+    const markyStop = (label, count) => {
+      const end = Math.floor(marky.stop(label).duration) / 1000;
+      consola.info(label, count, 'files in', end, 's');
+    };
+
+    const genBuildHash = () => getHash(JSON.stringify([
+      page,
+      views.length,
+      cacheBust
+    ]));
+
+    const buildStarter = arr => {
+      const built = arr.reduce((acc, res) => {
+        CACHE.set(cacheName, Buffer.from(JSON.stringify({
+          data: res.data.concat(acc.data),
+          count: res.count + acc.count,
+          buildHash: genBuildHash()
+        })));
+        cheers.transform('html', res.data);
+        return {
+          data: res.data.concat(acc.data),
+          count: res.count + acc.count
+        };
+      }, { data: [], count: 0 });
+
+      return built;
+    };
+
+    CACHE.get(cacheName)
+      .then(async found => {
+        marky.mark(markName('from cache'));
+        const res = JSON.parse(found.data.toString());
+        const buildHash = genBuildHash();
+
+        debugLog('Build hash', buildHash, 'Last build', res.buildHash);
+        debugLog('Build hash == Cached build Hash', buildHash === res.buildHash);
+
+        if (buildHash === res.buildHash) {
+          cheers.transform('save', res.data);
+          markyStop(markName('from cache'), res.count);
+        } else {
+          marky.mark(markName('transform'));
+          const built = buildStarter(await build(page, index));
+          markyStop(markName('transform'), built.count);
+        }
+      })
+      .catch(async() => {
+        marky.mark(markName('transform'));
+        const built = buildStarter(await build(page, index));
+        markyStop(markName('transform'), built.count);
+      });
+  };
 }
 
 // Interface
@@ -283,6 +389,7 @@ async function funnel(dataSource) {
     );
   }
 
+  let funneledData = [];
   const fromDataSource = dataSource();
   const isPromise = typeof fromDataSource.then === 'function';
 
@@ -293,6 +400,20 @@ async function funnel(dataSource) {
   if (!isPromise) {
     funneledData = getValidData(fromDataSource);
   }
+
+  if (Array.isArray(funneledData)) {
+    while (funneledData.length >= 100) {
+      pagination.push({
+        page: pagination.length + 1,
+        data: funneledData.splice(0, 50)
+      });
+    }
+  }
+
+  pagination.push({
+    page: pagination.length + 1,
+    data: funneledData
+  });
 }
 
 /**
@@ -301,31 +422,18 @@ async function funnel(dataSource) {
 async function gen(opts = {}) {
   const { watching = '' } = opts;
 
-  const locales = {};
-  globalLocales.forEach(loc => {
-    const locale = vpath([globalConfig.cwd, loc.json], true);
-    const content = fs.readFileSync(locale.full);
-    locales[loc.lang.toLowerCase().replace(/-/g, '_')] = {
-      lang: loc.lang,
-      entry: loc.entry,
-      ...JSON.parse(content)
-    };
-  });
-
-  globalConfig.locales = locales;
   globalConfig.buildId = genBuildId();
   debugLog('generated a new build id', globalConfig.buildId);
 
   globalConfig.build.dry
   && consola.log('Dry run in', `"${globalConfig.build.mode}" mode`);
 
+  setupLocales();
+
   // clean output dir
   const publicOutPath = vpath(globalConfig.output.path).full;
   const cleaned = await del([`${publicOutPath}/**`, `!${publicOutPath}`]);
   debugLog('cleaned output dir', cleaned);
-
-  // start timer
-  marky.mark('generating html');
 
   const assetsPath = vpath([globalConfig.cwd, 'assets'], true);
   const stylePath = vpath([globalConfig.cwd, 'style'], true);
@@ -351,45 +459,14 @@ async function gen(opts = {}) {
   cheers.transform('style', styles.map(p => ({ path: p })));
   cheers.transform('script', script.map(p => ({ path: p })));
 
-  const markyStop = (label, count) => {
-    const end = Math.floor(marky.stop(label).duration) / 1000;
-    consola.info('generated', count, 'files in', end, 's');
-  };
+  debugLog('Watching', `"${watching}"`);
 
-  const watchingContent = ['', 'ready'].includes(watching)
+  const cacheBust = ['', 'ready'].includes(watching)
     ? watching
     : fs.readFileSync(path.join(globalConfig.cwd, watching));
 
-  const genBuildHash = () => getHash(JSON.stringify([
-    funneledData,
-    views.length,
-    watchingContent
-  ]));
-
-  const buildStarter = result => {
-    result.buildHash = genBuildHash();
-    CACHE.set('manifest', Buffer.from(JSON.stringify(result)));
-    cheers.transform('html', result.data);
-    markyStop('generating html', result.count);
-  };
-
-  CACHE.get('manifest')
-    .then(async found => {
-      const res = JSON.parse(found.data.toString());
-      const buildHash = genBuildHash();
-
-      debugLog('Build hash', buildHash, 'Last build', res.buildHash);
-      debugLog('Build hash == Cached build Hash', buildHash === res.buildHash);
-      debugLog('Watching', `"${watching}"`);
-
-      if (buildHash === res.buildHash) {
-        cheers.transform('save', res.data);
-        markyStop('generating html', res.count);
-      } else {
-        buildStarter(await build());
-      }
-    })
-    .catch(async() => buildStarter(await build()));
+  const promises = pagination.map(pageTransform(views, cacheBust));
+  await Promise.all(promises);
 }
 
 /**

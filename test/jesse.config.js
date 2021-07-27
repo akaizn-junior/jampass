@@ -1,10 +1,18 @@
 const faker = require('faker');
 const path = require('path');
 const jesse = require('../src/jesse');
+const handlebars = require('handlebars');
+
+handlebars.registerHelper('eq', (a, b) => a === b);
+handlebars.registerHelper('neq', (a, b) => a !== b);
+handlebars.registerHelper('and', (a, b) => a && b);
+handlebars.registerHelper('inc', (a, b) => (a < b ? a + 1 : b));
+handlebars.registerHelper('dec', (a, b) => (a > b ? a - 1 : b));
 
 jesse.funnel(() => {
   const fakeData = [];
-  const fakeItemsCount = 4;
+  const fakeItemsCount = 200;
+  const colors = ['blue', 'black', 'red', 'cyan', 'orange', 'purple'];
 
   faker.seed(fakeItemsCount);
 
@@ -15,8 +23,7 @@ jesse.funnel(() => {
       description: faker.lorem.words(3),
       breed: faker.animal.cat(),
       insertedAt: `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`,
-      // photo: faker.image.dataUri(500, 500, '#161616')
-      photo: faker.image.animals(500, 500, true)
+      photo: faker.image.dataUri(500, 500, colors[faker.datatype.number(colors.length)])
     });
   }
 
@@ -26,7 +33,7 @@ jesse.funnel(() => {
     description: 'Doggo surprise',
     breed: faker.animal.dog(),
     insertedAt: `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`,
-    photo: faker.image.dataUri(500, 500, '#161616')
+    photo: colors[faker.datatype.number(colors.length)]
   });
 
   return fakeData;

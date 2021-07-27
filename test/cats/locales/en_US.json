@@ -4,5 +4,7 @@
   "img_alt": "Photo of Orange Tabby Cat With Red Handkerchief by Lina Kivaka from Pexels",
   "img_title": "photo",
   "tag": "",
-  "home": "home"
+  "home": "home",
+  "next": "next",
+  "prev": "prev"
 }
