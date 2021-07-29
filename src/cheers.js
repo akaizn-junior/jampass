@@ -392,7 +392,7 @@ function transform(type, data) {
       });
 
       const save = () => writeFile(file.path, $.html());
-      setTimeout(save, 250);
+      save();
       break;
     case 'style': handleCss({ path: file.path, code }, data); break;
     case 'script': handleJs({ path: file.path, code }, data); break;

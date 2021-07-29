@@ -31,7 +31,6 @@ const {
   CACHE,
   getHash,
   safeFun,
-  isObj,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
@@ -52,7 +51,10 @@ const globalConfig = {
   site: {},
   locales: [],
   views: {
-    engine: 'handlebars',
+    engine: {
+      name: 'handlebars',
+      config: () => {}
+    },
     remote: false,
     path: 'views'
   },
@@ -82,9 +84,15 @@ const uxLocaleName = name => name.toLowerCase().replace(/-/g, '_');
 
 async function compileTemplate(file, data) {
   const filePath = vpath(file);
-  const engine = cons[globalConfig.views.engine ?? 'handlebars'];
+  const name = globalConfig.views.engine.name ?? 'handlebars';
+  const engineConfig = safeFun(globalConfig.views.engine.config);
 
   try {
+    const engine = cons[name];
+    // expose the template engine being internally used
+    const templateEngine = require(name);
+    engineConfig(templateEngine);
+
     return await engine(filePath.full, data);
   } catch (err) {
     throw err;
@@ -493,7 +501,8 @@ function watch(cb = () => {}, ignore = []) {
   const watcher = chokidar.watch([
     `${watchPath.dir}/**/*.html`,
     `${watchPath.dir}/**/*.css`,
-    `${watchPath.dir}/**/*.js`
+    `${watchPath.dir}/**/*.js`,
+    `${watchPath.dir}/**/*.mjs`
   ], {
     cwd: globalConfig.cwd,
     ignored: ignore

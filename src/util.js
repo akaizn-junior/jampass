@@ -222,7 +222,6 @@ module.exports = {
   loadUserEnv,
   CACHE,
   safeFun,
-  isObj,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
