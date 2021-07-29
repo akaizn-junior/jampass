@@ -446,12 +446,14 @@ async function gen(opts = {}) {
   const assetsPath = vpath([globalConfig.cwd, 'assets'], true);
   const stylePath = vpath([globalConfig.cwd, 'style'], true);
   const scriptPath = vpath([globalConfig.cwd, 'script'], true);
+  const staticPath = vpath([globalConfig.cwd, 'static'], true);
   const viewsPath = vpath(globalConfig.views.path, true);
 
   const assets = getDirPaths(assetsPath.full, 'full');
   const styles = getDirPaths(stylePath.full, 'full');
   const script = getDirPaths(scriptPath.full, 'full');
   const views = getDirPaths(viewsPath.full, 'full');
+  const staticAssets = getDirPaths(staticPath.full, 'full');
 
   cheers.config({
     cwd: globalConfig.cwd,
@@ -466,6 +468,7 @@ async function gen(opts = {}) {
   cheers.transform('assets', assets.map(p => ({ path: p })));
   cheers.transform('style', styles.map(p => ({ path: p })));
   cheers.transform('script', script.map(p => ({ path: p })));
+  cheers.transform('static', staticAssets.map(p => ({ path: p })));
 
   debugLog('Watching', `"${watching}"`);
 

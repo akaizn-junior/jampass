@@ -360,6 +360,10 @@ function transform(type, data) {
     case 'save':
       writeFile(file.path, file.code);
       break;
+    case 'static':
+      const out = vpath(file.path);
+      writeFile(path.join(globalConfig.output.path, out.base), code);
+      break;
     case 'html':
       const $ = cheerio.load(code);
 
