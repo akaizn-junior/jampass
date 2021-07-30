@@ -8,6 +8,7 @@
     <title>{{ site.name }}</title>
     <link rel="stylesheet" href="/style/main.css">
     <link rel="preload" href="/assets/images/pexels-lina-kivaka-1741205.jpg" as="image" type="image/jpeg">
+    <link rel="shortcut icon" href="/cat-fav.png" type="image/png">
     <style>
       h1 {
         color: red;
@@ -54,19 +55,19 @@
         {{ locales.pt_ao.prev }}
       </a>
       {{else if (neq jesse.page.current 1)}}
-      <a href="/{{ ../locales.pt_ao.entry }}">{{ locales.pt_ao.prev }}</a>
+      <a href="/{{ page }}{{ ../locales.pt_ao.entry }}">{{ locales.pt_ao.prev }}</a>
       {{/if}}
       {{#each pages}}
       {{#if (eq ../jesse.page.current page)}}
       <i>{{ page }}</i>
-      {{else if (neq page 1)}} <a href="{{ page }}">{{ page }}</a>
+      {{else if (neq page 1)}} <a href="/{{ page }}{{ ../locales.pt_ao.entry }}">{{ page }}</a>
       {{/if}}
       {{#if (and (neq ../jesse.page.current page) (eq page 1))}}
       <a href="/{{ ../locales.pt_ao.entry }}">{{ page }}</a>
       {{/if}}
       {{/each}}
       {{#if (neq jesse.page.current pages.length)}}
-      <a href="{{ inc jesse.page.current pages.length }}">
+      <a href="/{{ inc jesse.page.current pages.length }}/{{ page }}">
         {{ locales.pt_ao.next }}
       </a>
       {{/if}}

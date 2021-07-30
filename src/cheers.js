@@ -361,8 +361,8 @@ function transform(type, data) {
       writeFile(file.path, file.code);
       break;
     case 'static':
-      const out = vpath(file.path);
-      writeFile(path.join(globalConfig.output.path, out.base), code);
+      const out = vpath(file.path).base;
+      writeFile(path.join(globalConfig.output.path, out), code);
       break;
     case 'html':
       const $ = cheerio.load(code);
