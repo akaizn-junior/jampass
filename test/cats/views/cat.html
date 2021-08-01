@@ -13,7 +13,7 @@
   <a href="/{{ locales.en_us.entry }}">{{ locales.en_us.home }}</a>
   <div class="langs"></div>
     {{#each locales}}
-    <a href="{{ entry }}/{{ ../jesse.urlPath.short }}">{{ lang }}</a>
+    <a href="{{../jesse.url.page}}{{ entry }}/{{ ../jesse.url.dir }}">{{ lang }}</a>
     {{/each}}
   </div>
   <div class="wrapper">

@@ -50,24 +50,27 @@
       </main>
     </div>
     <div class="pagination">
-      {{#if (neq (dec jesse.page.current 1) 1)}}
-      <a href="{{ dec jesse.page.current 1 }}">
+      {{#if (eq jesse.pages.current 1)}}
+      <span>1</span>
+      {{else if (eq jesse.pages.current 2)}}
+      <a href="{{ locales.pt_ao.entry }}">{{ locales.pt_ao.prev }}</a>
+      <a href="{{ locales.pt_ao.entry }}">1</a>
+      {{else}}
+      <a href="/{{ jesse.pages.previous }}{{ locales.pt_ao.entry }}">
         {{ locales.pt_ao.prev }}
       </a>
-      {{else if (neq jesse.page.current 1)}}
-      <a href="/{{ page }}{{ ../locales.pt_ao.entry }}">{{ locales.pt_ao.prev }}</a>
+      <a href="{{ locales.pt_ao.entry }}">1</a>
       {{/if}}
-      {{#each pages}}
-      {{#if (eq ../jesse.page.current page)}}
-      <i>{{ page }}</i>
-      {{else if (neq page 1)}} <a href="/{{ page }}{{ ../locales.pt_ao.entry }}">{{ page }}</a>
-      {{/if}}
-      {{#if (and (neq ../jesse.page.current page) (eq page 1))}}
-      <a href="/{{ ../locales.pt_ao.entry }}">{{ page }}</a>
-      {{/if}}
+
+      {{#each jesse.pages.list}}
+        {{#if (eq ../jesse.pages.current page)}}
+        <span>{{ page }}</span>
+        {{else}}<a href="/{{ page }}{{ ../locales.pt_ao.entry }}">{{ page }}</a>
+        {{/if}}
       {{/each}}
-      {{#if (neq jesse.page.current pages.length)}}
-      <a href="/{{ inc jesse.page.current pages.length }}/{{ page }}">
+
+      {{#if (neq jesse.pages.current jesse.pages.next)}}
+      <a href="/{{ jesse.pages.next }}{{ locales.pt_ao.entry }}">
         {{ locales.pt_ao.next }}
       </a>
       {{/if}}

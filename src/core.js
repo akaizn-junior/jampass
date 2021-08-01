@@ -99,7 +99,9 @@ async function compileTemplate(file, data) {
   }
 }
 
-async function compileDataAndPaths(file, outputNameParts, isOutAsDir, locals, pageIndex) {
+async function compileDataAndPaths(file, outputNameParts, locals, opts) {
+  const { outAsDir, pages } = opts;
+
   const publicOutPath = vpath(globalConfig.output.path);
   let filenameFromData;
   let localsUsed = locals;
@@ -142,7 +144,7 @@ async function compileDataAndPaths(file, outputNameParts, isOutAsDir, locals, pa
     ext: '.html'
   });
 
-  if (isOutAsDir) {
+  if (outAsDir) {
     outPath = path.format({
       dir: path.join(parsedOutPath.dir, parsedOutPath.base),
       name: 'index',
@@ -162,17 +164,18 @@ async function compileDataAndPaths(file, outputNameParts, isOutAsDir, locals, pa
 
   const html = await compileTemplate(file, {
     data: localsUsed,
-    pages: pagination,
     jesse: {
       year: new Date().getFullYear(),
-      urlPath: {
-        short: path.parse(outPath).dir,
+      url: {
+        dir: path.parse(outPath).dir,
         full: outPath,
-        here
+        here,
+        page: pages.current > 1 ? '/'.concat(pages.current) : ' ',
+        locale: locale ? locale.lang : ' '
       },
-      page: {
-        current: pageIndex,
-        count: pagination.length
+      pages: {
+        list: pagination.filter((item, i) => i && { page: item.page }),
+        ...pages
       }
     },
     site: {
@@ -183,7 +186,7 @@ async function compileDataAndPaths(file, outputNameParts, isOutAsDir, locals, pa
   });
 
   return {
-    path: publicOutPath.concat(pageIndex > 1 ? String(pageIndex) : '', outPath),
+    path: publicOutPath.concat(pages.current > 1 ? String(pages.current) : '', outPath),
     code: html
   };
 }
@@ -205,7 +208,7 @@ function handleCheersValidate(res, data) {
   return res.isValid;
 }
 
-async function build(page, index) {
+async function build(page) {
   debugLog('working on templates');
 
   const viewsPath = vpath(globalConfig.views.path, true);
@@ -226,7 +229,15 @@ async function build(page, index) {
     const outputNameParts = outPath.name.split('/');
 
     if (canProcess && !outputNameParts[0].startsWith(JESSE_LOOP_DATA_TOKEN)) {
-      const result = await compileDataAndPaths(file, outputNameParts, outPath.isDir, page, index);
+      const opts = {
+        outAsDir: outPath.isDir,
+        pages: {
+          current: page.page,
+          previous: page.previous,
+          next: page.next
+        }
+      };
+      const result = await compileDataAndPaths(file, outputNameParts, page.data, opts);
       const validate = globalConfig.build.mode !== JESSE_BUILD_MODE_LAZY;
 
       try {
@@ -244,11 +255,19 @@ async function build(page, index) {
       }
     }
 
-    if (canProcess && outputNameParts[0].startsWith(JESSE_LOOP_DATA_TOKEN) && Array.isArray(page)) {
+    if (canProcess && outputNameParts[0].startsWith(JESSE_LOOP_DATA_TOKEN) && Array.isArray(page.data)) {
       outputNameParts[0] = remTopChar(outputNameParts[0]);
-      genFilesCount += page.length;
-      page.forEach(async(dataItem, di) => {
-        const result = await compileDataAndPaths(file, outputNameParts, outPath.isDir, dataItem, index);
+      genFilesCount += page.data.length;
+      page.data.forEach(async(dataItem, di) => {
+        const opts = {
+          outAsDir: outPath.isDir,
+          pages: {
+            current: page.page,
+            previous: page.previous,
+            next: page.next
+          }
+        };
+        const result = await compileDataAndPaths(file, outputNameParts, dataItem, opts);
         const validate = di === 0 && globalConfig.build.mode !== JESSE_BUILD_MODE_LAZY;
 
         try {
@@ -294,12 +313,9 @@ function setupLocales() {
 }
 
 function pageTransform(views, cacheBust) {
-  return async item => {
-    const index = item.page;
-    const page = item.data;
-
-    const cacheName = `page-${index}-manifest`;
-    const markName = suffix => `page ${index} ${suffix}`;
+  return async page => {
+    const cacheName = `page-${page.page}-manifest`;
+    const markName = suffix => `page ${page.page} ${suffix}`;
 
     const markyStop = (label, count) => {
       const end = Math.floor(marky.stop(label).duration) / 1000;
@@ -307,7 +323,7 @@ function pageTransform(views, cacheBust) {
     };
 
     const genBuildHash = () => getHash(JSON.stringify([
-      page,
+      page.data,
       views.length,
       cacheBust
     ]));
@@ -343,13 +359,13 @@ function pageTransform(views, cacheBust) {
           markyStop(markName('from cache'), res.count);
         } else {
           marky.mark(markName('transform'));
-          const built = buildStarter(await build(page, index));
+          const built = buildStarter(await build(page));
           markyStop(markName('transform'), built.count);
         }
       })
       .catch(async() => {
         marky.mark(markName('transform'));
-        const built = buildStarter(await build(page, index));
+        const built = buildStarter(await build(page));
         markyStop(markName('transform'), built.count);
       });
   };
@@ -409,17 +425,27 @@ async function funnel(dataSource) {
     funneledData = getValidData(fromDataSource);
   }
 
+  const pageMaxItems = 100;
+
   if (Array.isArray(funneledData)) {
-    while (funneledData.length >= 100) {
+    while (funneledData.length >= pageMaxItems) {
+      const data = funneledData.splice(0, 50);
+      const pagesLen = pagination.length;
+
       pagination.push({
-        page: pagination.length + 1,
-        data: funneledData.splice(0, 50)
+        page: pagesLen + 1,
+        previous: pagesLen > 1 ? pagesLen : null,
+        next: pagesLen + 2,
+        data
       });
     }
   }
 
+  const pagesLen = pagination.length;
   pagination.push({
-    page: pagination.length + 1,
+    page: pagesLen + 1,
+    previous: pagesLen > 1 ? pagesLen : null,
+    next: pagesLen + 1,
     data: funneledData
   });
 }
@@ -538,7 +564,7 @@ function watch(cb = () => {}, ignore = []) {
  * Powered by [BrowserSync](https://browsersync.io/docs/api)
  */
 function serve({ port, open = false, watchIgnore }) {
-  const serverRoot = vpath(globalConfig.output.path, true).full;
+  const serverRoot = vpath(globalConfig.output.path).full;
   const bs = browserSync({
     port: port ?? 3000,
     open,

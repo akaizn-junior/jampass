@@ -35,9 +35,6 @@ jesse.funnel(() => {
 function configEngine(handlebars) {
   handlebars.registerHelper('eq', (a, b) => a === b);
   handlebars.registerHelper('neq', (a, b) => a !== b);
-  handlebars.registerHelper('and', (a, b) => a && b);
-  handlebars.registerHelper('inc', (a, b) => a < b && a + 1 || b);
-  handlebars.registerHelper('dec', (a, b) => a > b && a - 1 || b);
 }
 
 module.exports = {
