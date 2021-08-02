@@ -469,10 +469,10 @@ async function gen(opts = {}) {
   const cleaned = await del([`${publicOutPath}/**`, `!${publicOutPath}`]);
   debugLog('cleaned output dir', cleaned);
 
-  const assetsPath = vpath([globalConfig.cwd, 'assets'], true);
-  const stylePath = vpath([globalConfig.cwd, 'style'], true);
-  const scriptPath = vpath([globalConfig.cwd, 'script'], true);
-  const staticPath = vpath([globalConfig.cwd, 'static'], true);
+  const assetsPath = vpath([globalConfig.cwd, 'assets']);
+  const stylePath = vpath([globalConfig.cwd, 'style']);
+  const scriptPath = vpath([globalConfig.cwd, 'script']);
+  const staticPath = vpath([globalConfig.cwd, 'static']);
   const viewsPath = vpath(globalConfig.views.path, true);
 
   const assets = getDirPaths(assetsPath.full, 'full');

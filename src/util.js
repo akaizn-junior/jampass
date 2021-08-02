@@ -90,17 +90,22 @@ function outputName(outName) {
 }
 
 function getDirPaths(srcPath, dirType = 'sub', dir = '') {
-  const dirents = fs.readdirSync(srcPath, {
-    withFileTypes: true
-  });
+  try {
+    const dirents = fs.readdirSync(srcPath, {
+      withFileTypes: true
+    });
 
-  return dirents.flatMap(dirent => {
-    if (dirent.isDirectory()) {
-      return getDirPaths(path.join(srcPath, dirent.name), dirType, path.join(dir, dirent.name));
-    }
-    return dirType === 'full' ? path.join(srcPath, dirent.name)
-      : path.join(path.parse(dir).dir, path.parse(dir).base, dirent.name);
-  });
+    return dirents.flatMap(dirent => {
+      if (dirent.isDirectory()) {
+        return getDirPaths(path.join(srcPath, dirent.name), dirType, path.join(dir, dirent.name));
+      }
+      return dirType === 'full' ? path.join(srcPath, dirent.name)
+        : path.join(path.parse(dir).dir, path.parse(dir).base, dirent.name);
+    });
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
 }
 
 /**
