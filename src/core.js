@@ -355,7 +355,7 @@ function pageTransform(views, cacheBust) {
         debugLog('Build hash == Cached build Hash', buildHash === res.buildHash);
 
         if (buildHash === res.buildHash) {
-          cheers.transform('save', res.data);
+          cheers.transform('none', res.data);
           markyStop(markName('from cache'), res.count);
         } else {
           marky.mark(markName('transform'));

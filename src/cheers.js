@@ -357,7 +357,7 @@ function transform(type, data) {
     }
 
     switch (type) {
-    case 'save':
+    case 'none':
       writeFile(file.path, file.code);
       break;
     case 'static':
@@ -395,8 +395,11 @@ function transform(type, data) {
         processCss(styleCss, '', '', result => $(el).html(result.css));
       });
 
-      const save = () => writeFile(file.path, $.html());
-      setTimeout(save, 250);
+      const save = () => {
+        writeFile(file.path, $.html());
+      };
+
+      setTimeout(save, 300);
       break;
     case 'style': handleCss({ path: file.path, code }, data); break;
     case 'script': handleJs({ path: file.path, code }, data); break;
