@@ -10,6 +10,7 @@ const marky = require('marky');
 // node
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 
 // local
 const cheers = require('./cheers');
@@ -115,7 +116,9 @@ async function compileDataAndPaths(file, outputNameParts, locals, opts) {
         dynName.place(accessProperty(localsUsed, dynName.localKey))
       ];
     } else {
-      filenameFromData = dynName.place(accessProperty(locals, dynName.localKey));
+      filenameFromData = [
+        dynName.place(accessProperty(locals, dynName.localKey))
+      ];
     }
   }
 
@@ -406,48 +409,82 @@ function config(options = {}, configCwd = '') {
  * It must return an array or an object.
  * @returns void
  */
-async function funnel(dataSource) {
+function funnel(dataSource) {
   if (!dataSource || typeof dataSource !== 'function') {
     throw (
       TypeError('jesse.funnel() takes a function. "dataSource" must be a function that returns locals')
     );
   }
 
-  let funneledData = [];
-  const fromDataSource = dataSource();
-  const isPromise = typeof fromDataSource.then === 'function';
+  const withCache = done => {
+    CACHE.get('pagination')
+      .then(found => {
+        if (found) {
+          const res = JSON.parse(found.data.toString());
+          console.log('cached');
+          res.forEach(d => pagination.push(d));
+        } else {
+          done();
+        }
+      })
+      .catch(() => done());
+  };
 
-  if (isPromise) {
-    funneledData = getValidData(await fromDataSource);
-  }
+  const handleFunneledData = funneled => {
+    const pageMaxItems = 100;
 
-  if (!isPromise) {
-    funneledData = getValidData(fromDataSource);
-  }
+    if (Array.isArray(funneled)) {
+      while (funneled.length >= pageMaxItems) {
+        const page = funneled.splice(0, 50);
+        const pagesLen = pagination.length;
 
-  const pageMaxItems = 100;
+        pagination.push({
+          page: pagesLen + 1,
+          previous: pagesLen > 1 ? pagesLen : null,
+          next: pagesLen + 2,
+          data: page
+        });
+      }
+    }
 
-  if (Array.isArray(funneledData)) {
-    while (funneledData.length >= pageMaxItems) {
-      const data = funneledData.splice(0, 50);
-      const pagesLen = pagination.length;
+    const pagesLen = pagination.length;
+    pagination.push({
+      page: pagesLen + 1,
+      previous: pagesLen > 1 ? pagesLen : null,
+      next: pagesLen + 1,
+      data: funneled
+    });
 
-      pagination.push({
-        page: pagesLen + 1,
-        previous: pagesLen > 1 ? pagesLen : null,
-        next: pagesLen + 2,
-        data
-      });
+    CACHE.set('pagination', JSON.stringify(pagination));
+  };
+
+  const fromDataSource = dataSource(data => {
+    withCache(
+      () => handleFunneledData(getValidData(data))
+    );
+  });
+
+  if (fromDataSource) {
+    const isPromise = typeof fromDataSource.then === 'function';
+
+    if (isPromise) {
+      fromDataSource
+        .then(res => {
+          withCache(
+            () => handleFunneledData(getValidData(res))
+          );
+        })
+        .catch(err => {
+          throw err;
+        });
+    }
+
+    if (!isPromise) {
+      withCache(
+        () => handleFunneledData(getValidData(fromDataSource))
+      );
     }
   }
-
-  const pagesLen = pagination.length;
-  pagination.push({
-    page: pagesLen + 1,
-    previous: pagesLen > 1 ? pagesLen : null,
-    next: pagesLen + 1,
-    data: funneledData
-  });
 }
 
 /**
@@ -576,12 +613,29 @@ function serve({ port, open = false, watchIgnore }) {
   watch(bs.reload, watchIgnore);
 }
 
+function expose(data, opts = {}) {
+  const { port, host, headers } = opts || {};
+  const p = port || 5000;
+  const h = host || '127.0.0.1';
+  const _headers = headers || { 'Content-Type': 'application/json' };
+
+  const server = http.createServer((_, res) => {
+    res.writeHead(200, _headers);
+    res.end(data);
+  });
+
+  server.listen(p, h, () => {
+    consola.info(`Exposing data on port http://${h}:${p}`);
+  });
+}
+
 module.exports = {
   watch,
   config,
   gen,
   funnel,
   serve,
+  expose,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
   JESSE_BUILD_MODE_STRICT
