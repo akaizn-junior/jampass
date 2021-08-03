@@ -185,7 +185,7 @@ function parseDynamicName(nm) {
     let localKey = String(nm).substring(localBeginIndex + 1, localEndIndex);
 
     // the local key may be formated as [data item key, data item index]
-    localKey = localKey.split('.');
+    localKey = localKey.split(':');
 
     return {
       localIndex: Number(localKey[1]) || 0,
