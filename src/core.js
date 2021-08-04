@@ -416,20 +416,6 @@ function funnel(dataSource) {
     );
   }
 
-  const withCache = done => {
-    CACHE.get('pagination')
-      .then(found => {
-        if (found) {
-          const res = JSON.parse(found.data.toString());
-          console.log('cached');
-          res.forEach(d => pagination.push(d));
-        } else {
-          done();
-        }
-      })
-      .catch(() => done());
-  };
-
   const handleFunneledData = funneled => {
     const pageMaxItems = 100;
 
@@ -454,14 +440,10 @@ function funnel(dataSource) {
       next: pagesLen + 1,
       data: funneled
     });
-
-    CACHE.set('pagination', JSON.stringify(pagination));
   };
 
   const fromDataSource = dataSource(data => {
-    withCache(
-      () => handleFunneledData(getValidData(data))
-    );
+    handleFunneledData(getValidData(data));
   });
 
   if (fromDataSource) {
@@ -470,9 +452,7 @@ function funnel(dataSource) {
     if (isPromise) {
       fromDataSource
         .then(res => {
-          withCache(
-            () => handleFunneledData(getValidData(res))
-          );
+          handleFunneledData(getValidData(res));
         })
         .catch(err => {
           throw err;
@@ -480,9 +460,7 @@ function funnel(dataSource) {
     }
 
     if (!isPromise) {
-      withCache(
-        () => handleFunneledData(getValidData(fromDataSource))
-      );
+      handleFunneledData(getValidData(fromDataSource));
     }
   }
 }
