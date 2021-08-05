@@ -527,7 +527,7 @@ async function gen(opts = {}) {
         const promises = pagination.map(pageTransform(views, cacheBust));
         await Promise.all(promises);
       }
-    }, 500);
+    }, 1000);
   } else {
     const promises = pagination.map(pageTransform(views, cacheBust));
     await Promise.all(promises);
