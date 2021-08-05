@@ -618,6 +618,13 @@ function expose(data, opts = {}) {
   server.listen(p, h, () => {
     consola.info(`Exposing data on port http://${h}:${p}`);
   });
+
+  // for cases where pagination data is still not defined
+  // due to slow connection, try to generate from here
+  // given the user calls this function
+  setTimeout(() => {
+    if (!pagination.length) gen();
+  }, 200);
 }
 
 module.exports = {
