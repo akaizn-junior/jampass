@@ -517,8 +517,21 @@ async function gen(opts = {}) {
     ? watching
     : fs.readFileSync(path.join(globalConfig.cwd, watching));
 
-  const promises = pagination.map(pageTransform(views, cacheBust));
-  await Promise.all(promises);
+  if (!pagination.length) {
+    // poll for pagination data
+    let ic = 0;
+    const iid = setInterval(async() => {
+      ic++;
+      if (ic === 5 || pagination.length) {
+        clearInterval(iid);
+        const promises = pagination.map(pageTransform(views, cacheBust));
+        await Promise.all(promises);
+      }
+    }, 500);
+  } else {
+    const promises = pagination.map(pageTransform(views, cacheBust));
+    await Promise.all(promises);
+  }
 }
 
 /**

@@ -1,6 +1,7 @@
 // deps
 const cheerio = require('cheerio');
 const htmlValidator = require('html-validator');
+const consola = require('consola');
 
 // postcss and plugins
 const postcss = require('postcss');
@@ -152,6 +153,9 @@ function processCss(code, src, out, cb) {
     .process(code, { from: src, to: out })
     .then(result => {
       safeFun(cb)(result);
+    })
+    .catch(err => {
+      consola.info(err);
     });
 }
 
