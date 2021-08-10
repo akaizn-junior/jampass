@@ -29,7 +29,6 @@ const {
   parseDynamicName,
   genBuildId,
   loadUserEnv,
-  getHash,
   safeFun,
   JESSE_LOOP_DATA_TOKEN,
   JESSE_BUILD_MODE_LAZY,
