@@ -389,6 +389,7 @@ function funnel(dataSource) {
 
     const data = funneled.data;
     let every = 50;
+    let maxNPages = Infinity;
     let funPages = data;
 
     if (funneled.pages && funneled.pages.from && Array.isArray(funneled.pages.from)) {
@@ -399,10 +400,15 @@ function funnel(dataSource) {
       every = funneled.pages.every;
     }
 
+    if (funneled.pages && funneled.pages.max) {
+      maxNPages = funneled.pages.max;
+    }
+
     if (every < 10) consola.warn('Number of items per page is too low');
 
     if (Array.isArray(funPages)) {
-      while (funPages.length >= every) {
+      let i = 1;
+      while (funPages.length >= every && i < maxNPages) {
         const page = funPages.splice(0, every);
         const pagesLen = pagination.length;
 
@@ -412,6 +418,8 @@ function funnel(dataSource) {
           next: pagesLen + 2,
           data: page
         });
+
+        i++;
       }
     }
 
