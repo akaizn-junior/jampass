@@ -29,7 +29,6 @@ const {
   parseDynamicName,
   genBuildId,
   loadUserEnv,
-  CACHE,
   getHash,
   safeFun,
   JESSE_LOOP_DATA_TOKEN,
@@ -315,9 +314,8 @@ function setupLocales() {
   globalConfig.locales = locales;
 }
 
-function pageTransform(views, cacheBust) {
+function pageTransform() {
   return async page => {
-    const cacheName = `page-${page.page}-manifest`;
     const markName = suffix => `page ${page.page} ${suffix}`;
 
     const markyStop = (label, count) => {
@@ -325,19 +323,8 @@ function pageTransform(views, cacheBust) {
       consola.info(label, count, 'files in', end, 's');
     };
 
-    const genBuildHash = () => getHash(JSON.stringify([
-      page.data,
-      views.length,
-      cacheBust
-    ]));
-
     const buildStarter = arr => {
       const built = arr.reduce((acc, res) => {
-        CACHE.set(cacheName, Buffer.from(JSON.stringify({
-          data: res.data.concat(acc.data),
-          count: res.count + acc.count,
-          buildHash: genBuildHash()
-        })));
         cheers.transform('html', res.data);
         return {
           data: res.data.concat(acc.data),
@@ -348,29 +335,9 @@ function pageTransform(views, cacheBust) {
       return built;
     };
 
-    CACHE.get(cacheName)
-      .then(async found => {
-        marky.mark(markName('from cache'));
-        const res = JSON.parse(found.data.toString());
-        const buildHash = genBuildHash();
-
-        debugLog('Build hash', buildHash, 'Last build', res.buildHash);
-        debugLog('Build hash == Cached build Hash', buildHash === res.buildHash);
-
-        if (buildHash === res.buildHash) {
-          cheers.transform('none', res.data);
-          markyStop(markName('from cache'), res.count);
-        } else {
-          marky.mark(markName('transform'));
-          const built = buildStarter(await build(page));
-          markyStop(markName('transform'), built.count);
-        }
-      })
-      .catch(async() => {
-        marky.mark(markName('transform'));
-        const built = buildStarter(await build(page));
-        markyStop(markName('transform'), built.count);
-      });
+    marky.mark(markName('transform'));
+    const built = buildStarter(await build(page));
+    markyStop(markName('transform'), built.count);
   };
 }
 
@@ -417,11 +384,27 @@ function funnel(dataSource) {
   }
 
   const handleFunneledData = funneled => {
-    const pageMaxItems = 100;
+    if (!funneled.data) {
+      throw Error('no data found');
+    }
 
-    if (Array.isArray(funneled)) {
-      while (funneled.length >= pageMaxItems) {
-        const page = funneled.splice(0, 50);
+    const data = funneled.data;
+    let every = 50;
+    let funPages = data;
+
+    if (funneled.pages && funneled.pages.from && Array.isArray(funneled.pages.from)) {
+      funPages = funneled.pages.from.map(k => accessProperty(funneled.data, k));
+    }
+
+    if (funneled.pages && funneled.pages.every) {
+      every = funneled.pages.every;
+    }
+
+    if (every < 10) consola.warn('Number of items per page is too low');
+
+    if (Array.isArray(funPages)) {
+      while (funPages.length >= every) {
+        const page = funPages.splice(0, every);
         const pagesLen = pagination.length;
 
         pagination.push({
@@ -438,7 +421,7 @@ function funnel(dataSource) {
       page: pagesLen + 1,
       previous: pagesLen > 1 ? pagesLen : null,
       next: pagesLen + 1,
-      data: funneled
+      data: funPages
     });
   };
 
@@ -488,12 +471,10 @@ async function gen(opts = {}) {
   const stylePath = vpath([globalConfig.cwd, 'style']);
   const scriptPath = vpath([globalConfig.cwd, 'script']);
   const staticPath = vpath([globalConfig.cwd, 'static']);
-  const viewsPath = vpath(globalConfig.views.path, true);
 
   const assets = getDirPaths(assetsPath.full, 'full');
   const styles = getDirPaths(stylePath.full, 'full');
   const script = getDirPaths(scriptPath.full, 'full');
-  const views = getDirPaths(viewsPath.full, 'full');
   const staticAssets = getDirPaths(staticPath.full, 'full');
 
   cheers.config({
@@ -513,10 +494,6 @@ async function gen(opts = {}) {
 
   debugLog('Watching', `"${watching}"`);
 
-  const cacheBust = ['', 'ready'].includes(watching)
-    ? watching
-    : fs.readFileSync(path.join(globalConfig.cwd, watching));
-
   if (!pagination.length) {
     // poll for pagination data
     let ic = 0;
@@ -524,12 +501,12 @@ async function gen(opts = {}) {
       ic++;
       if (ic === 5 || pagination.length) {
         clearInterval(iid);
-        const promises = pagination.map(pageTransform(views, cacheBust));
+        const promises = pagination.map(pageTransform());
         await Promise.all(promises);
       }
     }, 1000);
   } else {
-    const promises = pagination.map(pageTransform(views, cacheBust));
+    const promises = pagination.map(pageTransform());
     await Promise.all(promises);
   }
 }

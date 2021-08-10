@@ -29,7 +29,12 @@ jesse.funnel(() => {
     photo: colors[faker.datatype.number(colors.length)]
   });
 
-  return fakeData;
+  return {
+    data: fakeData,
+    pages: {
+      every: 30
+    }
+  };
 });
 
 function configEngine(handlebars) {
