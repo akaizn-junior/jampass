@@ -535,8 +535,8 @@ function watch(cb = () => {}, ignore = []) {
   const watchPath = vpath(globalConfig.views.path, true);
   const _cb = safeFun(cb);
 
-  const mode = true;
-  globalConfig.watchMode = mode;
+  const watchMode = true;
+  globalConfig.watchMode = watchMode;
 
   // sanity check
   // the directory to watch must be inside the project cwd
@@ -561,13 +561,13 @@ function watch(cb = () => {}, ignore = []) {
 
   watcher.on('ready', () => {
     consola.info('watching', watchPath.dir);
-    gen({ watching: 'ready', mode });
+    gen({ watching: 'ready', watchMode });
     _cb();
   });
 
   const run = p => {
     debugLog('compiled', p);
-    gen({ watching: p, mode });
+    gen({ watching: p, watchMode });
     _cb();
   };
 
