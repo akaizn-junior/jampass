@@ -39,7 +39,6 @@ const concatLists = (a, b, key) => {
   return a[key];
 };
 
-const genBuildId = () => String(Date.now());
 const loadUserEnv = () => require('dotenv').config({
   path: path.join(process.cwd(), '.env')
 });
@@ -222,7 +221,6 @@ module.exports = {
   debugLog,
   parseDynamicName,
   concatLists,
-  genBuildId,
   getHash,
   loadUserEnv,
   CACHE,

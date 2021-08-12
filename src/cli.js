@@ -31,8 +31,10 @@ function loadUserSettings(opts) {
     throw err;
   }
 
+  settings.build = settings.build ?? {};
   opts.dry && (settings.build.dry = opts.dry);
   opts.mode && (settings.build.mode = opts.mode);
+  opts.expose && (settings.build.expose = opts.expose);
   settings && jesse.config(settings, configCwd);
 }
 
@@ -60,11 +62,18 @@ yargs.option('open', {
   description: 'open your default browser on serve'
 });
 
+yargs.option('expose', {
+  alias: 'e',
+  boolean: true,
+  description: 'exposes funneled data via an impromptu server that will simply dump the data for debugging purposes'
+});
+
 const withSettings = (args, done) => {
   loadUserSettings({
     cpath: args.config,
     mode: args.mode,
-    dry: args.dryRun
+    dry: args.dryRun,
+    expose: args.expose
   });
 
   return done();

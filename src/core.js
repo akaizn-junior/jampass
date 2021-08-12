@@ -27,7 +27,6 @@ const {
   handleErrors,
   debugLog,
   parseDynamicName,
-  genBuildId,
   loadUserEnv,
   safeFun,
   JESSE_LOOP_DATA_TOKEN,
@@ -41,11 +40,12 @@ const {
 const pagination = [];
 let globalLocales = [];
 const globalConfig = {
+  watchMode: false,
   cwd: '.',
-  buildId: genBuildId(),
   build: {
     mode: JESSE_BUILD_MODE_LAZY,
-    dry: false
+    dry: false,
+    expose: false
   },
   site: {},
   locales: [],
@@ -94,7 +94,8 @@ async function compileTemplate(file, data) {
 
     return await engine(filePath.full, data);
   } catch (err) {
-    throw err;
+    if (globalConfig.watchMode) consola.info(err);
+    else throw err;
   }
 }
 
@@ -239,27 +240,25 @@ async function build(page) {
         }
       };
       const result = await compileDataAndPaths(file, outputNameParts, page.data, opts);
-      const validate = globalConfig.build.mode !== JESSE_BUILD_MODE_LAZY;
 
       try {
-        if (validate) {
-          handleCheersValidate(await cheers.validate(result.code),
-            { gen: result.path, view: file });
-        }
+        handleCheersValidate(await cheers.validate(result.code),
+          { gen: result.path, view: file });
 
         writeFile(result.path, result.code, globalConfig.build.dry);
         resultData.push(result);
         genFilesCount++;
       } catch (err) {
         await del([publicOutPath]);
-        throw err;
+        if (globalConfig.watchMode) consola.info(err);
+        else throw err;
       }
     }
 
-    if (canProcess && outputNameParts[0].startsWith(JESSE_LOOP_DATA_TOKEN) && Array.isArray(page.data)) {
+    if (canProcess && outputNameParts[0].startsWith(JESSE_LOOP_DATA_TOKEN) && Array.isArray(page.list)) {
       outputNameParts[0] = remTopChar(outputNameParts[0]);
-      genFilesCount += page.data.length;
-      page.data.forEach(async(dataItem, di) => {
+      genFilesCount += page.list.length;
+      page.list.forEach(async(dataItem, di) => {
         const opts = {
           outAsDir: outPath.isDir,
           pages: {
@@ -269,7 +268,7 @@ async function build(page) {
           }
         };
         const result = await compileDataAndPaths(file, outputNameParts, dataItem, opts);
-        const validate = di === 0 && globalConfig.build.mode !== JESSE_BUILD_MODE_LAZY;
+        const validate = di === 0;
 
         try {
           if (validate) {
@@ -286,7 +285,8 @@ async function build(page) {
           }
         } catch (err) {
           await del([publicOutPath]);
-          throw err;
+          if (globalConfig.watchMode) consola.info(err);
+          else throw err;
         }
       });
     }
@@ -324,9 +324,11 @@ function pageTransform() {
 
     const buildStarter = arr => {
       const built = arr.reduce((acc, res) => {
-        cheers.transform('html', res.data);
+        const data = res.data.concat(acc.data);
+
+        cheers.transform('html', data);
         return {
-          data: res.data.concat(acc.data),
+          data,
           count: res.count + acc.count
         };
       }, { data: [], count: 0 });
@@ -390,10 +392,10 @@ function funnel(dataSource) {
     const data = funneled.data;
     let every = 50;
     let maxNPages = Infinity;
-    let funPages = data;
+    let pagesList = data;
 
-    if (funneled.pages && funneled.pages.from && Array.isArray(funneled.pages.from)) {
-      funPages = funneled.pages.from.map(k => accessProperty(funneled.data, k));
+    if (funneled.pages && funneled.pages.from) {
+      pagesList = accessProperty(data, funneled.pages.from);
     }
 
     if (funneled.pages && funneled.pages.every) {
@@ -406,17 +408,19 @@ function funnel(dataSource) {
 
     if (every < 10) consola.warn('Number of items per page is too low');
 
-    if (Array.isArray(funPages)) {
+    if (pagesList && Array.isArray(pagesList)) {
       let i = 1;
-      while (funPages.length >= every && i < maxNPages) {
-        const page = funPages.splice(0, every);
+
+      while (pagesList.length >= every && i < maxNPages) {
+        const pages = pagesList.splice(0, every);
         const pagesLen = pagination.length;
 
         pagination.push({
           page: pagesLen + 1,
           previous: pagesLen > 1 ? pagesLen : null,
           next: pagesLen + 2,
-          data: page
+          list: pages,
+          data: pages
         });
 
         i++;
@@ -424,12 +428,16 @@ function funnel(dataSource) {
     }
 
     const pagesLen = pagination.length;
+
     pagination.push({
       page: pagesLen + 1,
       previous: pagesLen > 1 ? pagesLen : null,
       next: pagesLen + 1,
-      data: funPages
+      list: pagesList,
+      data
     });
+
+    if (globalConfig.build.expose) expose(JSON.stringify(pagination));
   };
 
   const fromDataSource = dataSource(data => {
@@ -459,10 +467,9 @@ function funnel(dataSource) {
  * Compiles all templates according to configurations and outputs html.
  */
 async function gen(opts = {}) {
-  const { watching = '' } = opts;
+  const { watching = '', watchMode } = opts;
 
-  globalConfig.buildId = genBuildId();
-  debugLog('generated a new build id', globalConfig.buildId);
+  globalConfig.watchMode = watchMode || false;
 
   globalConfig.build.dry
   && consola.log('Dry run in', `"${globalConfig.build.mode}" mode`);
@@ -485,10 +492,10 @@ async function gen(opts = {}) {
   const staticAssets = getDirPaths(staticPath.full, 'full');
 
   cheers.config({
+    watchMode: globalConfig.watchMode,
     cwd: globalConfig.cwd,
     output: globalConfig.output,
     plugins: globalConfig.plugins,
-    buildId: globalConfig.buildId,
     assets: globalConfig.assets,
     build: globalConfig.build,
     site: globalConfig.site
@@ -528,6 +535,9 @@ function watch(cb = () => {}, ignore = []) {
   const watchPath = vpath(globalConfig.views.path, true);
   const _cb = safeFun(cb);
 
+  const mode = true;
+  globalConfig.watchMode = mode;
+
   // sanity check
   // the directory to watch must be inside the project cwd
   // or at least be exactly the project cwd
@@ -551,13 +561,13 @@ function watch(cb = () => {}, ignore = []) {
 
   watcher.on('ready', () => {
     consola.info('watching', watchPath.dir);
-    gen({ watching: 'ready' });
+    gen({ watching: 'ready', mode });
     _cb();
   });
 
   const run = p => {
     debugLog('compiled', p);
-    gen({ watching: p });
+    gen({ watching: p, mode });
     _cb();
   };
 
@@ -602,13 +612,6 @@ function expose(data, opts = {}) {
   server.listen(p, h, () => {
     consola.info(`Exposing data on port http://${h}:${p}`);
   });
-
-  // for cases where pagination data is still not defined
-  // due to slow connection, try to generate from here
-  // given the user calls this function
-  setTimeout(() => {
-    if (!pagination.length) gen();
-  }, 200);
 }
 
 module.exports = {
@@ -617,7 +620,6 @@ module.exports = {
   gen,
   funnel,
   serve,
-  expose,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
   JESSE_BUILD_MODE_STRICT

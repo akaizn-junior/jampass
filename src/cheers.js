@@ -25,7 +25,6 @@ const {
   vpath,
   concatLists,
   debugLog,
-  genBuildId,
   CACHE,
   getHash,
   safeFun,
@@ -35,7 +34,7 @@ const {
 
 // globals
 const globalConfig = {
-  buildId: genBuildId(),
+  watchMode: false,
   cwd: '.',
   build: {
     mode: JESSE_BUILD_MODE_LAZY,
@@ -155,7 +154,8 @@ function processCss(code, src, out, cb) {
       safeFun(cb)(result);
     })
     .catch(err => {
-      consola.info(err);
+      if (globalConfig.watchMode) consola.info(err);
+      else throw err;
     });
 }
 
@@ -171,7 +171,8 @@ function processJs(code, filename, cb) {
     sourceMaps: false,
     sourceType: 'unambiguous'
   }, (err, result) => {
-    if (err) throw err;
+    if (err && globalConfig.watchMode) consola.info(err);
+    if (err && !globalConfig.watchMode) throw err;
     safeFun(cb)(result);
   });
 }
@@ -308,8 +309,8 @@ async function handleAssets(file, data) {
 function config(options = {}) {
   if (!options) throw Error('Options must be a valid object');
 
-  globalConfig.buildId = options.buildId ?? globalConfig.buildId;
   globalConfig.cwd = options.cwd ?? globalConfig.cwd;
+  globalConfig.watchMode = options.watchMode ?? globalConfig.watchMode;
   globalConfig.output = concatObjects(globalConfig.output, options.output ?? {});
   globalConfig.build = concatObjects(globalConfig.build, options.build ?? {});
   globalConfig.site = concatObjects(globalConfig.site, options.site ?? {});
@@ -332,7 +333,8 @@ async function validate(html) {
 
     return result;
   } catch (err) {
-    throw err;
+    if (err && globalConfig.watchMode) consola.info(err);
+    if (err && !globalConfig.watchMode) throw err;
   }
 }
 
