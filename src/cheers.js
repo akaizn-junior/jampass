@@ -173,7 +173,7 @@ function processJs(code, filename, cb) {
   }, (err, result) => {
     if (err && globalConfig.watchMode) consola.info(err);
     if (err && !globalConfig.watchMode) throw err;
-    safeFun(cb)(result);
+    if (!err) safeFun(cb)(result);
   });
 }
 
@@ -405,7 +405,7 @@ function transform(type, data) {
         writeFile(file.path, $.html());
       };
 
-      setTimeout(save, 300);
+      setTimeout(save, 200);
       break;
     case 'style': handleCss({ path: file.path, code }, data); break;
     case 'script': handleJs({ path: file.path, code }, data); break;

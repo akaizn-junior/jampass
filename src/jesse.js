@@ -1,5 +1,6 @@
 const {
   funnel,
+  expose,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
   JESSE_BUILD_MODE_STRICT
@@ -7,6 +8,7 @@ const {
 
 module.exports = {
   funnel,
+  expose,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
   JESSE_BUILD_MODE_STRICT

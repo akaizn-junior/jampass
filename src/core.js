@@ -39,13 +39,15 @@ const {
 
 const pagination = [];
 let globalLocales = [];
+let globalSearchList = [];
 const globalConfig = {
   watchMode: false,
   cwd: '.',
   build: {
     mode: JESSE_BUILD_MODE_LAZY,
     dry: false,
-    expose: false
+    expose: false,
+    search: {}
   },
   site: {},
   locales: [],
@@ -80,6 +82,35 @@ process.on('unhandledRejection', err => handleErrors(err, globalConfig));
 // Helpers
 
 const uxLocaleName = name => name.toLowerCase().replace(/-/g, '_');
+
+function buildSearchIndex(locals) {
+  const searchEntries = globalConfig.build.search;
+  const searchKeys = Object.keys(globalConfig.build.search);
+
+  const searchIndex = searchKeys.reduce((acc, key) => {
+    const value = searchEntries[key];
+    if (value) {
+      try {
+        acc[key] = accessProperty(locals, value);
+        return acc;
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }, {});
+
+  if (searchIndex) {
+    globalSearchList.push(searchIndex);
+    writeSearchFile(globalSearchList);
+  }
+}
+
+function writeSearchFile(list) {
+  const searchPath = path.join(globalConfig.output.path, 'search.json');
+  writeFile(searchPath, JSON.stringify(list, null, 2));
+}
 
 async function compileTemplate(file, data) {
   const filePath = vpath(file);
@@ -182,10 +213,13 @@ async function compileDataAndPaths(file, outputNameParts, locals, opts) {
     },
     site: {
       name: globalConfig.site.name,
-      author: globalConfig.site.author
+      author: globalConfig.site.author,
+      url: globalConfig.site.url
     },
     locales: globalConfig.locales
   });
+
+  buildSearchIndex(localsUsed);
 
   return {
     path: publicOutPath.concat(pages.current > 1 ? String(pages.current) : '', outPath),
@@ -437,7 +471,7 @@ function funnel(dataSource) {
       data
     });
 
-    if (globalConfig.build.expose) expose(JSON.stringify(pagination));
+    if (globalConfig.build.expose) expose(JSON.stringify(data));
   };
 
   const fromDataSource = dataSource(data => {
@@ -467,29 +501,39 @@ function funnel(dataSource) {
  * Compiles all templates according to configurations and outputs html.
  */
 async function gen(opts = {}) {
-  const { watching = '', watchMode } = opts;
+  const { watching = '', ext, watchMode } = opts;
 
   globalConfig.watchMode = watchMode || false;
 
   globalConfig.build.dry
   && consola.log('Dry run in', `"${globalConfig.build.mode}" mode`);
 
-  setupLocales();
+  setupLocales(); // format locales as needed at this stage
+
+  // build triggeres
+  const triggers = {
+    all: ext === null,
+    js: ext === null || ext === '.js' || ext === '.mjs',
+    css: ext === null || ext === '.css',
+    html: ext === null || ext === '.html'
+  };
+
+  triggers.html && (globalSearchList = []); // reset search list on every build
 
   // clean output dir
   const publicOutPath = vpath(globalConfig.output.path).full;
-  const cleaned = await del([`${publicOutPath}/**`, `!${publicOutPath}`]);
+  const cleaned = triggers.all && await del([`${publicOutPath}/**`, `!${publicOutPath}`]);
   debugLog('cleaned output dir', cleaned);
 
-  const assetsPath = vpath([globalConfig.cwd, 'assets']);
-  const stylePath = vpath([globalConfig.cwd, 'style']);
-  const scriptPath = vpath([globalConfig.cwd, 'script']);
-  const staticPath = vpath([globalConfig.cwd, 'static']);
+  const assetsPath = triggers.all && vpath([globalConfig.cwd, 'assets']);
+  const stylePath = triggers.css && vpath([globalConfig.cwd, 'style']);
+  const scriptPath = triggers.js && vpath([globalConfig.cwd, 'script']);
+  const staticPath = triggers.all && vpath([globalConfig.cwd, 'static']);
 
-  const assets = getDirPaths(assetsPath.full, 'full');
-  const styles = getDirPaths(stylePath.full, 'full');
-  const script = getDirPaths(scriptPath.full, 'full');
-  const staticAssets = getDirPaths(staticPath.full, 'full');
+  const assets = triggers.all && getDirPaths(assetsPath.full, 'full');
+  const styles = triggers.css && getDirPaths(stylePath.full, 'full');
+  const script = triggers.js && getDirPaths(scriptPath.full, 'full');
+  const staticAssets = triggers.all && getDirPaths(staticPath.full, 'full');
 
   cheers.config({
     watchMode: globalConfig.watchMode,
@@ -501,12 +545,17 @@ async function gen(opts = {}) {
     site: globalConfig.site
   });
 
-  cheers.transform('assets', assets.map(p => ({ path: p })));
-  cheers.transform('style', styles.map(p => ({ path: p })));
-  cheers.transform('script', script.map(p => ({ path: p })));
-  cheers.transform('static', staticAssets.map(p => ({ path: p })));
+  triggers.all && cheers.transform('assets', assets.map(p => ({ path: p })));
+  triggers.css && cheers.transform('style', styles.map(p => ({ path: p })));
+  triggers.js && cheers.transform('script', script.map(p => ({ path: p })));
+  triggers.all && cheers.transform('static', staticAssets.map(p => ({ path: p })));
 
   debugLog('Watching', `"${watching}"`);
+
+  const run = () => {
+    const promises = pagination.map(pageTransform());
+    return Promise.all(promises);
+  };
 
   if (!pagination.length) {
     // poll for pagination data
@@ -515,13 +564,12 @@ async function gen(opts = {}) {
       ic++;
       if (ic === 5 || pagination.length) {
         clearInterval(iid);
-        const promises = pagination.map(pageTransform());
-        await Promise.all(promises);
       }
+
+      triggers.all && await run();
     }, 1000);
   } else {
-    const promises = pagination.map(pageTransform());
-    await Promise.all(promises);
+    triggers.all && await run();
   }
 }
 
@@ -561,13 +609,13 @@ function watch(cb = () => {}, ignore = []) {
 
   watcher.on('ready', () => {
     consola.info('watching', watchPath.dir);
-    gen({ watching: 'ready', watchMode });
+    gen({ watching: 'ready', ext: null, watchMode });
     _cb();
   });
 
   const run = p => {
     debugLog('compiled', p);
-    gen({ watching: p, watchMode });
+    gen({ watching: p, ext: path.parse(p).ext, watchMode });
     _cb();
   };
 
@@ -620,6 +668,7 @@ module.exports = {
   gen,
   funnel,
   serve,
+  expose,
   JESSE_BUILD_MODE_LAZY,
   JESSE_BUILD_MODE_BUSY,
   JESSE_BUILD_MODE_STRICT
