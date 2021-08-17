@@ -566,10 +566,10 @@ async function gen(opts = {}) {
         clearInterval(iid);
       }
 
-      triggers.all && await run();
+      triggers.html && await run();
     }, 1000);
   } else {
-    triggers.all && await run();
+    triggers.html && await run();
   }
 }
 
