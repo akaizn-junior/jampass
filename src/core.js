@@ -375,7 +375,18 @@ function withPolling(fn) {
     const iid = setInterval(async() => {
       ic++;
 
-      const timeout = ic === (globalConfig.build.timeout || 5);
+      const safeTimeout = () => {
+        // validate user input
+        const ut = globalConfig.build.timeout;
+
+        if (!ut || ut < 0 || ut >= 300) {
+          throw Error('jesse withPolling(): timeout must be a positive value less than 300');
+        }
+
+        return ut;
+      };
+
+      const timeout = ic === safeTimeout();
       const success = pagination.length;
 
       if (timeout) {

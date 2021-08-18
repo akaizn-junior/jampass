@@ -35,6 +35,7 @@ function loadUserSettings(opts) {
   opts.dry && (settings.build.dry = opts.dry);
   opts.mode && (settings.build.mode = opts.mode);
   opts.expose && (settings.build.expose = opts.expose);
+  opts.timeout && (settings.build.timeout = opts.timeout);
   settings && jesse.config(settings, configCwd);
 }
 
@@ -52,7 +53,7 @@ yargs.option('config', {
 
 yargs.option('port', {
   alias: 'p',
-  string: true,
+  number: true,
   description: 'a development server is launched from this port'
 });
 
@@ -68,12 +69,19 @@ yargs.option('expose', {
   description: 'exposes funneled data via an impromptu server that will simply dump the data for debugging purposes'
 });
 
+yargs.option('timeout', {
+  alias: 't',
+  number: true,
+  description: 'exposes funneled data via an impromptu server that will simply dump the data for debugging purposes'
+});
+
 const withSettings = (args, done) => {
   loadUserSettings({
     cpath: args.config,
     mode: args.mode,
     dry: args.dryRun,
-    expose: args.expose
+    expose: args.expose,
+    timeout: args.timeout
   });
 
   return done();
