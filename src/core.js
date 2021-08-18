@@ -104,10 +104,7 @@ function buildSearchIndex(locals, trigger) {
     }, {});
 
     if (searchIndex) globalSearchList.push(searchIndex);
-    if (searchIndex && trigger) {
-      console.log('gen serach');
-      writeSearchFile(globalSearchList);
-    }
+    if (searchIndex && trigger) writeSearchFile(globalSearchList);
   }
 }
 
