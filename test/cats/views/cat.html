@@ -10,7 +10,7 @@
 </head>
 <body>
   <a href="/{{ locales.en_us.entry }}">{{ locales.en_us.home }}</a>
-  <div class="langs"></div>
+  <div class="langs">
     {{#each locales}}
     <a href="{{../jesse.url.page}}{{ entry }}/{{ ../jesse.url.dir }}">{{ lang }}</a>
     {{/each}}

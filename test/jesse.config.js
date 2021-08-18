@@ -26,7 +26,7 @@ jesse.funnel(() => {
     description: 'Doggo surprise',
     breed: faker.animal.dog(),
     insertedAt: `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`,
-    photo: colors[faker.datatype.number(colors.length)]
+    photo: faker.image.dataUri(500, 500, colors[faker.datatype.number(colors.length)])
   });
 
   return {

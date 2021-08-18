@@ -47,6 +47,7 @@ const globalConfig = {
     mode: JESSE_BUILD_MODE_LAZY,
     dry: false,
     expose: false,
+    timeout: 5,
     search: {}
   },
   site: {},
@@ -83,27 +84,30 @@ process.on('unhandledRejection', err => handleErrors(err, globalConfig));
 
 const uxLocaleName = name => name.toLowerCase().replace(/-/g, '_');
 
-function buildSearchIndex(locals) {
-  const searchEntries = globalConfig.build.search;
+function buildSearchIndex(locals, trigger) {
+  const buildSearch = globalConfig.build.search;
   const searchKeys = Object.keys(globalConfig.build.search);
 
-  const searchIndex = searchKeys.reduce((acc, key) => {
-    const value = searchEntries[key];
-    if (value) {
-      try {
-        acc[key] = accessProperty(locals, value);
-        return acc;
-      } catch {
-        return null;
+  if (searchKeys.length) {
+    const searchIndex = searchKeys.reduce((acc, key) => {
+      const value = buildSearch[key];
+      if (value) {
+        try {
+          acc[key] = accessProperty(locals, value);
+          return acc;
+        } catch {
+          return null;
+        }
       }
+
+      return null;
+    }, {});
+
+    if (searchIndex) globalSearchList.push(searchIndex);
+    if (searchIndex && trigger) {
+      console.log('gen serach');
+      writeSearchFile(globalSearchList);
     }
-
-    return null;
-  }, {});
-
-  if (searchIndex) {
-    globalSearchList.push(searchIndex);
-    writeSearchFile(globalSearchList);
   }
 }
 
@@ -131,7 +135,7 @@ async function compileTemplate(file, data) {
 }
 
 async function compileDataAndPaths(file, outputNameParts, locals, opts) {
-  const { outAsDir, pages } = opts;
+  const { outAsDir, pages, currentPage, pagesLen } = opts;
 
   const publicOutPath = vpath(globalConfig.output.path);
   let filenameFromData;
@@ -219,7 +223,7 @@ async function compileDataAndPaths(file, outputNameParts, locals, opts) {
     locales: globalConfig.locales
   });
 
-  buildSearchIndex(localsUsed);
+  buildSearchIndex(localsUsed, currentPage === pagesLen);
 
   return {
     path: publicOutPath.concat(pages.current > 1 ? String(pages.current) : '', outPath),
@@ -249,15 +253,16 @@ async function build(page) {
 
   const viewsPath = vpath(globalConfig.views.path, true);
   const views = getDirPaths(viewsPath.full);
+  const resultData = [];
+  let genFilesCount = 0; // count all generated files
 
-  async function transformView(viewPath) {
+  for (let i = 0; i < views.length; i++) {
+    const viewPath = views[i];
     const tmpl = vpath(viewPath); // a template view
     const file = viewsPath.concat(viewPath);
     const outName = globalConfig.output.filename[tmpl.name] || globalConfig.output.filename[path.join(tmpl.full)];
 
     const publicOutPath = vpath(globalConfig.output.path).full;
-    const resultData = [];
-    let genFilesCount = 0; // count all generated files
 
     const canProcess = viewPath && !tmpl.name.startsWith('.'); // can process if not a hidden file
     const outPath = outputName(outName ?? viewPath);
@@ -267,6 +272,8 @@ async function build(page) {
     if (canProcess && !outputNameParts[0].startsWith(JESSE_LOOP_DATA_TOKEN)) {
       const opts = {
         outAsDir: outPath.isDir,
+        currentPage: 1,
+        pagesLen: 1,
         pages: {
           current: page.page,
           previous: page.previous,
@@ -295,6 +302,8 @@ async function build(page) {
       page.list.forEach(async(dataItem, di) => {
         const opts = {
           outAsDir: outPath.isDir,
+          currentPage: di + 1,
+          pagesLen: page.list.length,
           pages: {
             current: page.page,
             previous: page.previous,
@@ -324,12 +333,9 @@ async function build(page) {
         }
       });
     }
-
-    return { data: resultData, view: viewPath, count: genFilesCount };
   }
 
-  const promises = views.map(transformView);
-  return await Promise.all(promises);
+  return { data: resultData, count: genFilesCount };
 }
 
 function setupLocales() {
@@ -356,23 +362,10 @@ function pageTransform() {
       consola.info(label, count, 'files in', end, 's');
     };
 
-    const buildStarter = arr => {
-      const built = arr.reduce((acc, res) => {
-        const data = res.data.concat(acc.data);
-
-        cheers.transform('html', data);
-        return {
-          data,
-          count: res.count + acc.count
-        };
-      }, { data: [], count: 0 });
-
-      return built;
-    };
-
     marky.mark(markName('transform'));
-    const built = buildStarter(await build(page));
-    markyStop(markName('transform'), built.count);
+    const res = await build(page);
+    cheers.transform('html', res.data);
+    markyStop(markName('transform'), res.count);
   };
 }
 
@@ -562,11 +555,20 @@ async function gen(opts = {}) {
     let ic = 0;
     const iid = setInterval(async() => {
       ic++;
-      if (ic === 5 || pagination.length) {
+
+      const timeout = ic === (globalConfig.build.timeout || 5);
+      const success = pagination.length;
+
+      if (timeout) {
         clearInterval(iid);
+        consola.info('slow internet?');
+        throw Error('jesse gen(): Connection timeout. Build failed, please try again.');
       }
 
-      triggers.html && await run();
+      if (success) {
+        clearInterval(iid);
+        triggers.html && await run();
+      }
     }, 1000);
   } else {
     triggers.html && await run();
@@ -640,6 +642,28 @@ function serve({ port, open = false, watchIgnore }) {
     open,
     server: {
       baseDir: serverRoot
+    },
+    /**
+     * @see https://browsersync.io/docs/options/#option-callbacks
+     */
+    callbacks: {
+      /**
+       * This 'ready' callback can be used
+       * to access the Browsersync instance
+       */
+      ready(err, ins) {
+        if (err) {
+          if (globalConfig.watchMode) consola.info(err);
+          else throw err;
+        }
+
+        ins.addMiddleware('*', (_, res) => {
+          res.writeHead(302, {
+            location: '/404.html'
+          });
+          res.end('Redirecting!');
+        });
+      }
     }
   });
 
