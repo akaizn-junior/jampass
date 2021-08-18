@@ -540,11 +540,12 @@ async function gen(opts = {}) {
   setupLocales(); // format locales as needed at this stage
 
   // build triggeres
+  const triggerAll = ext === null || ext === '.html';
   const triggers = {
-    all: ext === null,
-    js: ext === null || ext === '.js' || ext === '.mjs',
-    css: ext === null || ext === '.css',
-    html: ext === null || ext === '.html'
+    all: triggerAll,
+    js: triggerAll || ext === '.js' || ext === '.mjs',
+    css: triggerAll || ext === '.css',
+    html: triggerAll || ext === '.html'
   };
 
   triggers.html && (globalSearchList = []); // reset search list on every build
