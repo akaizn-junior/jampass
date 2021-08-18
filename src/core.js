@@ -369,6 +369,34 @@ function pageTransform() {
   };
 }
 
+function withPolling(fn) {
+  const _fn = safeFun(fn);
+
+  if (!pagination.length) {
+    // poll for pagination data
+    let ic = 0;
+    const iid = setInterval(async() => {
+      ic++;
+
+      const timeout = ic === (globalConfig.build.timeout || 5);
+      const success = pagination.length;
+
+      if (timeout) {
+        clearInterval(iid);
+        consola.info('slow internet?');
+        throw Error('jesse gen(): Connection timeout. Build failed, please try again.');
+      }
+
+      if (success) {
+        clearInterval(iid);
+        _fn();
+      }
+    }, 1000);
+  } else {
+    _fn();
+  }
+}
+
 // Interface
 
 /**
@@ -550,29 +578,7 @@ async function gen(opts = {}) {
     return Promise.all(promises);
   };
 
-  if (!pagination.length) {
-    // poll for pagination data
-    let ic = 0;
-    const iid = setInterval(async() => {
-      ic++;
-
-      const timeout = ic === (globalConfig.build.timeout || 5);
-      const success = pagination.length;
-
-      if (timeout) {
-        clearInterval(iid);
-        consola.info('slow internet?');
-        throw Error('jesse gen(): Connection timeout. Build failed, please try again.');
-      }
-
-      if (success) {
-        clearInterval(iid);
-        triggers.html && await run();
-      }
-    }, 1000);
-  } else {
-    triggers.html && await run();
-  }
+  triggers.html && await run();
 }
 
 /**
@@ -611,13 +617,13 @@ function watch(cb = () => {}, ignore = []) {
 
   watcher.on('ready', () => {
     consola.info('watching', watchPath.dir);
-    gen({ watching: 'ready', ext: null, watchMode });
+    withPolling(() => gen({ watching: 'ready', ext: null, watchMode }));
     _cb();
   });
 
   const run = p => {
     debugLog('compiled', p);
-    gen({ watching: p, ext: path.parse(p).ext, watchMode });
+    withPolling(() => gen({ watching: p, ext: path.parse(p).ext, watchMode }));
     _cb();
   };
 
