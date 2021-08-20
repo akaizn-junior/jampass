@@ -407,8 +407,17 @@ function transform(type, data) {
 
       setTimeout(save, 200);
       break;
-    case 'style': handleCss({ path: file.path, code }, data); break;
-    case 'script': handleJs({ path: file.path, code }, data); break;
+    case 'style':
+      if ([1, 2].includes(file.procState)) {
+        handleCss({ path: file.path, code }, data);
+      }
+
+      break;
+    case 'script':
+      if ([1, 2].includes(file.procState)) {
+        handleJs({ path: file.path, code }, data);
+      }
+      break;
     case 'assets': handleAssets({ path: file.path, code }, data); break;
     }
   });

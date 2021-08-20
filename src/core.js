@@ -575,9 +575,22 @@ async function gen(opts = {}) {
     site: globalConfig.site
   });
 
+  const getProcState = p => {
+    /* eslint-disable camelcase */
+    const proc_all = 1;
+    const proc_watched = 2;
+    const proc_ignore = 3;
+
+    return ['', 'ready'].includes(watching) || triggerAll
+      ? proc_all
+      : p.endsWith(watching) ? proc_watched
+        : proc_ignore;
+    /* eslint-enable camelcase */
+  };
+
   triggers.all && cheers.transform('assets', assets.map(p => ({ path: p })));
-  triggers.css && cheers.transform('style', styles.map(p => ({ path: p })));
-  triggers.js && cheers.transform('script', script.map(p => ({ path: p })));
+  triggers.css && cheers.transform('style', styles.map(p => ({ path: p, procState: getProcState(p) })));
+  triggers.js && cheers.transform('script', script.map(p => ({ path: p, procState: getProcState(p) })));
   triggers.all && cheers.transform('static', staticAssets.map(p => ({ path: p })));
 
   debugLog('Watching', `"${watching}"`);
