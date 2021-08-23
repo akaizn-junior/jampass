@@ -2,6 +2,6 @@ test
 node_modules
 .eslintrc
 .editorconfig
-jesse.config.js
+jampass.config.js
 .eslintignore
 manifest.json

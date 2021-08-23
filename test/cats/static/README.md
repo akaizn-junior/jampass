@@ -1,6 +1,6 @@
 # Adopt Animals
 
-Built by jesse
+Built by Jampass
 
 ## Author
 

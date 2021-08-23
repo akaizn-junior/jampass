@@ -1,8 +1,8 @@
 const faker = require('faker');
 const path = require('path');
-const jesse = require('../src/jesse');
+const jampass = require('../src/jampass');
 
-jesse.funnel(() => {
+jampass.funnel(() => {
   const fakeData = [];
   const fakeItemsCount = 100;
   const colors = ['blue', 'black', 'red', 'cyan', 'orange', 'purple'];
@@ -58,7 +58,7 @@ module.exports = {
     json: 'locales/pt_AO.json'
   }],
   build: {
-    mode: jesse.JESSE_BUILD_MODE_LAZY
+    mode: jampass.JESSE_BUILD_MODE_LAZY
   },
   views: {
     engine: {

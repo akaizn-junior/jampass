@@ -1,15 +1,15 @@
 {
-  "name": "jesse",
+  "name": "jampass",
   "version": "0.0.2-edge.1",
-  "main": "src/jesse.js",
+  "main": "src/jampass.js",
   "bin": {
-    "jesse": "src/cli.js"
+    "jampass": "src/cli.js"
   },
   "scripts": {
     "lint": "eslint .",
-    "serve": "node src/cli serve --config=test/jesse.config.js",
-    "watch": "node src/cli watch --config=test/jesse.config.js",
-    "start": "node src/cli --config=test/jesse.config.js"
+    "serve": "node src/cli serve --config=test/jampass.config.js",
+    "watch": "node src/cli watch --config=test/jampass.config.js",
+    "start": "node src/cli --config=test/jampass.config.js"
   },
   "keywords": [
     "SSG",
@@ -49,10 +49,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/akaizn-junior/jesse.git"
+    "url": "git+https://github.com/akaizn-junior/jampass.git"
   },
   "bugs": {
-    "url": "https://github.com/akaizn-junior/jesse/issues"
+    "url": "https://github.com/akaizn-junior/jampass/issues"
   },
-  "homepage": "https://github.com/akaizn-junior/jesse#readme"
+  "homepage": "https://github.com/akaizn-junior/jampass#readme"
 }

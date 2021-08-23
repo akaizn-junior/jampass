@@ -198,7 +198,7 @@ async function compileDataAndPaths(file, outputNameParts, locals, opts) {
 
   const html = await compileTemplate(file, {
     data: localsUsed,
-    jesse: {
+    jampass: {
       year: new Date().getFullYear(),
       url: {
         dir: path.parse(outPath).dir,
@@ -380,7 +380,7 @@ function withPolling(fn) {
         const ut = globalConfig.build.timeout;
 
         if (!ut || ut < 0 || ut >= 300) {
-          throw Error('jesse withPolling(): timeout must be a positive value less than 300');
+          throw Error('jampass withPolling(): timeout must be a positive value less than 300');
         }
 
         return ut;
@@ -392,7 +392,7 @@ function withPolling(fn) {
       if (timeout) {
         clearInterval(iid);
         consola.info('slow internet?');
-        throw Error('jesse gen(): Connection timeout. Build failed, please try again.');
+        throw Error('jampass gen(): Connection timeout. Build failed, please try again.');
       }
 
       if (success) {
@@ -443,7 +443,7 @@ function config(options = {}, configCwd = '') {
 function funnel(dataSource) {
   if (!dataSource || typeof dataSource !== 'function') {
     throw (
-      TypeError('jesse.funnel() takes a function. "dataSource" must be a function that returns locals')
+      TypeError('jampass.funnel() takes a function. "dataSource" must be a function that returns locals')
     );
   }
 

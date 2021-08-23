@@ -9,13 +9,13 @@ const path = require('path');
 
 // local
 const pkg = require('../package.json');
-const jesse = require('./core');
+const jampass = require('./core');
 let validUserConfigPath = '';
 
 function loadUserSettings(opts) {
   let settings;
   let configCwd;
-  const configPath = opts.cpath ?? 'jesse.config.js';
+  const configPath = opts.cpath ?? 'jampass.config.js';
 
   try {
     const userConfig = path.join(process.cwd(), configPath);
@@ -36,10 +36,10 @@ function loadUserSettings(opts) {
   opts.mode && (settings.build.mode = opts.mode);
   opts.expose && (settings.build.expose = opts.expose);
   opts.timeout && (settings.build.timeout = opts.timeout);
-  settings && jesse.config(settings, configCwd);
+  settings && jampass.config(settings, configCwd);
 }
 
-yargs.scriptName('jesse');
+yargs.scriptName('jampass');
 yargs.version(pkg.version);
 
 yargs.alias('help', 'h');
@@ -90,20 +90,20 @@ const withSettings = (args, done) => {
 yargs.command({
   command: '$0',
   description: 'Generates a static site, simply',
-  handler: args => withSettings(args, () => jesse.gen())
+  handler: args => withSettings(args, () => jampass.gen())
 });
 
 yargs.command({
   command: 'gen',
   description: 'Generate html from current configurations',
-  handler: args => withSettings(args, () => jesse.gen())
+  handler: args => withSettings(args, () => jampass.gen())
 });
 
 yargs.command({
   command: 'serve',
   description: 'Starts a development server. Reads additional options. See help',
   handler: args => withSettings(args, () => {
-    jesse.serve({
+    jampass.serve({
       port: args.port,
       open: args.open,
       watchIgnore: [validUserConfigPath]
@@ -114,7 +114,7 @@ yargs.command({
 yargs.command({
   command: 'watch',
   description: 'Watches for template changes',
-  handler: args => withSettings(args, () => jesse.watch(null, [validUserConfigPath]))
+  handler: args => withSettings(args, () => jampass.watch(null, [validUserConfigPath]))
 });
 
 yargs.showHelpOnFail(true, 'Generates a static site, simply');

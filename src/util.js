@@ -19,7 +19,7 @@ const JESSE_BUILD_MODE_STRICT = 'strict';
 
 // quick setup
 
-const cachePath = findCacheDir({ name: 'jesse' });
+const cachePath = findCacheDir({ name: 'jampass' });
 
 const CACHE = {
   get: k => cacache.get(cachePath, k),
