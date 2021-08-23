@@ -3,3 +3,5 @@ node_modules
 .eslintrc
 .editorconfig
 jesse.config.js
+.eslintignore
+manifest.json
