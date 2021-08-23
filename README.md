@@ -13,6 +13,8 @@ If you would like to help, email me at sdnziaka@gmail.com.
 
 ## Example
 
+See a working example of how to implement under 'test'
+
 ```js
 // filename: jampass.config.js
 
