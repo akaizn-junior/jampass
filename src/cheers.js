@@ -373,18 +373,22 @@ function transform(type, data) {
     case 'html':
       const $ = cheerio.load(code);
 
-      $('link[rel]').each((_, el) => {
-        switch (el.attribs.rel) {
-        case 'stylesheet': updateCssSrc(el, $); break;
-        case 'preload':
-          switch (el.attribs.as) {
-          case 'style': updateCssSrc(el, $); break;
-          case 'image': updateImageSrc(el, $, 'href'); break;
-          }
-        }
-      });
+      // ***** DONT UPDATE SOURCES FOR NOW
 
-      $('img[src]').each((_, img) => updateImageSrc(img, $));
+      // $('link[rel]').each((_, el) => {
+      //   switch (el.attribs.rel) {
+      //   case 'stylesheet': updateCssSrc(el, $); break;
+      //   case 'preload':
+      //     switch (el.attribs.as) {
+      //     case 'style': updateCssSrc(el, $); break;
+      //     case 'image': updateImageSrc(el, $, 'href'); break;
+      //     }
+      //   }
+      // });
+
+      // $('img[src]').each((_, img) => updateImageSrc(img, $));
+
+      // ***** end DONT UPDATE SOURCES FOR NOW
 
       const scriptsWithSrc = $('script[src]');
       scriptsWithSrc.each((_, el) => updateScriptSrc(el, $));
