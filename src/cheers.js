@@ -388,10 +388,10 @@ function transform(type, data) {
 
       // $('img[src]').each((_, img) => updateImageSrc(img, $));
 
-      // ***** end DONT UPDATE SOURCES FOR NOW
+      // const scriptsWithSrc = $('script[src]');
+      // scriptsWithSrc.each((_, el) => updateScriptSrc(el, $));
 
-      const scriptsWithSrc = $('script[src]');
-      scriptsWithSrc.each((_, el) => updateScriptSrc(el, $));
+      // ***** end DONT UPDATE SOURCES FOR NOW
 
       const scripts = $('script');
       scripts.each((_, el) => {
