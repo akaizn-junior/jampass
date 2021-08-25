@@ -72,7 +72,14 @@ module.exports = {
   output: {
     filename: {
       'cat.html': '-[insertedAt]/[name]/',
-      'pt-AO/cat.html': '-pt-AO/[insertedAt]/[name]/'
+      'pt-AO/cat.html': '-pt-AO/[insertedAt]/[name]/',
+      preview: {
+        dir: 'preview/',
+        style: 'style',
+        static: 'static',
+        assets: 'assets',
+        script: 'script'
+      }
     }
   }
 };

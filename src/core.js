@@ -245,6 +245,43 @@ function handleCheersValidate(res, data) {
   return res.isValid;
 }
 
+function handleOutputSubDir(subDirObj) {
+  const subdir = subDirObj.dir;
+  const stylePath = vpath([globalConfig.cwd, subDirObj.style], true);
+  const staticPath = vpath([globalConfig.cwd, subDirObj.static], true);
+  const scriptPath = vpath([globalConfig.cwd, subDirObj.script], true);
+  const assetsPath = vpath([globalConfig.cwd, subDirObj.assets], true);
+
+  const styles = getDirPaths(stylePath.full, 'full');
+  const staticAssets = getDirPaths(staticPath.full, 'full');
+  const scripts = getDirPaths(scriptPath.full, 'full');
+  const assets = getDirPaths(assetsPath.full, 'full');
+
+  cheers.transform('style', styles.map(p => ({
+    path: p,
+    out: path.join(subdir, subDirObj.style),
+    procState: 1
+  })));
+
+  cheers.transform('script', scripts.map(p => ({
+    path: p,
+    out: path.join(subdir, subDirObj.script),
+    procState: 1
+  })));
+
+  cheers.transform('static', staticAssets.map(p => ({
+    path: p,
+    out: path.join(subdir, vpath(p).base)
+  })));
+
+  cheers.transform('assets', assets.map(p => ({
+    path: p,
+    out: path.join(subdir, subDirObj.assets)
+  })));
+
+  return subdir;
+}
+
 async function build(page) {
   debugLog('working on templates');
 
@@ -257,7 +294,9 @@ async function build(page) {
     const viewPath = views[i];
     const tmpl = vpath(viewPath); // a template view
     const file = viewsPath.concat(viewPath);
-    const outName = globalConfig.output.filename[tmpl.name] || globalConfig.output.filename[path.join(tmpl.full)];
+    let outName = globalConfig.output.filename[tmpl.name] || globalConfig.output.filename[path.join(tmpl.full)];
+
+    if (outName && outName.dir) outName = handleOutputSubDir(outName);
 
     const publicOutPath = vpath(globalConfig.output.path).full;
 

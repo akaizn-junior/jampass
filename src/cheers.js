@@ -177,14 +177,14 @@ function processJs(code, filename, cb) {
   });
 }
 
-async function handleCss(file, data) {
+async function handleCss(file, outDir, data) {
   const cached = CACHE.get(file.path);
   const code = Buffer.from(file.code);
   const genHash = () => getHash(code.toString().concat('+build hash', data.length));
 
   const re = () => {
     const fullPathBase = file.path.split('style')[1];
-    const cssOutPath = path.join(globalConfig.output.path, 'style', fullPathBase);
+    const cssOutPath = path.join(globalConfig.output.path, outDir || 'style', fullPathBase);
 
     processCss(file.code, file.path, cssOutPath, result => {
       CACHE.set(file.path, Buffer.from(JSON.stringify({
@@ -220,7 +220,7 @@ async function handleCss(file, data) {
     .catch(re);
 }
 
-function handleJs(file, data) {
+function handleJs(file, outDir, data) {
   const cached = CACHE.get(file.path);
   const code = Buffer.from(file.code);
 
@@ -228,7 +228,7 @@ function handleJs(file, data) {
 
   const re = () => {
     const fullPathBase = file.path.split('script')[1];
-    const dest = path.join(globalConfig.output.path, 'script', fullPathBase);
+    const dest = path.join(globalConfig.output.path, outDir || 'script', fullPathBase);
 
     processJs(code, file.path, result => {
       CACHE.set(file.path, Buffer.from(JSON.stringify({
@@ -264,12 +264,12 @@ function handleJs(file, data) {
     .catch(re);
 }
 
-async function handleAssets(file, data) {
+async function handleAssets(file, outDir, data) {
   const cached = CACHE.get(file.path);
 
   const re = () => {
     const fullPathBase = file.path.split('assets')[1];
-    const dest = path.join(globalConfig.output.path, 'assets', fullPathBase);
+    const dest = path.join(globalConfig.output.path, outDir || 'assets', fullPathBase);
     const code = Buffer.from(file.code);
     const buildHash = getHash(code.toString().concat('+build hash', data.length));
 
@@ -363,11 +363,8 @@ function transform(type, data) {
     }
 
     switch (type) {
-    case 'none':
-      writeFile(file.path, file.code);
-      break;
     case 'static':
-      const out = vpath(file.path).base;
+      const out = file.out || vpath(file.path).base;
       writeFile(path.join(globalConfig.output.path, out), code);
       break;
     case 'html':
@@ -413,16 +410,15 @@ function transform(type, data) {
       break;
     case 'style':
       if ([1, 2].includes(file.procState)) {
-        handleCss({ path: file.path, code }, data);
+        handleCss({ path: file.path, code }, file.out, data);
       }
-
       break;
     case 'script':
       if ([1, 2].includes(file.procState)) {
-        handleJs({ path: file.path, code }, data);
+        handleJs({ path: file.path, code }, file.out, data);
       }
       break;
-    case 'assets': handleAssets({ path: file.path, code }, data); break;
+    case 'assets': handleAssets({ path: file.path, code }, file.out, data); break;
     }
   });
 }
