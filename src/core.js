@@ -247,37 +247,44 @@ function handleCheersValidate(res, data) {
 
 function handleOutputSubDir(subDirObj) {
   const subdir = subDirObj.dir;
-  const stylePath = vpath([globalConfig.cwd, subDirObj.style], true);
-  const staticPath = vpath([globalConfig.cwd, subDirObj.static], true);
-  const scriptPath = vpath([globalConfig.cwd, subDirObj.script], true);
-  const assetsPath = vpath([globalConfig.cwd, subDirObj.assets], true);
 
-  const styles = getDirPaths(stylePath.full, 'full');
-  const staticAssets = getDirPaths(staticPath.full, 'full');
-  const scripts = getDirPaths(scriptPath.full, 'full');
-  const assets = getDirPaths(assetsPath.full, 'full');
+  if (subDirObj.style) {
+    const stylePath = vpath([globalConfig.cwd, subDirObj.style], true);
+    const styles = getDirPaths(stylePath.full, 'full');
+    cheers.transform('style', styles.map(p => ({
+      path: p,
+      out: path.join(subdir, subDirObj.style),
+      procState: 1
+    })));
+  }
 
-  cheers.transform('style', styles.map(p => ({
-    path: p,
-    out: path.join(subdir, subDirObj.style),
-    procState: 1
-  })));
+  if (subDirObj.static) {
+    const staticPath = vpath([globalConfig.cwd, subDirObj.static], true);
+    const staticAssets = getDirPaths(staticPath.full, 'full');
+    cheers.transform('static', staticAssets.map(p => ({
+      path: p,
+      out: path.join(subdir, vpath(p).base)
+    })));
+  }
 
-  cheers.transform('script', scripts.map(p => ({
-    path: p,
-    out: path.join(subdir, subDirObj.script),
-    procState: 1
-  })));
+  if (subDirObj.script) {
+    const scriptPath = vpath([globalConfig.cwd, subDirObj.script], true);
+    const scripts = getDirPaths(scriptPath.full, 'full');
+    cheers.transform('script', scripts.map(p => ({
+      path: p,
+      out: path.join(subdir, subDirObj.script),
+      procState: 1
+    })));
+  }
 
-  cheers.transform('static', staticAssets.map(p => ({
-    path: p,
-    out: path.join(subdir, vpath(p).base)
-  })));
-
-  cheers.transform('assets', assets.map(p => ({
-    path: p,
-    out: path.join(subdir, subDirObj.assets)
-  })));
+  if (subDirObj.assets) {
+    const assetsPath = vpath([globalConfig.cwd, subDirObj.assets], true);
+    const assets = getDirPaths(assetsPath.full, 'full');
+    cheers.transform('assets', assets.map(p => ({
+      path: p,
+      out: path.join(subdir, subDirObj.assets)
+    })));
+  }
 
   return subdir;
 }
