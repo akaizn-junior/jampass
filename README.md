@@ -8,7 +8,9 @@ Jampass easily helps you funnel data from any headless cms to your templates.
 
 ## Install
 
-`npm i jampass`
+```bash
+ npm i jampass
+```
 
 ## Edge
 
