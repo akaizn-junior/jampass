@@ -1,6 +1,6 @@
 {
   "name": "jampass",
-  "version": "0.0.2-edge.2.5",
+  "version": "0.0.2-edge.2.6",
   "main": "src/jampass.js",
   "bin": {
     "jampass": "src/cli.js"
