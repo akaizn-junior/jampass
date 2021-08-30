@@ -733,7 +733,7 @@ function serve({ port, open = false, watchIgnore }) {
 
         ins.addMiddleware('*', (_, res) => {
           res.writeHead(302, {
-            location: '/404.html'
+            location: globalConfig.build.errorPage || '/404.html'
           });
           res.end('Redirecting!');
         });
