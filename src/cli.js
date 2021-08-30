@@ -39,6 +39,18 @@ function loadUserSettings(opts) {
   settings && jampass.config(settings, configCwd);
 }
 
+const withSettings = (args, done) => {
+  loadUserSettings({
+    cpath: args.config,
+    mode: args.mode,
+    dry: args.dryRun,
+    expose: args.expose,
+    timeout: args.timeout
+  });
+
+  return done();
+};
+
 yargs.scriptName('jampass');
 yargs.version(pkg.version);
 
@@ -75,18 +87,6 @@ yargs.option('timeout', {
   description: 'exposes funneled data via an impromptu server that will simply dump the data for debugging purposes'
 });
 
-const withSettings = (args, done) => {
-  loadUserSettings({
-    cpath: args.config,
-    mode: args.mode,
-    dry: args.dryRun,
-    expose: args.expose,
-    timeout: args.timeout
-  });
-
-  return done();
-};
-
 yargs.command({
   command: '$0',
   description: 'Generates a static site, simply',
@@ -113,7 +113,7 @@ yargs.command({
 
 yargs.command({
   command: 'watch',
-  description: 'Watches for template changes',
+  description: 'Watches for code changes',
   handler: args => withSettings(args, () => jampass.watch(null, [validUserConfigPath]))
 });
 
