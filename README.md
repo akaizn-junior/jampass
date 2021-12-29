@@ -1,6 +1,6 @@
 # Jampass
 
-![Another one](https://media.giphy.com/media/l0HlQ7LRalQqdWfao/giphy.gif)
+![Another one](./jampass-logo.png)
 
 A static site generator.
 
