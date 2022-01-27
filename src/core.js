@@ -1,705 +1,549 @@
-// deps
-
-const consola = require('consola');
-const chokidar = require('chokidar');
-const cons = require('consolidate');
-const browserSync = require('browser-sync');
-const del = require('del');
-const marky = require('marky');
+// vendors
+import consola from 'consola';
+import cons from 'consolidate';
+import browserSync from 'browser-sync';
+import chokidar from 'chokidar';
+import del from 'del';
+import { ESLint } from 'eslint';
+import * as marky from 'marky';
 
 // node
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
+import fs from 'fs';
+import path from 'path';
 
 // local
-const cheers = require('./cheers');
-
-const {
-  accessProperty,
-  concatObjects,
-  getValidData,
-  outputName,
-  getDirPaths,
-  remTopChar,
+import {
+  log,
   vpath,
-  writeFile,
-  handleErrors,
-  debugLog,
-  parseDynamicName,
   loadUserEnv,
   safeFun,
-  JESSE_LOOP_DATA_TOKEN,
-  JESSE_BUILD_MODE_LAZY,
-  JESSE_BUILD_MODE_BUSY,
-  JESSE_BUILD_MODE_STRICT
-} = require('./util');
+  getDirPaths,
+  tmpdir,
+  handleThrown,
+  toggleDebug,
+  makeHash,
+  parseDynamicName,
+  accessProperty,
+  pathDistance
+} from './util.js';
+import {
+  validateHtml,
+  writeFile,
+  parseHtmlLinked,
+  processAsset,
+  updatedHtmlLinkedCss,
+  updatedHtmlLinkedJs,
+  updateStyleTagCss,
+  updateScriptTagJs
+  // minifyHtml
+} from './cheers.js';
+import * as keep from './keep.js';
 
-// globals
+// quick setup
 
-const pagination = [];
-let globalLocales = [];
-let globalSearchList = [];
-const globalConfig = {
-  watchMode: false,
-  cwd: '.',
-  build: {
-    mode: JESSE_BUILD_MODE_LAZY,
-    dry: false,
-    expose: false,
-    timeout: 5,
-    search: {}
-  },
-  site: {},
-  locales: [],
-  views: {
-    engine: {
-      name: 'handlebars',
-      config: () => {}
-    },
-    remote: false,
-    path: 'views'
-  },
-  output: {
-    remote: false,
-    path: 'public',
-    filename: {}
-  },
-  plugins: {
-    css: []
-  },
-  assets: {
-    whitelist: []
-  }
-};
+const userEnv = loadUserEnv();
+log(userEnv);
 
-// Quick setup
+// ++++++++++++++++
+// HELPERS
+// ++++++++++++++++
 
-loadUserEnv();
-
-process.on('uncaughtException', err => handleErrors(err, globalConfig));
-process.on('unhandledRejection', err => handleErrors(err, globalConfig));
-
-// Helpers
-
-const uxLocaleName = name => name.toLowerCase().replace(/-/g, '_');
-
-function buildSearchIndex(locals, trigger) {
-  const buildSearch = globalConfig.build.search;
-  const searchKeys = Object.keys(globalConfig.build.search);
-
-  if (searchKeys.length) {
-    const searchIndex = searchKeys.reduce((acc, key) => {
-      const value = buildSearch[key];
-      if (value) {
-        try {
-          acc[key] = accessProperty(locals, value);
-          return acc;
-        } catch {
-          return null;
-        }
-      }
-
-      return null;
-    }, {});
-
-    if (searchIndex) globalSearchList.push(searchIndex);
-    if (searchIndex && trigger) writeSearchFile(globalSearchList);
-  }
-}
-
-function writeSearchFile(list) {
-  const searchPath = path.join(globalConfig.output.path, 'search.json');
-  writeFile(searchPath, JSON.stringify(list, null, 2));
-}
-
-async function compileTemplate(file, data) {
+async function compileView(config, file, locals) {
   const filePath = vpath(file);
-  const name = globalConfig.views.engine.name ?? 'handlebars';
-  const engineConfig = safeFun(globalConfig.views.engine.config);
+  const name = config.views.engine.name ?? 'handlebars';
+  const engineConfig = safeFun(config.views.engine.config);
 
   try {
     const engine = cons[name];
     // expose the template engine being internally used
-    const templateEngine = require(name);
+    const templateEngine = await import(name);
     engineConfig(templateEngine);
 
-    return await engine(filePath.full, data);
+    return await engine(filePath.full, locals);
   } catch (err) {
-    if (globalConfig.watchMode) consola.info(err);
-    else throw err;
+    throw err;
   }
 }
 
-async function compileDataAndPaths(file, outputNameParts, locals, opts) {
-  const { outAsDir, pages, currentPage, pagesLen } = opts;
+async function funnel(config, file, funneled) {
+  log('funnel data to', file);
+  const parsed = parseDynamicName(vpath(file).base);
+  const htmls = [];
+  const names = [];
 
-  const publicOutPath = vpath(globalConfig.output.path);
-  let filenameFromData;
-  let localsUsed = locals;
+  const keysToPath = (locals, i) => parsed.keys?.reduce((acc, item) => {
+    const index = Number(item.index || i);
+    const data = locals[index] || locals;
 
-  // no added output paths
-  const dynName = parseDynamicName(outputNameParts[0]);
-  if (outputNameParts.length === 1 && dynName.localKey) {
-    if (Array.isArray(locals)) {
-      localsUsed = locals[dynName.localIndex];
-      filenameFromData = [
-        dynName.place(accessProperty(localsUsed, dynName.localKey))
-      ];
-    } else {
-      filenameFromData = [
-        dynName.place(accessProperty(locals, dynName.localKey))
-      ];
-    }
-  }
+    let prop = path.sep;
+    if (item.key) prop = accessProperty(data, item.key);
 
-  if (Array.isArray(outputNameParts) && outputNameParts.length > 1) {
-    filenameFromData = outputNameParts.map(name => {
-      const dynamic = parseDynamicName(name);
+    return vpath([acc, prop]).full;
+  }, '');
 
-      if (dynamic.localKey) {
-        if (Array.isArray(locals)) {
-          localsUsed = locals[dynName.localIndex];
-          return dynamic.place(accessProperty(localsUsed, dynamic.localKey));
-        }
-        return dynamic.place(accessProperty(locals, dynamic.localKey));
-      }
+  const funnelData = async(locals, i) => {
+    const prop = keysToPath(locals.data, i);
+    const keysPath = parsed.place(prop);
+    const dynamicView = vpath([config.cwd, config.src, parsed.name]).full;
 
-      return name;
-    });
-  }
-
-  const processedPath = path.join(...filenameFromData || outputNameParts);
-  const parsedOutPath = vpath(processedPath);
-
-  let outPath = path.format({
-    dir: parsedOutPath.dir,
-    name: parsedOutPath.name,
-    ext: '.html'
-  });
-
-  if (outAsDir) {
-    outPath = path.format({
-      dir: path.join(parsedOutPath.dir, parsedOutPath.base),
-      name: 'index',
-      ext: '.html'
-    });
-  }
-
-  // locales will have an entry attribute
-  // that should match the directory where locale specific pages are rendered to
-  // try to get said entry from the output path here
-  // to separate sub directory inside a locale directory
-  const outParts = outPath.split('/');
-  const possibleLocaleEntry = outParts[0];
-  const locale = globalConfig.locales[uxLocaleName(possibleLocaleEntry)];
-  let here = outPath;
-  if (locale) here = outParts.splice(1, outParts.length).join('/');
-
-  const html = await compileTemplate(file, {
-    data: localsUsed,
-    jampass: {
-      year: new Date().getFullYear(),
-      url: {
-        dir: path.parse(outPath).dir,
-        full: outPath,
-        here,
-        page: pages.current > 1 ? '/'.concat(pages.current) : ' ',
-        locale: locale ? locale.lang : ' '
-      },
-      pages: {
-        list: pagination.filter((item, i) => i && { page: item.page }),
-        ...pages
-      }
-    },
-    site: {
-      name: globalConfig.site.name,
-      author: globalConfig.site.author,
-      url: globalConfig.site.url
-    },
-    locales: globalConfig.locales
-  });
-
-  buildSearchIndex(localsUsed, currentPage === pagesLen);
-
-  return {
-    path: publicOutPath.concat(pages.current > 1 ? String(pages.current) : '', outPath),
-    code: html
+    names.push(keysPath);
+    htmls.push(
+      await compileView(config, dynamicView, {
+        data: locals.data[i],
+        locales: locals.locales
+      })
+    );
   };
-}
 
-function handleCheersValidate(res, data) {
-  if (!res.isValid) {
-    consola.info('cheers.validate()', `"${data.gen}"`, `\ngenerated from "${data.view}"\n`);
+  const isArray = Array.isArray(funneled.data);
+
+  if (!parsed.loop && parsed.keys) {
+    await funnelData(funneled, 0);
   }
 
-  res.errors.forEach(err => {
-    consola.log(`${err.line}:${err.column}`, `"${err.ruleId}"`, 'error', err.message);
-  });
-
-  res.warnings.forEach(warn => {
-    consola.log(`${warn.line}:${warn.column}`, `"${warn.ruleId}"`, 'error', warn.message);
-  });
-
-  if (!res.isValid) throw Error('HTML validation');
-  return res.isValid;
-}
-
-function handleOutputSubDir(subDirObj) {
-  const subdir = subDirObj.dir;
-
-  if (subDirObj.style) {
-    const stylePath = vpath([globalConfig.cwd, subDirObj.style], true);
-    const styles = getDirPaths(stylePath.full, 'full');
-    cheers.transform('style', styles.map(p => ({
-      path: p,
-      out: path.join(subdir, subDirObj.style),
-      procState: 1
-    })));
-  }
-
-  if (subDirObj.static) {
-    const staticPath = vpath([globalConfig.cwd, subDirObj.static], true);
-    const staticAssets = getDirPaths(staticPath.full, 'full');
-    cheers.transform('static', staticAssets.map(p => ({
-      path: p,
-      out: path.join(subdir, vpath(p).base)
-    })));
-  }
-
-  if (subDirObj.script) {
-    const scriptPath = vpath([globalConfig.cwd, subDirObj.script], true);
-    const scripts = getDirPaths(scriptPath.full, 'full');
-    cheers.transform('script', scripts.map(p => ({
-      path: p,
-      out: path.join(subdir, subDirObj.script),
-      procState: 1
-    })));
-  }
-
-  if (subDirObj.assets) {
-    const assetsPath = vpath([globalConfig.cwd, subDirObj.assets], true);
-    const assets = getDirPaths(assetsPath.full, 'full');
-    cheers.transform('assets', assets.map(p => ({
-      path: p,
-      out: path.join(subdir, subDirObj.assets)
-    })));
-  }
-
-  return subdir;
-}
-
-async function build(page) {
-  debugLog('working on templates');
-
-  const viewsPath = vpath(globalConfig.views.path, true);
-  const views = getDirPaths(viewsPath.full);
-  const resultData = [];
-  let genFilesCount = 0; // count all generated files
-
-  for (let i = 0; i < views.length; i++) {
-    const viewPath = views[i];
-    const tmpl = vpath(viewPath); // a template view
-    const file = viewsPath.concat(viewPath);
-    let outName = globalConfig.output.filename[tmpl.name] || globalConfig.output.filename[path.join(tmpl.full)];
-
-    if (outName && outName.dir) outName = handleOutputSubDir(outName);
-
-    const publicOutPath = vpath(globalConfig.output.path).full;
-
-    const canProcess = viewPath && !tmpl.name.startsWith('.'); // can process if not a hidden file
-    const outPath = outputName(outName ?? viewPath);
-
-    const outputNameParts = outPath.name.split('/');
-
-    if (canProcess && !outputNameParts[0].startsWith(JESSE_LOOP_DATA_TOKEN)) {
-      const opts = {
-        outAsDir: outPath.isDir,
-        currentPage: 1,
-        pagesLen: 1,
-        pages: {
-          current: page.page,
-          previous: page.previous,
-          next: page.next
-        }
-      };
-      const result = await compileDataAndPaths(file, outputNameParts, page.data, opts);
-
-      try {
-        handleCheersValidate(await cheers.validate(result.code),
-          { gen: result.path, view: file });
-
-        writeFile(result.path, result.code, globalConfig.build.dry);
-        resultData.push(result);
-        genFilesCount++;
-      } catch (err) {
-        await del([publicOutPath]);
-        if (globalConfig.watchMode) consola.info(err);
-        else throw err;
-      }
-    }
-
-    if (canProcess && outputNameParts[0].startsWith(JESSE_LOOP_DATA_TOKEN) && Array.isArray(page.list)) {
-      outputNameParts[0] = remTopChar(outputNameParts[0]);
-      genFilesCount += page.list.length;
-      page.list.forEach(async(dataItem, di) => {
-        const opts = {
-          outAsDir: outPath.isDir,
-          currentPage: di + 1,
-          pagesLen: page.list.length,
-          pages: {
-            current: page.page,
-            previous: page.previous,
-            next: page.next
-          }
-        };
-        const result = await compileDataAndPaths(file, outputNameParts, dataItem, opts);
-        const validate = di === 0;
-
-        try {
-          if (validate) {
-            handleCheersValidate(await cheers.validate(result.code),
-              { gen: result.path, view: file });
-          }
-
-          writeFile(result.path, result.code, globalConfig.build.dry);
-
-          if (!globalConfig.build.mode === JESSE_BUILD_MODE_LAZY) {
-            di === 0 && resultData.push(result);
-          } else {
-            resultData.push(result);
-          }
-        } catch (err) {
-          await del([publicOutPath]);
-          if (globalConfig.watchMode) consola.info(err);
-          else throw err;
-        }
-      });
+  if (parsed.loop && isArray) {
+    for (let i = 0; i < funneled.data.length; i++) {
+      await funnelData(funneled, i);
     }
   }
 
-  return { data: resultData, count: genFilesCount };
-}
-
-function setupLocales() {
-  const locales = {};
-  globalLocales.forEach(loc => {
-    const locale = vpath([globalConfig.cwd, loc.json], true);
-    const content = fs.readFileSync(locale.full);
-    locales[uxLocaleName(loc.lang)] = {
-      lang: loc.lang,
-      entry: loc.entry,
-      ...JSON.parse(content)
-    };
-  });
-
-  globalConfig.locales = locales;
-}
-
-function pageTransform() {
-  return async page => {
-    const markName = suffix => `page ${page.page} ${suffix}`;
-
-    const markyStop = (label, count) => {
-      const end = Math.floor(marky.stop(label).duration) / 1000;
-      consola.info(label, count, 'files in', end, 's');
-    };
-
-    marky.mark(markName('transform'));
-    const res = await build(page);
-    cheers.transform('html', res.data);
-    markyStop(markName('transform'), res.count);
-  };
-}
-
-function withPolling(fn) {
-  const _fn = safeFun(fn);
-
-  if (!pagination.length) {
-    // poll for pagination data
-    let ic = 0;
-    const iid = setInterval(async() => {
-      ic++;
-
-      const safeTimeout = () => {
-        // validate user input
-        const ut = globalConfig.build.timeout;
-
-        if (!ut || ut < 0 || ut >= 300) {
-          throw Error('jampass withPolling(): timeout must be a positive value less than 300');
-        }
-
-        return ut;
-      };
-
-      const timeout = ic === safeTimeout();
-      const success = pagination.length;
-
-      if (timeout) {
-        clearInterval(iid);
-        consola.info('slow internet?');
-        throw Error('jampass gen(): Connection timeout. Build failed, please try again.');
-      }
-
-      if (success) {
-        clearInterval(iid);
-        _fn();
-      }
-    }, 1000);
-  } else {
-    _fn();
-  }
-}
-
-// Interface
-
-/**
- * Sets user configurations
- * @param {object} options User defined configurations
- */
-function config(options = {}, configCwd = '') {
-  if (!options) throw Error('Options must be a valid object');
-
-  // update paths
-  globalConfig.cwd = options.cwd ?? (configCwd || globalConfig.cwd);
-
-  // update using user configs
-  globalConfig.output = concatObjects(globalConfig.output, options.output ?? {});
-  globalConfig.views = concatObjects(globalConfig.views, options.views ?? {});
-  globalConfig.views.path = path.join(globalConfig.cwd, globalConfig.views.path);
-  globalConfig.output.path = path.join(configCwd, globalConfig.output.path);
-
-  globalConfig.plugins = concatObjects(globalConfig.plugins, options.plugins ?? {});
-  globalConfig.site = concatObjects(globalConfig.site, options.site ?? {});
-  globalConfig.asssets = concatObjects(globalConfig.assets, options.assets ?? {});
-  globalConfig.build = concatObjects(globalConfig.build, options.build ?? {});
-  globalLocales = options.locales ?? [];
-
-  const validMode = [JESSE_BUILD_MODE_LAZY, JESSE_BUILD_MODE_BUSY, JESSE_BUILD_MODE_STRICT]
-    .includes(globalConfig.build.mode);
-  if (!validMode) throw Error('build mode is not valid');
-}
-
-/**
- * Funnels data/locals through the generator.
- * @param {() => Array | Promise<Array>} dataSource The source of the data to inject.
- * It must return an array or an object.
- * @returns void
- */
-function funnel(dataSource) {
-  if (!dataSource || typeof dataSource !== 'function') {
-    throw (
-      TypeError('jampass.funnel() takes a function. "dataSource" must be a function that returns locals')
+  if (!parsed.keys) {
+    names.push(parsed.name);
+    htmls.push(
+      await compileView(config, file, funneled)
     );
   }
 
-  const handleFunneledData = funneled => {
-    if (!funneled.data) {
-      throw Error('no data found');
+  return {
+    htmls,
+    names
+  };
+}
+
+function readSource(src) {
+  log('reading source');
+
+  const files = getDirPaths(src, 'full');
+  log(files);
+
+  log('classify files read by extension');
+
+  const classified = files.reduce((acc, file) => {
+    const ext = vpath(file).ext;
+
+    if (!acc[ext]) {
+      acc[ext] = [file];
+    } else {
+      acc[ext].push(file);
     }
 
-    const data = funneled.data;
-    let every = 50;
-    let maxNPages = Infinity;
-    let pagesList = data;
+    return acc;
+  }, {});
 
-    if (funneled.pages && funneled.pages.from) {
-      pagesList = accessProperty(data, funneled.pages.from);
-    }
+  log(classified);
+  return classified;
+}
 
-    if (funneled.pages && funneled.pages.every) {
-      every = funneled.pages.every;
-    }
+async function parseLinkedAssets(config, html, assets) {
+  const srcBase = vpath([config.src]).base;
 
-    if (funneled.pages && funneled.pages.max) {
-      maxNPages = funneled.pages.max;
-    }
+  // and the h is for helper
+  const h = async list => {
+    const result = [];
 
-    if (every < 10) consola.warn('Number of items per page is too low');
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i];
+      const entry = item.href || item.src;
+      const exists = keep.get(entry);
+      const ext = item.ext;
 
-    if (pagesList && Array.isArray(pagesList)) {
-      let i = 1;
+      if (!exists) {
+        const file = item.assetPath;
+        const outputPath = vpath([config.owd, config.output.path, srcBase, entry]).full;
+        const out = await processAsset(ext, config, file, outputPath);
 
-      while (pagesList.length >= every && i < maxNPages) {
-        const pages = pagesList.splice(0, every);
-        const pagesLen = pagination.length;
+        if (out) {
+          const passed = {
+            html,
+            from: entry,
+            to: vpath(out.to).base,
+            code: Buffer.from(out.code),
+            out: out.to
+          };
 
-        pagination.push({
-          page: pagesLen + 1,
-          previous: pagesLen > 1 ? pagesLen : null,
-          next: pagesLen + 2,
-          list: pages,
-          data: pages
-        });
-
-        i++;
+          result.push(passed);
+        } else {
+          consola.error('failed processing asset');
+        }
       }
     }
 
-    const pagesLen = pagination.length;
-
-    pagination.push({
-      page: pagesLen + 1,
-      previous: pagesLen > 1 ? pagesLen : null,
-      next: pagesLen + 1,
-      list: pagesList,
-      data
-    });
-
-    if (globalConfig.build.expose) expose(JSON.stringify(data));
+    return result;
   };
 
-  const fromDataSource = dataSource(data => {
-    handleFunneledData(getValidData(data));
+  const res = {};
+
+  for (const ext in assets) {
+    if (assets[ext]) {
+      // list of assets of a specific extension
+      const list = assets[ext];
+      const data = await h(list);
+      res[ext] = data;
+    }
+  }
+
+  return res;
+}
+
+function getLocales(config, files) {
+  const dotjson = files['.json'] || [];
+  const locales = dotjson.filter(file =>
+    file.includes('/locales/')
+    && file.endsWith('.json')
+  );
+
+  // const fromConfig = config.locales.map
+
+  const fromFiles = locales.map(locale => {
+    const contents = JSON.parse(
+      fs.readFileSync(new URL(locale, import.meta.url))
+    );
+
+    const name = vpath(locale).name;
+    const [lang, region] = name.split('_');
+
+    return {
+      contents,
+      locale: name,
+      lang,
+      region
+    };
   });
 
-  if (fromDataSource) {
-    const isPromise = typeof fromDataSource.then === 'function';
+  const contents = fromFiles
+    .reduce((acc, item) => Object.assign(acc, { [item.locale]: item.contents }), {});
 
-    if (isPromise) {
-      fromDataSource
-        .then(res => {
-          handleFunneledData(getValidData(res));
-        })
-        .catch(err => {
-          throw err;
-        });
+  const res = {
+    meta: fromFiles,
+    ...contents
+  };
+
+  return res;
+}
+
+function writeAssets(config, assets) {
+  assets.forEach(asset => {
+    const passed = keep.get(asset.html);
+    const item = passed?.[asset.from];
+
+    if (!item || item.out !== asset.out) {
+      log('generated asset', asset.out);
+      writeFile(asset.out, asset.code);
     }
+  });
+}
 
-    if (!isPromise) {
-      handleFunneledData(getValidData(fromDataSource));
+function updateLinkedAssetsPaths(html, assets) {
+  return assets.map(list => list.map(asset => {
+    const res = pathDistance(html.out, asset.out);
+    asset.to = res.distance;
+    return asset;
+  }));
+}
+
+async function parseViews(config, views, funneled) {
+  log('parsing src views');
+  marky.mark('parsing views');
+
+  views = views.map(v => {
+    const code = fs.readFileSync(v);
+    // create content hash
+    const hash = makeHash(code);
+    return {
+      path: v,
+      hash
+    };
+  })
+    .filter(v => {
+      const item = keep.get(v.path);
+      // only allow views with new content
+      return v.hash !== item?.contentHash;
+    });
+
+  const result = [];
+  const srcBase = vpath([config.cwd, config.src]).base;
+  const outputPath = vpath([config.owd, config.output.path]);
+
+  if (!config.watch) {
+    const cleaned = await del(
+      [`${outputPath.full}/**`, `!${outputPath.full}`]
+    );
+    log('clean output', cleaned);
+  }
+
+  for (let i = 0; i < views.length; i++) {
+    const viewPath = views[i].path;
+    const contentHash = views[i].hash;
+
+    const { htmls, names } = await funnel(config, viewPath, funneled);
+
+    const exists = keep.get(viewPath);
+    keep.add(viewPath);
+
+    let j = 0;
+    while (j < htmls.length) {
+      const compiled = htmls[j];
+      const outname = names[j];
+
+      const tmpfile = vpath([tmpdir, srcBase, outname]).full;
+      const htmlOutFile = outputPath.join(srcBase, outname).full;
+
+      const html = {
+        from: viewPath,
+        out: htmlOutFile,
+        code: Buffer.from(compiled),
+        tmpfile,
+        contentHash
+      };
+
+      try {
+        validateHtml(html.code.toString(), {
+          view: viewPath,
+          out: html.out
+        });
+
+        // parse html and get linked assets
+        const linked = parseHtmlLinked(config, html.code);
+        // an object of schema { [ext]: [] } / ex: { '.css': [] }
+        let assets = await parseLinkedAssets(config, html.from, linked);
+
+        // console.log('1', assets);
+
+        const updatedValues = updateLinkedAssetsPaths(html, Object.values(assets));
+        const assetList = updatedValues.reduce((acc, arr) => acc.concat(arr), []);
+
+        console.log(assetList)
+
+        writeAssets(config, assetList);
+
+        // const updateAssetValues = ass => {
+        //   let a = 0;
+        //   for (const ext in ass) {
+        //     if (ass[ext]) {
+        //       ass[ext] = updatedValues[a];
+        //       a++;
+        //     }
+        //   }
+
+        //   return ass;
+        // };
+
+        // console.log('2', assets);
+
+        // assets = updateAssetValues(assets);
+
+        // console.log('3', assets);
+
+        keep.appendHtmlTo(html.from, html.out, html);
+        keep.appendAssetsTo(html.from, assets);
+
+        result.push({
+          ...assets,
+          html
+        });
+      } catch (err) {
+        const d = await del([outputPath.full], { force: true });
+        log('clean output', d);
+        throw err;
+      }
+
+      j++;
+    }
+  }
+
+  return result;
+}
+
+async function prepareAndOutput(config, parsed) {
+  const result = [];
+
+  for (let i = 0; i < parsed.length; i++) {
+    const { html, css, js } = parsed[i];
+
+    try {
+      // 'u' stands for 'updated'
+      // these variables hold HTML with updated content
+      const uLinkedCss = updatedHtmlLinkedCss(html.code, css);
+      const uLinkedJs = updatedHtmlLinkedJs(uLinkedCss, js);
+      const uStyleTags = await updateStyleTagCss(config, uLinkedJs);
+      const uScriptTags = await updateScriptTagJs(uStyleTags);
+
+      // writeFile(html.tmpfile, uScriptTags);
+      // const minHtml = await minifyHtml(config, html.tmpfile);
+      writeFile(html.out, uScriptTags);
+      result.push(html.code);
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  const timer = marky.stop('parsing views');
+  const end = Math.floor(timer.duration) / 1000;
+  const no = result.length;
+  const s = n => n === 1 ? '' : 's';
+  consola.info('Generated', no, `file${s(no)} -`, `${end}s`);
+
+  log('parsed and output', no, `file${s(no)}`);
+  return result;
+}
+
+async function getFunneled(config) {
+  const dataPath = vpath([config.cwd, config.src, config.funnel], true).full;
+  log('funnel data path', dataPath);
+
+  try {
+    const imported = await import(dataPath);
+    const funneled = imported.default || imported;
+    return funneled;
+  } catch (err) {
+    throw err;
+  }
+}
+
+async function parseAsset(config, asset, ext) {
+  log('parsing asset');
+  const srcBase = vpath([config.cwd, config.src]).base;
+
+  for (let i = 0; i < asset.length; i++) {
+    const file = asset[i];
+    const fileBase = file.split(config.src + path.sep)[1];
+    // being passed here means the asset is linked to an html file
+    const passed = keep.get(fileBase);
+
+    if (passed) {
+      const outputPath = vpath([config.owd, config.output.path, srcBase, fileBase]).full;
+      const processed = await processAsset(ext, config, file, outputPath);
+
+      if (processed) {
+        const res = {
+          from: fileBase,
+          to: vpath(processed.to).base,
+          code: Buffer.from(processed.code),
+          out: processed.to
+        };
+
+        writeFile(res.out, res.code);
+        consola.info('processed asset', file);
+      } else {
+        consola.error('failed processing asset');
+      }
     }
   }
 }
 
-/**
- * Compiles all templates according to configurations and outputs html.
- */
-async function gen(opts = {}) {
-  const { watching = '', ext, watchMode } = opts;
+// +++++++++++++++++++++++++++++++
+// RUN WITH CONFIG
+// +++++++++++++++++++++++++++++++
 
-  globalConfig.watchMode = watchMode || false;
+function withConfig(config, done) {
+  process.on('uncaughtException', handleThrown(config));
+  process.on('unhandledRejection', handleThrown(config));
 
-  globalConfig.build.dry
-  && consola.log('Dry run in', `"${globalConfig.build.mode}" mode`);
+  toggleDebug(config.debug);
+  log('user config %O', config);
 
-  setupLocales(); // format locales as needed at this stage
+  // output working directory
+  config.owd = config.cwd;
+  if (config.watch) {
+    config.owd = tmpdir;
+    config.output.path = 'tmpout';
+  }
 
-  // build triggeres
-  const triggerAll = ext === null || ext === '.html';
-  const triggers = {
-    all: triggerAll,
-    js: triggerAll || ext === '.js' || ext === '.mjs',
-    css: triggerAll || ext === '.css',
-    html: triggerAll || ext === '.html'
-  };
+  config.env = process.env.NODE_ENV;
+  config.isDev = config.env !== 'production';
 
-  triggers.html && (globalSearchList = []); // reset search list on every build
+  log('working environment', config.env);
+  log('watch mode', config.watch);
+  log('output working directory', config.owd);
+  log('public output directory', config.output.path);
 
-  // clean output dir
-  const publicOutPath = vpath(globalConfig.output.path).full;
-  const cleaned = triggers.all && await del([`${publicOutPath}/**`, `!${publicOutPath}`]);
-  debugLog('cleaned output dir', cleaned);
+  return done(config);
+}
 
-  const assetsPath = triggers.all && vpath([globalConfig.cwd, 'assets']);
-  const stylePath = triggers.css && vpath([globalConfig.cwd, 'style']);
-  const scriptPath = triggers.js && vpath([globalConfig.cwd, 'script']);
-  const staticPath = triggers.all && vpath([globalConfig.cwd, 'static']);
+// ++++++++++++++++
+// INTERFACE
+// ++++++++++++++++
 
-  const assets = triggers.all && getDirPaths(assetsPath.full, 'full');
-  const styles = triggers.css && getDirPaths(stylePath.full, 'full');
-  const script = triggers.js && getDirPaths(scriptPath.full, 'full');
-  const staticAssets = triggers.all && getDirPaths(staticPath.full, 'full');
+async function gen(config, watching = null, ext = null) {
+  const funneled = await getFunneled(config);
+  const funneledKeys = (() => {
+    if (Array.isArray(funneled.data)) return Object.keys(funneled.data[0]);
+    Object.keys(funneled.data);
+  })();
 
-  cheers.config({
-    watchMode: globalConfig.watchMode,
-    cwd: globalConfig.cwd,
-    output: globalConfig.output,
-    plugins: globalConfig.plugins,
-    assets: globalConfig.assets,
-    build: globalConfig.build,
-    site: globalConfig.site
-  });
+  log('preview funneled data', funneledKeys);
 
-  const getProcState = p => {
-    /* eslint-disable camelcase */
-    const proc_all = 1;
-    const proc_watched = 2;
-    const proc_ignore = 3;
+  const srcPath = vpath([config.cwd, config.src]);
+  const read = readSource(srcPath.full);
+  // files read from source or currently being watched
+  const files = watching || read;
+  const views = files['.html'] || [];
 
-    return ['', 'ready'].includes(watching) || triggerAll
-      ? proc_all
-      : p.endsWith(watching) ? proc_watched
-        : proc_ignore;
-    /* eslint-enable camelcase */
-  };
+  if (ext !== '.html') {
+    const asset = watching?.[ext] || [];
+    parseAsset(config, asset, ext);
+  }
 
-  triggers.all && cheers.transform('assets', assets.map(p => ({ path: p })));
-  triggers.css && cheers.transform('style', styles.map(p => ({ path: p, procState: getProcState(p) })));
-  triggers.js && cheers.transform('script', script.map(p => ({ path: p, procState: getProcState(p) })));
-  triggers.all && cheers.transform('static', staticAssets.map(p => ({ path: p })));
-
-  debugLog('Watching', `"${watching}"`);
-
-  const run = () => {
-    const promises = pagination.map(pageTransform());
-    return Promise.all(promises);
-  };
-
-  triggers.html && await run();
+  funneled.locales = getLocales(config, read);
+  const parsedViews = await parseViews(config, views, funneled);
+  prepareAndOutput(config, parsedViews);
 }
 
 /**
- * Watches changes on the templates folder.
+ * Watches changes on the templates
  * Powered by [Chokidar](https://www.npmjs.com/package/chokidar)
+ * @param {object} config user configurations
  * @param {Function} cb Runs on triggered events
  * @param {string[]} ignore paths/globs to ignore
  */
-function watch(cb = () => {}, ignore = []) {
-  const watchPath = vpath(globalConfig.views.path, true);
+function watch(config, cb = () => {}, ignore = []) {
+  const watchPath = vpath([config.cwd, config.src], true);
   const _cb = safeFun(cb);
 
-  const watchMode = true;
-  globalConfig.watchMode = watchMode;
-
-  // sanity check
-  // the directory to watch must be inside the project cwd
-  // or at least be exactly the project cwd
-  // otherwise fail
-  const sanityCheck = watchPath.dir === globalConfig.cwd
-    || watchPath.dir.startsWith(globalConfig.cwd);
-
-  if (!sanityCheck) {
-    throw Error('"views" path fail. Confirm "views" are in a subdirectory');
-  }
-
   const watcher = chokidar.watch([
-    `${watchPath.dir}/**/*.html`,
-    `${watchPath.dir}/**/*.css`,
-    `${watchPath.dir}/**/*.js`,
-    `${watchPath.dir}/**/*.mjs`
+    `${watchPath.full}/**/*.html`,
+    `${watchPath.full}/**/*.css`,
+    `${watchPath.full}/**/*.js`,
+    `${watchPath.full}/**/*.mjs`
   ], {
-    cwd: globalConfig.cwd,
+    cwd: config.cwd,
     ignored: ignore
   });
 
   watcher.on('ready', () => {
-    consola.info('watching', watchPath.dir);
-    withPolling(() => gen({ watching: 'ready', ext: null, watchMode }));
+    consola.info('watching', watchPath.full);
+    gen(config);
     _cb();
   });
 
-  const run = p => {
-    debugLog('compiled', p);
-    withPolling(() => gen({ watching: p, ext: path.parse(p).ext, watchMode }));
+  const run = () => p => {
+    log('compiled', p);
+    const ext = vpath(p).ext;
+
+    // the path here excludes the cwd defined above
+    // add it back for the full path
+    const fp = vpath([config.cwd, p]).full;
+
+    const watching = { [ext]: [fp] };
+    gen(config, watching);
     _cb();
   };
 
   watcher
-    .on('change', run)
-    .on('addDir', run)
-    .on('unlink', run)
-    .on('unlinkDir', run)
+    .on('change', run('change'))
+    .on('addDir', run('addDir'))
+    .on('unlink', run('unlink'))
+    .on('unlinkDir', run('unlinkDir'))
     .on('error', err => {
       throw err;
     });
@@ -709,13 +553,16 @@ function watch(cb = () => {}, ignore = []) {
  * Starts a development server.
  * Powered by [BrowserSync](https://browsersync.io/docs/api)
  */
-function serve({ port, open = false, watchIgnore }) {
-  const serverRoot = vpath(globalConfig.output.path).full;
+function serve(config) {
+  const serverRoot = vpath([config.owd, config.output.path]).full;
+  const errorPagePath = config.devServer.pages['404'];
+
   const bs = browserSync({
-    port: port ?? 3000,
-    open,
+    port: config.port ?? 2000,
+    open: config.open,
     server: {
-      baseDir: serverRoot
+      baseDir: serverRoot,
+      directory: config.list
     },
     /**
      * @see https://browsersync.io/docs/options/#option-callbacks
@@ -725,15 +572,14 @@ function serve({ port, open = false, watchIgnore }) {
        * This 'ready' callback can be used
        * to access the Browsersync instance
        */
-      ready(err, ins) {
+      ready(err, instance) {
         if (err) {
-          if (globalConfig.watchMode) consola.info(err);
-          else throw err;
+          throw err;
         }
 
-        ins.addMiddleware('*', (_, res) => {
+        instance.addMiddleware('*', (_, res) => {
           res.writeHead(302, {
-            location: vpath(globalConfig.build.errorPage || '/404.html', true)
+            location: errorPagePath
           });
           res.end('Redirecting!');
         });
@@ -741,33 +587,42 @@ function serve({ port, open = false, watchIgnore }) {
     }
   });
 
-  watch(bs.reload, watchIgnore);
+  watch(config, bs.reload);
 }
 
-function expose(data, opts = {}) {
-  const { port, host, headers } = opts || {};
-  const p = port || 5000;
-  const h = host || '127.0.0.1';
-  const _headers = headers || { 'Content-Type': 'application/json' };
+async function lint(config) {
+  log('linting source code');
+  log('auto fix linting', config.fix);
+  log('linting cwd', config.cwd);
 
-  const server = http.createServer((_, res) => {
-    res.writeHead(200, _headers);
-    res.end(data);
+  const eslint = new ESLint({
+    fix: config.fix,
+    cwd: config.cwd,
+    overrideConfigFile: config.esrc
   });
 
-  server.listen(p, h, () => {
-    consola.info(`Exposing data on port http://${h}:${p}`);
-  });
+  try {
+    const res = await eslint.lintFiles(config.src);
+    // update linted files
+    await ESLint.outputFixes(res);
+    // format res for stdout
+    const fmtr = await eslint.loadFormatter('stylish');
+    const text = fmtr.format(res);
+    text.length && consola.log(text);
+  } catch (err) {
+    throw err;
+  }
 }
 
-module.exports = {
-  watch,
-  config,
-  gen,
-  funnel,
-  serve,
-  expose,
-  JESSE_BUILD_MODE_LAZY,
-  JESSE_BUILD_MODE_BUSY,
-  JESSE_BUILD_MODE_STRICT
+export default {
+  gen: c => withConfig(c, gen),
+  watch: c => {
+    c.watch = true;
+    return withConfig(c, watch);
+  },
+  serve: c => {
+    c.watch = true;
+    return withConfig(c, serve);
+  },
+  lint: c => withConfig(c, lint)
 };

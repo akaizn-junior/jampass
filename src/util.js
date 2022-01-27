@@ -1,54 +1,185 @@
-// deps
-const consola = require('consola');
-const cacache = require('cacache');
-const findCacheDir = require('find-cache-dir');
+import findCacheDir from 'find-cache-dir';
+import debug from 'debug';
+import consola from 'consola';
+import del from 'del';
+import { minify } from 'minify';
+import dotenv from 'dotenv';
 
 // node
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import crypto from 'crypto';
 
-// globals
+// local
+import defaultconfig from './default.config.js';
 
-const JESSE_LOCALS_FIELD_BEGIN_TOKEN = '[';
-const JESSE_LOCALS_FIELD_END_TOKEN = ']';
-const JESSE_LOOP_DATA_TOKEN = '-';
-const JESSE_BUILD_MODE_LAZY = 'lazy';
-const JESSE_BUILD_MODE_BUSY = 'busy';
-const JESSE_BUILD_MODE_STRICT = 'strict';
+// tokens
+const LOCALS_FIELD_BEGIN_TOKEN = '[';
+const LOCALS_FIELD_END_TOKEN = ']';
+const LOCALS_PATH_TOKEN = '_';
+const LOCALS_INDEX_TOKEN = ':';
+const LOCALS_LOOP_TOKEN = '-';
 
 // quick setup
+export const cachedir = findCacheDir({ name: defaultconfig.name });
+export const tmpdir = (() => {
+  const dir = path.join(os.tmpdir(), defaultconfig.name);
 
-const cachePath = findCacheDir({ name: 'jampass' });
-
-const CACHE = {
-  get: k => cacache.get(cachePath, k),
-  set: (k, v) => cacache.put(cachePath, k, v)
-};
-
-// lambdas
-
-const debugLog = (...msg) => consola.debug(...msg);
-const remTopChar = str => str.substring(1, str.length);
-const isObj = o => o && typeof o === 'object' && o.constructor === Object;
-const concatObjects = (target, src) => Object.assign(target, src);
-const concatLists = (a, b, key) => {
-  if (b && b[key] && Array.isArray(b[key])) {
-    return a[key].concat(b[key]);
+  try {
+    fs.statSync(dir);
+  } catch (err) {
+    // create if dir does not exist
+    fs.mkdirSync(dir);
   }
-  return a[key];
-};
 
-const loadUserEnv = () => require('dotenv').config({
+  return dir;
+})();
+
+// bind debug log to consola info
+debug.log = consola.info.bind(consola);
+export const log = debug(defaultconfig.name);
+
+export function toggleDebug(toggle) {
+  if (toggle) debug.enable(defaultconfig.name);
+  else debug.disable();
+}
+
+// eslint-disable-next-line no-extra-parens
+export const safeFun = cb => (cb !== void 0 && typeof cb === 'function' ? cb : () => {});
+
+export const loadUserEnv = () => dotenv.config({
   path: path.join(process.cwd(), '.env')
 });
 
-// eslint-disable-next-line no-extra-parens
-const safeFun = cb => (cb !== void 0 && typeof cb === 'function' ? cb : () => {});
+/**
+ * minify code
+ * @param {object} config config
+ * @param {string} file file to read
+ * @param {object} opts options for minification
+ * @see [minify](https://www.npmjs.com/package/minify)
+ */
+export function compress(config, file, lang, opts) {
+  const _opts = Object.assign({
+    [lang]: opts
+  }, {
+    [lang]: {}
+  });
 
-// functions
+  try {
+    return minify(file, _opts);
+  } catch (err) {
+    throw err;
+  }
+}
 
-function accessProperty(obj, key, start = 0) {
+/**
+ * create a content hash of a specific length
+ * @param {string} content the data to hash
+ * @param {number} len the desired length of the hash
+ */
+export function makeHash(content, len = null) {
+  let hash = crypto
+    .createHash('md5')
+    .update(content)
+    .digest('hex');
+
+  len && (hash = hash.substring(0, len));
+  return hash;
+}
+
+export function handleThrown(config) {
+  return err => {
+    const code = err.name || err.code || '';
+    consola.error(code);
+    consola.log(err);
+
+    const end = () => {
+      // eslint-disable-next-line no-process-exit
+      process.exit(1);
+    };
+
+    log('error object keys', Object.keys(err));
+
+    // special cases
+    const special = [
+      'CssSyntaxError',
+      'HtmlValidatorError'
+    ];
+
+    if (!(special.includes(code) && config.watch)) {
+      // clean output folder
+      const outputPath = vpath([config.cwd, config.output.path]).full;
+      del(outputPath)
+        .then(cleaned => {
+          log('cleaned because of error: ', cleaned);
+        })
+        .catch(err => {
+          throw err;
+        });
+
+      end();
+    }
+  };
+}
+
+/**
+ * Validates and parses a path
+ * @param {string|string[]} p The path to parse.
+ * May also be a list of paths. The paths will be joined and used as one pathString
+ * @param {boolean} withStats Indicates whether or not to verify if the path exists
+ */
+export function vpath(p, withStats = false) {
+  try {
+    let stats = null;
+    const str = Array.isArray(p) ? path.join(...p) : p;
+    if (withStats) stats = fs.statSync(str);
+    const parsed = path.parse(str);
+
+    return {
+      ...parsed,
+      stats,
+      full: str,
+      noext: str.split(parsed.ext)[0],
+      join: (...paths) => vpath([str, ...paths], withStats)
+    };
+  } catch (err) {
+    throw err;
+  }
+}
+
+/**
+ * Reads a directory for a list of paths
+ * @param {string} srcPath The source path to check files on
+ * @param {string} dirType How to list files, full directories or subdir only
+ * @param {string} dir Private recursive dir to build directory filenames
+ */
+export function getDirPaths(srcPath, dirType = 'sub', dir = '') {
+  try {
+    const ignore = [
+      'node_modules'
+    ];
+
+    const dirents = fs.readdirSync(srcPath, {
+      withFileTypes: true
+    })
+      .filter(d => !ignore.includes(d.name))
+      .filter(d => !d.name.startsWith('.'));
+
+    return dirents.flatMap(dirent => {
+      if (dirent.isDirectory()) {
+        return getDirPaths(path.join(srcPath, dirent.name), dirType, path.join(dir, dirent.name));
+      }
+      return dirType === 'full' ? path.join(srcPath, dirent.name)
+        : path.join(path.parse(dir).dir, path.parse(dir).base, dirent.name);
+    });
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+}
+
+export function accessProperty(obj, key, start = 0) {
   if (!key && typeof key !== 'string') {
     throw Error('Undefined key, key must be of type string');
   }
@@ -70,163 +201,130 @@ function accessProperty(obj, key, start = 0) {
   }
 }
 
-function getValidData(data) {
-  const isValid = Array.isArray(data) || isObj(data);
+export function parseDynamicName(fnm) {
+  log('parsing dynamic name');
+  const localBeginIndex = fnm.indexOf(LOCALS_FIELD_BEGIN_TOKEN);
+  const localEndIndex = fnm.indexOf(LOCALS_FIELD_END_TOKEN);
+  const isDynamicName = localBeginIndex !== -1 && localEndIndex !== -1;
 
-  if (!isValid) {
-    throw TypeError('Funneled data must be of type Object or Array');
+  log('dynamic filename', fnm);
+
+  // fail if no dyanmic name found
+  // but has loop token
+  if (!isDynamicName && fnm.startsWith(LOCALS_LOOP_TOKEN)) {
+    throw Error('Please provide a dynamic name to loop');
   }
 
-  return data;
-}
+  if (isDynamicName) {
+    const prefix = fnm.substring(0, localBeginIndex);
+    const suffix = fnm.substring(localEndIndex + 1, fnm.length);
+    const localKeys = String(fnm).substring(localBeginIndex + 1, localEndIndex);
 
-function outputName(outName) {
-  const isDir = outName.endsWith('/');
+    // separate local keys per paths
+    const localKeysAsPath = localKeys.split(LOCALS_PATH_TOKEN);
+
+    // find indexes from keys
+    const keys = localKeysAsPath.map(localkey => {
+      const lk = localkey.split(LOCALS_INDEX_TOKEN);
+      const key = lk[0];
+      const index = lk[1];
+
+      return {
+        key,
+        index
+      };
+    });
+
+    log('dynamic keys', keys);
+
+    // remove any loop token in front of the prefix
+    const cleanPrefix = prefix.startsWith(LOCALS_LOOP_TOKEN)
+      ? prefix.substring(1, prefix.length)
+      : prefix;
+
+    return {
+      keys,
+      loop: fnm.startsWith(LOCALS_LOOP_TOKEN),
+      name: fnm,
+      prefix: cleanPrefix,
+      suffix,
+      place: str => {
+        if (str.endsWith(path.sep) && suffix.startsWith('.')) {
+          return cleanPrefix.concat(str, 'index', suffix);
+        }
+
+        return cleanPrefix.concat(str, suffix);
+      }
+    };
+  }
+
   return {
-    name: !isDir ? outName : outName.substring(0, outName.length - 1),
-    isDir
+    name: fnm
   };
 }
 
-function getDirPaths(srcPath, dirType = 'sub', dir = '') {
-  try {
-    const dirents = fs.readdirSync(srcPath, {
-      withFileTypes: true
-    });
+export function pathDistance(src, target) {
+  const TRAIL = '..'.concat(path.sep);
 
-    return dirents.flatMap(dirent => {
-      if (dirent.isDirectory()) {
-        return getDirPaths(path.join(srcPath, dirent.name), dirType, path.join(dir, dirent.name));
+  const separate = (a, b) => {
+    let sPath = '';
+    let tPath = '';
+    let root = '';
+    const s = a.split(path.sep);
+    const t = b.split(path.sep);
+    const len = s.length > t.length ? s.length : t.length;
+
+    let j = 0;
+    while (j < len) {
+      const sPart = s[j];
+      const tPart = t[j];
+
+      if (sPart !== tPart && tPart) {
+        tPath = tPath.concat(tPath.length ? path.sep : '', tPart);
       }
-      return dirType === 'full' ? path.join(srcPath, dirent.name)
-        : path.join(path.parse(dir).dir, path.parse(dir).base, dirent.name);
-    });
-  } catch (err) {
-    if (err.code === 'ENOENT') return [];
-    throw err;
-  }
-}
 
-/**
- * Validates and parses a path
- * @param {string|string[]} p The path to parse.
- * May also be a list of paths. The paths will be joined and used as one pathString
- * @param {boolean} withStats Indicates whether or not to verify if the path exists
- */
-function vpath(p, withStats = false) {
-  try {
-    let stats = null;
-    const pathString = Array.isArray(p) ? path.join(...p) : p;
+      if (sPart !== tPart && sPart) {
+        sPath = sPath.concat(sPath.length ? path.sep : '', sPart);
+      }
 
-    if (withStats) stats = fs.statSync(pathString);
+      if (sPart && tPart && sPart === tPart) {
+        root = root.concat(sPart, path.sep);
+      }
 
-    return {
-      ...path.parse(pathString),
-      stats,
-      full: pathString,
-      concat: (...paths) => path.join(pathString, ...paths)
-    };
-  } catch (error) {
-    throw error;
-  }
-}
-
-function handleErrors(err, { cwd }) {
-  consola.error(err);
-
-  if (err.message.startsWith('ENOENT')) {
-    consola.info('Confirm the file or directory exists in the project root', `'${cwd}'`);
-  }
-
-  // eslint-disable-next-line no-process-exit
-  process.exit(1);
-}
-
-function writeFile(file, data, dry = false) {
-  const safeFile = vpath(file);
-
-  const done = () => {
-    if (!dry) {
-      fs.writeFile(safeFile.full, data, {
-        encoding: 'utf-8',
-        flag: 'w'
-      }, err => {
-        if (err) throw err;
-        debugLog('generated', safeFile.full);
-      });
+      j++;
     }
+
+    return { root, sPath, tPath };
   };
 
-  try {
-    const stats = fs.statSync(safeFile.dir);
-    if (!stats.isDirectory()) {
-      throw Error('Public output must be a directory');
-    } else {
-      done();
-    }
-  } catch (error) {
-    if (!dry) {
-      fs.mkdir(safeFile.dir, { recursive: true }, err => {
-        if (err) throw err;
-        done();
-      });
-    }
-  }
-}
+  const { root, sPath, tPath } = separate(src, target);
 
-function parseDynamicName(nm) {
-  const localBeginIndex = nm.indexOf(JESSE_LOCALS_FIELD_BEGIN_TOKEN);
-  const localEndIndex = nm.indexOf(JESSE_LOCALS_FIELD_END_TOKEN);
-
-  if (localBeginIndex !== -1 && localEndIndex !== -1) {
-    const prefix = nm.substring(0, localBeginIndex);
-    const suffix = nm.substring(localEndIndex + 1, nm.length);
-    let localKey = String(nm).substring(localBeginIndex + 1, localEndIndex);
-
-    // the local key may be formated as [data item key, data item index]
-    localKey = localKey.split(':');
-
-    return {
-      localIndex: Number(localKey[1]) || 0,
-      localKey: localKey[0],
-      place(str) {
-        return prefix.concat(str, suffix);
-      }
-    };
+  if (!root) {
+    throw Error('Paths do not exist in the same root directory');
   }
 
-  return nm;
+  // ignore filenames from the src path
+  const sPathDir = vpath(sPath).dir;
+  const tPathDir = vpath(tPath).dir;
+  // get the length of the path split by 'path.sep'
+  // the diff between src path and root path without src filename
+  const diff = sPathDir ? sPathDir.split(path.sep).length : 0;
+  const tDiff = tPathDir ? tPathDir.split(path.sep).length : 0;
+  let trail = '';
+
+  for (let i = 0; i < diff; i++) {
+    trail = trail.concat(TRAIL);
+  }
+
+  const distance = {
+    root,
+    src: sPath,
+    target: tPath,
+    trail,
+    srcDiff: diff,
+    targetDiff: tDiff,
+    distance: trail.concat(tPath)
+  };
+
+  return distance;
 }
-
-function getHash(content, len) {
-  let hash = crypto
-    .createHash('md5')
-    .update(content)
-    .digest('hex');
-
-  len && (hash = hash.substr(0, len));
-  return hash;
-}
-
-module.exports = {
-  accessProperty,
-  concatObjects,
-  getValidData,
-  outputName,
-  getDirPaths,
-  remTopChar,
-  vpath,
-  writeFile,
-  handleErrors,
-  debugLog,
-  parseDynamicName,
-  concatLists,
-  getHash,
-  loadUserEnv,
-  CACHE,
-  safeFun,
-  JESSE_LOOP_DATA_TOKEN,
-  JESSE_BUILD_MODE_LAZY,
-  JESSE_BUILD_MODE_BUSY,
-  JESSE_BUILD_MODE_STRICT
-};

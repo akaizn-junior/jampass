@@ -2,9 +2,7 @@
 
 ![Another one](./jampass-logo.png)
 
-A static site generator.
-
-Jampass easily helps you funnel data from any headless cms to your templates.
+A dev kit for static site generation.
 
 ## Install
 
@@ -46,12 +44,10 @@ Jampass.funnel(async () => {
 
 ## Docs
 
-Jampass aims bridge the gap between content making and content publishing.
+Jampass aims to bridge the gap between content making and content publishing.
 The system helps funnel data to your templates to generate HTML, while providing a modern development environment.
 
-Build your site with the latest browser-ready CSS and JavaScript, along side  server side JavaScript to seamlessly generate a fully static site.
-
-Jampass supports, *locales*, *pagination*, build time variables along side your template data, site *subdirectories*, multiple pages generation based on *slugs*, *index* generation for search.
+Jampass supports, *locales*, *pagination*, build-time variables along side your template data, site *subdirectories*, multiple pages generation based on *slugs*, *index* generation for search and much more.
 
 ...
 

@@ -1,121 +1,121 @@
 #!/usr/bin/env node
 
-// deps
-const yargs = require('yargs/yargs')(process.argv.slice(2));
+// vendors
+import { Command } from 'commander';
 
 // node
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 // local
-const pkg = require('../package.json');
-const jampass = require('./core');
-let validUserConfigPath = '';
+import core from './core.js';
+import config from './default.config.js';
 
-function loadUserSettings(opts) {
-  let settings;
-  let configCwd;
-  const configPath = opts.cpath ?? 'jampass.config.js';
+// ++++++++++++++++++++++++
+//
+// Setup CLI
+// ++++++++++++++++++++++++
+
+const cli = new Command();
+cli.name(config.name);
+cli.description('A static web builder');
+cli.version(config.version, '-v, --version', 'output the version number');
+cli.showHelpAfterError(true);
+
+// ++++++++++++++++++++++++
+//
+// Helpers
+// ++++++++++++++++++++++++
+
+function loadUserConfig(args) {
+  const opts = args.opts;
+  const cmdOpts = args.cmdOpts;
+
+  let userOpts = config.userOpts;
+  const userSource = opts.src || config.userOpts.src;
+  const configFile = opts.config || config.configFile;
 
   try {
-    const userConfig = path.join(process.cwd(), configPath);
+    const userConfig = path.join(process.cwd(), userSource, configFile);
     const stats = fs.statSync(userConfig);
 
     if (stats.isFile()) {
-      validUserConfigPath = userConfig;
-      settings = require(userConfig);
-      configCwd = path.parse(userConfig).dir;
-      !settings.cwd && (settings.cwd = configCwd);
+      userOpts = require(userConfig);
+      userOpts = Object.assign(userOpts, config.userOpts);
     }
   } catch (err) {
-    throw err;
+    if (err.code !== 'ENOENT') {
+      throw err;
+    }
   }
 
-  settings.build = settings.build ?? {};
-  opts.dry && (settings.build.dry = opts.dry);
-  opts.mode && (settings.build.mode = opts.mode);
-  opts.expose && (settings.build.expose = opts.expose);
-  opts.timeout && (settings.build.timeout = opts.timeout);
-  settings && jampass.config(settings, configCwd);
+  // use command line opt if used
+  // cli opts have priority over config file opts
+  userOpts.src = opts.src || userOpts.src;
+  userOpts.cwd = opts.cwd || userOpts.cwd;
+  userOpts.debug = opts.debug || userOpts.debug;
+  userOpts.config = opts.config || userOpts.config;
+  userOpts.funnel = opts.funnel || userOpts.funnel;
+  userOpts.output.path = opts.dist || userOpts.output.path;
+
+  // concatenate all args and return
+  return Object.assign({}, cmdOpts, userOpts);
 }
 
-const withSettings = (args, done) => {
-  loadUserSettings({
-    cpath: args.config,
-    mode: args.mode,
-    dry: args.dryRun,
-    expose: args.expose,
-    timeout: args.timeout
+const withConfig = (args, done) => {
+  const conf = loadUserConfig({
+    cmdOpts: args.opts(),
+    opts: cli.opts()
   });
 
-  return done();
+  return done(conf);
 };
 
-yargs.scriptName('jampass');
-yargs.version(pkg.version);
+// ++++++++++++++++++++++++
+//
+// Global Options
+// ++++++++++++++++++++++++
 
-yargs.alias('help', 'h');
-yargs.alias('version', 'v');
+cli.option('-c, --config <path>', 'user config path', config.configFile);
+cli.option('-s, --src <path>', 'reads the folder to build');
+cli.option('-C, --cwd <path>', 'define a custom cwd');
+cli.option('-D, --debug', 'toggle debug logs', false);
+cli.option('-d, --dist <path>', 'output directory', config.userOpts.output.path);
+cli.option('-f, --funnel <path>', 'funnel data path', config.dataFile);
 
-yargs.option('config', {
-  alias: 'c',
-  string: true,
-  description: 'A path to user configuration'
-});
+// ++++++++++++++++++++++++
+//
+// Commands
+// ++++++++++++++++++++++++
 
-yargs.option('port', {
-  alias: 'p',
-  number: true,
-  description: 'a development server is launched from this port'
-});
+cli
+  .command('gen', { isDefault: true })
+  .description('build source')
+  .action((_, d) => withConfig(d, c => core.gen(c)));
 
-yargs.option('open', {
-  alias: 'o',
-  boolean: true,
-  description: 'open your default browser on serve'
-});
+cli
+  .command('serve')
+  .description('serve static site')
+  .option('-p, --port [number]', 'serve site on this port', 2000)
+  .option('-o, --open', 'open default browser on serve', false)
+  .option('--list', 'enable server directory listing', false)
+  .action((_, d) => withConfig(d, c => core.serve(c)));
 
-yargs.option('expose', {
-  alias: 'e',
-  boolean: true,
-  description: 'exposes funneled data via an impromptu server that will simply dump the data for debugging purposes'
-});
+cli
+  .command('watch')
+  .description('watch source edits')
+  .action((_, d) => withConfig(d, c => core.watch(c)));
 
-yargs.option('timeout', {
-  alias: 't',
-  number: true,
-  description: 'exposes funneled data via an impromptu server that will simply dump the data for debugging purposes'
-});
+cli
+  .command('lint')
+  .description('lint source files')
+  .option('--fix', 'auto fix linting errors', false)
+  .option('--esrc <path>', 'eslint configuration file path', null)
+  .action((_, d) => withConfig(d, c => core.lint(c)));
 
-yargs.command({
-  command: '$0',
-  description: 'Generates a static site, simply',
-  handler: args => withSettings(args, () => jampass.gen())
-});
+// ++++++++++++++++++++++++
+//
+// Parse CLI
+// ++++++++++++++++++++++++
 
-yargs.command({
-  command: 'gen',
-  description: 'Generate html from current configurations',
-  handler: args => withSettings(args, () => jampass.gen())
-});
-
-yargs.command({
-  command: 'serve',
-  description: 'Starts a development server. Reads additional options. See help',
-  handler: args => withSettings(args, () => {
-    jampass.serve({
-      port: args.port,
-      open: args.open,
-      watchIgnore: [validUserConfigPath]
-    });
-  })
-});
-
-yargs.command({
-  command: 'watch',
-  description: 'Watches for code changes',
-  handler: args => withSettings(args, () => jampass.watch(null, [validUserConfigPath]))
-});
-
-yargs.showHelpOnFail(true, 'Generates a static site, simply');
-yargs.argv;
+cli.parse(process.argv);

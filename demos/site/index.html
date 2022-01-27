@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jampass</title>
+  <link rel="stylesheet" href="css/site.css">
+  <script defer src="js/site.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Jampass</h1>
+    <h2>{{ locales.en_us.[header.h2] }}</h2>
+    <div class="locales">
+      {{#each locales.meta}}
+      <a href="{{ locale }}">
+        {{ lang }}-<i class="country">{{ region }}</i>
+      </a>
+      {{/each}}
+    </div>
+  </header>
+  <main>
+    <ul class="data-grid">
+      {{#each data}}
+      <li>
+        <div class="data">
+          <img src="{{ photo }}" alt="{{ name }}" title="{{ name }}" width="200">
+          <p><a href="{{ insertedAt }}/{{ name }}">{{ name }}</a></p>
+        </div>
+      </li>
+      {{/each}}
+    </ul>
+  </main>
+</body>
+</html>

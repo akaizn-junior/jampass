@@ -1,430 +1,346 @@
-// deps
-const cheerio = require('cheerio');
-const htmlValidator = require('html-validator');
-const consola = require('consola');
+import consola from 'consola';
+import htmlValidator from 'html-validator';
+import cheerio from 'cheerio';
+import { bold, bgBlack, red } from 'colorette';
+import browserify from 'browserify';
 
 // postcss and plugins
-const postcss = require('postcss');
-const postcssPresetEnv = require('postcss-preset-env');
-const cssnano = require('cssnano');
-const autoprefixer = require('autoprefixer');
-// const postCssHash = require('postcss-hash');
-
-// babel and plugins
-const babel = require('@babel/core');
+import postcss from 'postcss';
+import postcssPresetEnv from 'postcss-preset-env';
+import cssnano from 'cssnano';
+import autoprefixer from 'autoprefixer';
+import postCssHash from 'postcss-hash';
 
 // node
-const fs = require('fs');
-const path = require('path');
-const { promisify } = require('util');
+import fs from 'fs';
+import { EOL } from 'os';
+import { promisify } from 'util';
 
 // local
-const {
-  writeFile,
-  concatObjects,
-  vpath,
-  concatLists,
-  debugLog,
-  CACHE,
-  getHash,
-  safeFun,
-  JESSE_BUILD_MODE_LAZY,
-  JESSE_BUILD_MODE_STRICT
-} = require('./util');
+import { vpath, tmpdir, compress, makeHash } from './util.js';
 
-// globals
-const globalConfig = {
-  watchMode: false,
-  cwd: '.',
-  build: {
-    mode: JESSE_BUILD_MODE_LAZY,
-    dry: false
-  },
-  site: {
-    favicons: { src: '' }
-  },
-  output: {
-    remote: false,
-    path: 'public'
-  },
-  plugins: {
-    css: [
-      postcssPresetEnv(),
-      cssnano(),
-      autoprefixer()
-      // postCssHash()
-    ]
-  },
-  assets: {
-    trust: []
-  }
-};
+function spliceCodeSnippet(code, lnumber, column = 0, range = 5) {
+  const multiLineString = code;
+  const lines = multiLineString.split(EOL);
 
-function handleExternalUrls(src) {
-  const source = src.split('//');
-  const protocol = source[0];
-  const provider = source[1].substring(0, source[1].indexOf('/'));
+  const cut = (a, b, max) => {
+    const lower = a < 0 ? 0 : a;
+    const upper = b > max ? max : b;
+    return { lower, upper };
+  };
 
-  if (protocol === 'http' && !globalConfig.assets.trust.includes(provider)) {
-    debugLog('site connects to unsecure service from', provider);
-    if (globalConfig.build.mode === JESSE_BUILD_MODE_STRICT) {
-      throw Error(`Content served via "http" from an untrusted provider "${provider}"`);
+  const markLine = (s, a, b, max) => {
+    const prefix = s.substring(0, a);
+    const current = s.substring(a, b);
+    const suffix = s.substring(b, max);
+    return prefix.concat(red(current), suffix);
+  };
+
+  // get only lines withing a range
+  const lrange = cut(
+    lnumber - range,
+    lnumber + range,
+    lines.length
+  );
+  const slice = lines.map((l, i) => {
+    const ln = i + 1;
+
+    if (ln === lnumber) {
+      const c = cut(column - 1, column + 1, l.length);
+      const ml = markLine(l, c.lower, c.upper, l.length);
+      return bold(`${ln} ${ml}`);
     }
-  }
+
+    return `${ln} ${l}`;
+  })
+    .slice(lrange.lower, lrange.upper);
+
+  const snippet = bgBlack(slice.join(EOL)).concat(EOL);
+  return snippet;
 }
 
-function updateCssSrc(element, $) {
-  const cssSrc = element.attribs.href;
-  const isExternal = cssSrc.substr(0, 10).includes('//');
-  const hasExtName = path.extname(cssSrc).startsWith('.');
-
-  if (isExternal) handleExternalUrls(cssSrc);
-
-  if (!isExternal && hasExtName) {
-    const cssPath = vpath([globalConfig.cwd, cssSrc], true);
-    const cached = CACHE.get(cssPath.full);
-
-    cached
-      .then(found => {
-        const { path: p } = JSON.parse(found.data.toString());
-        const base = p.split('style')[1];
-
-        const out = path.join('/style', base);
-        const modded = $(element).attr('href', out);
-        $(element).replaceWith(modded);
-      }).catch(() => {});
-  }
-}
-
-function updateImageSrc(element, $, attr = 'src') {
-  const imgSrc = element.attribs.src ?? element.attribs.href;
-  const isDataUrl = imgSrc.startsWith('data:image');
-  const isExternal = imgSrc.substr(0, 10).includes('//');
-  const hasExtName = path.extname(imgSrc).startsWith('.');
-
-  if (isExternal) handleExternalUrls(imgSrc);
-
-  if (!isExternal && !isDataUrl && hasExtName) {
-    const imagePath = vpath([globalConfig.cwd, imgSrc], true);
-    const cached = CACHE.get(imagePath.full);
-
-    cached
-      .then(found => {
-        const { path: p } = JSON.parse(found.data.toString());
-        const base = p.split('assets')[1];
-
-        const out = path.join('/assets', base);
-        const modded = $(element).attr(attr, out);
-        $(element).replaceWith(modded);
-      })
-      .catch(() => {});
-  }
-}
-
-function updateScriptSrc(element, $) {
-  const scriptSrc = element.attribs.src;
-  const isExternal = scriptSrc.substr(0, 10).includes('//');
-  const hasExtName = path.extname(scriptSrc).startsWith('.');
-
-  if (isExternal) handleExternalUrls(scriptSrc);
-
-  if (!isExternal && hasExtName) {
-    const scriptPath = vpath([globalConfig.cwd, scriptSrc], true);
-    const cached = CACHE.get(scriptPath.full);
-
-    cached
-      .then(found => {
-        const { path: p } = JSON.parse(found.data.toString());
-        const base = p.split('script')[1];
-
-        const out = path.join('/script', base);
-        const modded = $(element).attr('src', out);
-        $(element).replaceWith(modded);
-      })
-      .catch(() => {});
-  }
-}
-
-// helpers
-
-function processCss(code, src, out, cb) {
-  postcss(globalConfig.plugins.css)
-    .process(code, { from: src, to: out })
-    .then(result => {
-      safeFun(cb)(result);
-    })
-    .catch(err => {
-      if (globalConfig.watchMode) consola.info(err);
-      else throw err;
-    });
-}
-
-function processJs(code, filename, cb) {
-  babel.transform(code, {
-    envName: process.env.NODE_ENV ?? 'production',
-    comments: false,
-    compact: true,
-    filename,
-    minified: true,
-    plugins: [],
-    presets: [],
-    sourceMaps: false,
-    sourceType: 'unambiguous'
-  }, (err, result) => {
-    if (err && globalConfig.watchMode) consola.info(err);
-    if (err && !globalConfig.watchMode) throw err;
-    if (!err) safeFun(cb)(result);
-  });
-}
-
-async function handleCss(file, outDir, data) {
-  const cached = CACHE.get(file.path);
-  const code = Buffer.from(file.code);
-  const genHash = () => getHash(code.toString().concat('+build hash', data.length));
-
-  const re = () => {
-    const fullPathBase = file.path.split('style')[1];
-    const cssOutPath = path.join(globalConfig.output.path, outDir || 'style', fullPathBase);
-
-    processCss(file.code, file.path, cssOutPath, result => {
-      CACHE.set(file.path, Buffer.from(JSON.stringify({
-        path: result.opts.to,
-        code: result.css,
-        buildHash: genHash()
-      })));
-
-      writeFile(result.opts.to, result.css, globalConfig.build.dry);
-    });
-  };
-
-  cached
-    .then(found => {
-      const {
-        path: p,
-        code: cCode,
-        buildHash: cHash
-      } = JSON.parse(found.data.toString());
-
-      const buildHash = genHash();
-      const c = Buffer.from(cCode.data);
-
-      debugLog('Build hash', buildHash, 'Last build', cHash);
-      debugLog('Build hash == Cached build Hash', buildHash === cHash);
-
-      if (buildHash === cHash) {
-        writeFile(p, c, globalConfig.build.dry);
-      } else {
-        re();
-      }
-    })
-    .catch(re);
-}
-
-function handleJs(file, outDir, data) {
-  const cached = CACHE.get(file.path);
-  const code = Buffer.from(file.code);
-
-  const genHash = () => getHash(code.toString().concat('+build hash', data.length));
-
-  const re = () => {
-    const fullPathBase = file.path.split('script')[1];
-    const dest = path.join(globalConfig.output.path, outDir || 'script', fullPathBase);
-
-    processJs(code, file.path, result => {
-      CACHE.set(file.path, Buffer.from(JSON.stringify({
-        path: dest,
-        code: result.code,
-        buildHash: genHash()
-      })));
-
-      writeFile(dest, result.code, globalConfig.build.dry);
-    });
-  };
-
-  cached
-    .then(found => {
-      const {
-        path: p,
-        code: cCode,
-        buildHash: cHash
-      } = JSON.parse(found.data.toString());
-
-      const c = Buffer.from(cCode.data);
-      const buildHash = genHash();
-
-      debugLog('Build hash', buildHash, 'Last build', cHash);
-      debugLog('Build hash == Cached build Hash', buildHash === cHash);
-
-      if (buildHash === cHash) {
-        writeFile(p, c, globalConfig.build.dry);
-      } else {
-        re();
-      }
-    })
-    .catch(re);
-}
-
-async function handleAssets(file, outDir, data) {
-  const cached = CACHE.get(file.path);
-
-  const re = () => {
-    const fullPathBase = file.path.split('assets')[1];
-    const dest = path.join(globalConfig.output.path, outDir || 'assets', fullPathBase);
-    const code = Buffer.from(file.code);
-    const buildHash = getHash(code.toString().concat('+build hash', data.length));
-
-    CACHE.set(file.path, Buffer.from(JSON.stringify({
-      path: dest,
-      code,
-      buildHash
-    })));
-
-    writeFile(dest, file.code, globalConfig.build.dry);
-  };
-
-  cached
-    .then(found => {
-      const { path: p, code, buildHash: cachedHash } = JSON.parse(found.data.toString());
-      const c = Buffer.from(code.data);
-      const buildHash = getHash(c.toString().concat('+build hash', data.length));
-
-      debugLog('Build hash', buildHash, 'Last build', cachedHash);
-      debugLog('Build hash == Cached build Hash', buildHash === cachedHash);
-
-      if (buildHash === cachedHash) {
-        writeFile(p, c, globalConfig.build.dry);
-      } else {
-        re();
-      }
-    })
-    .catch(re);
-}
-
-// interface
-
-/**
- * Sets user configurations
- * @param {object} options User defined configurations
- */
-function config(options = {}) {
-  if (!options) throw Error('Options must be a valid object');
-
-  globalConfig.cwd = options.cwd ?? globalConfig.cwd;
-  globalConfig.watchMode = options.watchMode ?? globalConfig.watchMode;
-  globalConfig.output = concatObjects(globalConfig.output, options.output ?? {});
-  globalConfig.build = concatObjects(globalConfig.build, options.build ?? {});
-  globalConfig.site = concatObjects(globalConfig.site, options.site ?? {});
-
-  globalConfig.plugins.css = concatLists(globalConfig.plugins, options.plugins, 'css');
-  globalConfig.assets.trust = concatLists(globalConfig.assets, options.assets, 'trust');
-}
-
-async function validate(html) {
+export async function validateHtml(html, opts) {
   if (!html || typeof html !== 'string') {
-    throw Error(`cheers.validate() takes a html string. "${html}" given`);
+    throw Error(`validateHtml() takes a html string. "${html}" given`);
   }
 
   try {
-    const result = await htmlValidator({
+    const res = await htmlValidator({
       data: html,
       format: 'text',
       validator: 'WHATWG'
     });
 
-    return result;
+    // log('validate html result %o', res);
+
+    if (!res.isValid) {
+      consola.info('validateHtml()', `"${opts.view}" invalid html`, EOL);
+    }
+
+    res.errors.forEach(err => {
+      consola.log(`${err.line}:${err.column}`, `"${err.ruleId}"`, err.message, EOL);
+      consola.log(spliceCodeSnippet(html, err.line, err.column));
+    });
+
+    res.warnings.forEach(warn => {
+      consola.log(`${warn.line}:${warn.column}`, `"${warn.ruleId}"`, warn.message);
+      consola.log(spliceCodeSnippet(html, warn.line, warn.column));
+    });
+
+    if (!res.isValid) throw Error('HTML validation');
+
+    return res.isValid;
   } catch (err) {
-    if (err && globalConfig.watchMode) consola.info(err);
-    if (err && !globalConfig.watchMode) throw err;
+    err.name = 'HtmlValidatorError';
+    throw err;
   }
 }
 
-/**
- * Transforms static sources described by type
- * @param {string} type type of file to transform
- * @param {{path: string, code?: string}[]} data sources relevant data
- */
-function transform(type, data) {
-  if (!data || !Array.isArray(data)) {
-    throw (
-      TypeError(`cheers.transform() expects an array of (path: string, html?: string) objects. Received "${data}"`)
-    );
+export function writeFile(file, data, dry = false) {
+  const safeFile = vpath(file);
+
+  const done = () => {
+    if (!dry) {
+      fs.writeFile(safeFile.full, data, {
+        encoding: 'utf-8',
+        flag: 'w'
+      }, err => {
+        if (err) throw err;
+      });
+    }
+  };
+
+  try {
+    const stats = fs.statSync(safeFile.dir);
+    if (!stats.isDirectory()) {
+      throw Error('Public output must be a directory');
+    } else {
+      done();
+    }
+  } catch (err) {
+    if (!dry) {
+      fs.mkdir(safeFile.dir, { recursive: true }, err => {
+        if (err) throw err;
+        done();
+      });
+    }
+  }
+}
+
+export async function processJs(config, file, out) {
+  const b = browserify();
+  const outpath = vpath(out);
+  let to = outpath.full;
+
+  const name = vpath(file).base;
+  const srcBase = vpath([config.cwd, config.src]).base;
+  const tmpfile = vpath([tmpdir, srcBase, name]).full;
+
+  const bundle = f => new Promise((res, rej) => {
+    b.add(f);
+    b.bundle((err, data) => err ? rej(err) : res(data));
+  });
+
+  const res = await bundle(file);
+  writeFile(tmpfile, res);
+
+  const minCode = await compress(config, tmpfile, 'js', {
+    compress: true,
+    mangle: true
+  });
+
+  if (!config.isDev) {
+    const hash = makeHash(minCode, 10);
+    to = outpath.noext.concat('.', hash, outpath.ext);
   }
 
-  data.forEach(async file => {
-    if (!file.path) {
-      throw (
-        TypeError('Object must have a valid "path" key')
+  b.reset();
+
+  return {
+    to,
+    code: minCode
+  };
+}
+
+export async function processCss(config, file, out) {
+  const plugins = [
+    postcssPresetEnv(),
+    cssnano(),
+    autoprefixer()
+  ];
+
+  !config.isDev && plugins.push(
+    postCssHash({
+      manifest: vpath([
+        tmpdir,
+        vpath(config.src).base,
+        'manifest.json'
+      ]).full
+    })
+  );
+
+  try {
+    const code = await promisify(fs.readFile)(file);
+    const processed = await postcss(plugins)
+      .process(code, { from: file, to: out });
+
+    return {
+      to: processed.opts.to,
+      code: processed.css
+    };
+  } catch (err) {
+    if (err.name === 'CssSyntaxError') {
+      // this err object by postcss
+      // conctains a few important keys
+      const snippet = spliceCodeSnippet(err.source, err.line);
+      consola.info('processCss()', `"${err.file}" invalid css`, EOL);
+      consola.log(`${err.line}:${err.column}`, 'CssSyntaxError', `"${err.reason}"`, EOL);
+      consola.log(snippet);
+    }
+
+    throw err;
+  }
+}
+
+export function processAsset(ext, config, file, out) {
+  const fns = {
+    '.css': processCss,
+    '.js': processJs
+  };
+
+  return fns[ext](config, file, out);
+}
+
+export function parseHtmlLinked(config, code) {
+  const $ = cheerio.load(code);
+
+  const linked = {};
+  const addLinked = (ext, data) => {
+    if (!linked[ext]) {
+      linked[ext] = [data];
+    } else {
+      linked[ext].push(data);
+    }
+  };
+
+  $('link[rel]').each((_, el) => {
+    try {
+      const hrefPath = vpath(
+        [config.cwd, config.src, el.attribs.href],
+        true
       );
-    }
 
-    let code = file.code;
-    if (!file.code) {
-      code = await promisify(fs.readFile)(file.path);
-    }
-
-    switch (type) {
-    case 'static':
-      const out = file.out || vpath(file.path).base;
-      writeFile(path.join(globalConfig.output.path, out), code);
-      break;
-    case 'html':
-      const $ = cheerio.load(code);
-
-      // ***** DONT UPDATE SOURCES FOR NOW
-
-      // $('link[rel]').each((_, el) => {
-      //   switch (el.attribs.rel) {
-      //   case 'stylesheet': updateCssSrc(el, $); break;
-      //   case 'preload':
-      //     switch (el.attribs.as) {
-      //     case 'style': updateCssSrc(el, $); break;
-      //     case 'image': updateImageSrc(el, $, 'href'); break;
-      //     }
-      //   }
-      // });
-
-      // $('img[src]').each((_, img) => updateImageSrc(img, $));
-
-      // const scriptsWithSrc = $('script[src]');
-      // scriptsWithSrc.each((_, el) => updateScriptSrc(el, $));
-
-      // ***** end DONT UPDATE SOURCES FOR NOW
-
-      const scripts = $('script');
-      scripts.each((_, el) => {
-        const scriptJs = $(el).html();
-        processJs(scriptJs, file.path, result => $(el).html(result.code));
-      });
-
-      const styles = $('style');
-      styles.each((_, el) => {
-        const styleCss = $(el).html();
-        processCss(styleCss, '', '', result => $(el).html(result.css));
-      });
-
-      const save = () => {
-        writeFile(file.path, $.html());
+      const data = {
+        ext: hrefPath.ext,
+        assetPath: hrefPath.full,
+        ...el.attribs
       };
 
-      setTimeout(save, 200);
-      break;
-    case 'style':
-      if ([1, 2].includes(file.procState)) {
-        handleCss({ path: file.path, code }, file.out, data);
+      addLinked(hrefPath.ext, data);
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        err.name = 'HtmlLinkedCssWarn';
+        consola.info('file "%s" not found locally', el.attribs.href);
       }
-      break;
-    case 'script':
-      if ([1, 2].includes(file.procState)) {
-        handleJs({ path: file.path, code }, file.out, data);
-      }
-      break;
-    case 'assets': handleAssets({ path: file.path, code }, file.out, data); break;
     }
   });
+
+  $('script[src]').each((_, el) => {
+    try {
+      const srcPath = vpath(
+        [config.cwd, config.src, el.attribs.src],
+        true
+      );
+
+      const data = {
+        ext: srcPath.ext,
+        assetPath: srcPath.full,
+        ...el.attribs
+      };
+
+      addLinked(srcPath.ext, data);
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        err.name = 'HtmlLinkedScriptWarn';
+        consola.info('file "%s" not found locally', el.attribs.src);
+      } else {
+        throw err;
+      }
+    }
+  });
+
+  return linked;
 }
 
-module.exports = {
-  config,
-  transform,
-  validate
-};
+const wrapCheerioElem = m => '\n'.concat(m, '\n');
+
+export function updatedHtmlLinkedJs(code, linkedJs) {
+  const $ = cheerio.load(code);
+  linkedJs = linkedJs || [];
+
+  for (let i = 0; i < linkedJs.length; i++) {
+    const it = linkedJs[i];
+    const el = $(`script[src="${it.from}"]`)
+
+    const mod = el.attr('src', it.to);
+    $(el).replaceWith(wrapCheerioElem(mod));
+  }
+
+  return $.html();
+}
+
+export function updatedHtmlLinkedCss(code, linkedCss) {
+  const $ = cheerio.load(code);
+  linkedCss = linkedCss || [];
+
+  for (let i = 0; i < linkedCss.length; i++) {
+    const item = linkedCss[i];
+    const elem = $(`link[href="${item.from}"]`);
+
+    const modded = elem.attr('href', item.to);
+    $(elem).replaceWith(wrapCheerioElem(modded));
+  }
+
+  return $.html();
+}
+
+export async function updateScriptTagJs(code) {
+  const $ = cheerio.load(code);
+  const scriptTags = $('script');
+
+  for (const elem of scriptTags) {
+    const innerJs = $(elem).html();
+    const res = innerJs; // processJs(innerJs);
+    $(elem).html(res);
+  }
+
+  return $.html();
+}
+
+export async function updateStyleTagCss(config, code) {
+  const $ = cheerio.load(code);
+  const styleTags = $('style');
+
+  for (const elem of styleTags) {
+    const innerCss = $(elem).html();
+    const res = await processCss(config, innerCss, '', '');
+    $(elem).html(res.css);
+  }
+
+  return $.html();
+}
+
+export async function minifyHtml(config, file) {
+  try {
+    const res = await compress(config, file, 'html', {
+      minifyCSS: false,
+      minifyJS: false,
+      noNewlinesBeforeTagClose: true,
+      removeAttributeQuotes: true
+    });
+
+    return res;
+  } catch (err) {
+    throw err;
+  }
+}
