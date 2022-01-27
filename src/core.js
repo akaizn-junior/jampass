@@ -144,7 +144,7 @@ function readSource(src) {
   return classified;
 }
 
-async function parseLinkedAssets(config, html, assets) {
+async function parseLinkedAssets(config, assets) {
   const srcBase = vpath([config.src]).base;
 
   // and the h is for helper
@@ -164,7 +164,6 @@ async function parseLinkedAssets(config, html, assets) {
 
         if (out) {
           const passed = {
-            html,
             from: entry,
             to: vpath(out.to).base,
             code: Buffer.from(out.code),
@@ -175,6 +174,8 @@ async function parseLinkedAssets(config, html, assets) {
         } else {
           consola.error('failed processing asset');
         }
+      } else {
+        result.push(exists);
       }
     }
 
@@ -233,10 +234,9 @@ function getLocales(config, files) {
 
 function writeAssets(config, assets) {
   assets.forEach(asset => {
-    const passed = keep.get(asset.html);
-    const item = passed?.[asset.from];
+    const exists = keep.get(asset.from);
 
-    if (!item || item.out !== asset.out) {
+    if (!exists || exists.out !== asset.out) {
       log('generated asset', asset.out);
       writeFile(asset.out, asset.code);
     }
@@ -257,17 +257,16 @@ async function parseViews(config, views, funneled) {
 
   views = views.map(v => {
     const code = fs.readFileSync(v);
-    // create content hash
-    const hash = makeHash(code);
+    const contentHash = makeHash(code);
     return {
       path: v,
-      hash
+      contentHash
     };
   })
     .filter(v => {
       const item = keep.get(v.path);
       // only allow views with new content
-      return v.hash !== item?.contentHash;
+      return v.contentHash !== item?.contentHash;
     });
 
   const result = [];
@@ -287,7 +286,7 @@ async function parseViews(config, views, funneled) {
 
     const { htmls, names } = await funnel(config, viewPath, funneled);
 
-    const exists = keep.get(viewPath);
+    // const exists = keep.get(viewPath);
     keep.add(viewPath);
 
     let j = 0;
@@ -315,40 +314,18 @@ async function parseViews(config, views, funneled) {
         // parse html and get linked assets
         const linked = parseHtmlLinked(config, html.code);
         // an object of schema { [ext]: [] } / ex: { '.css': [] }
-        let assets = await parseLinkedAssets(config, html.from, linked);
-
-        // console.log('1', assets);
+        const assets = await parseLinkedAssets(config, linked);
 
         const updatedValues = updateLinkedAssetsPaths(html, Object.values(assets));
         const assetList = updatedValues.reduce((acc, arr) => acc.concat(arr), []);
 
-        console.log(assetList)
-
         writeAssets(config, assetList);
-
-        // const updateAssetValues = ass => {
-        //   let a = 0;
-        //   for (const ext in ass) {
-        //     if (ass[ext]) {
-        //       ass[ext] = updatedValues[a];
-        //       a++;
-        //     }
-        //   }
-
-        //   return ass;
-        // };
-
-        // console.log('2', assets);
-
-        // assets = updateAssetValues(assets);
-
-        // console.log('3', assets);
 
         keep.appendHtmlTo(html.from, html.out, html);
         keep.appendAssetsTo(html.from, assets);
 
         result.push({
-          ...assets,
+          assets,
           html
         });
       } catch (err) {
@@ -368,13 +345,13 @@ async function prepareAndOutput(config, parsed) {
   const result = [];
 
   for (let i = 0; i < parsed.length; i++) {
-    const { html, css, js } = parsed[i];
+    const { html, assets } = parsed[i];
 
     try {
       // 'u' stands for 'updated'
       // these variables hold HTML with updated content
-      const uLinkedCss = updatedHtmlLinkedCss(html.code, css);
-      const uLinkedJs = updatedHtmlLinkedJs(uLinkedCss, js);
+      const uLinkedCss = updatedHtmlLinkedCss(html.code, assets.css);
+      const uLinkedJs = updatedHtmlLinkedJs(uLinkedCss, assets.js);
       const uStyleTags = await updateStyleTagCss(config, uLinkedJs);
       const uScriptTags = await updateScriptTagJs(uStyleTags);
 
@@ -417,10 +394,9 @@ async function parseAsset(config, asset, ext) {
   for (let i = 0; i < asset.length; i++) {
     const file = asset[i];
     const fileBase = file.split(config.src + path.sep)[1];
-    // being passed here means the asset is linked to an html file
-    const passed = keep.get(fileBase);
+    const exists = keep.get(fileBase);
 
-    if (passed) {
+    if (exists) {
       const outputPath = vpath([config.owd, config.output.path, srcBase, fileBase]).full;
       const processed = await processAsset(ext, config, file, outputPath);
 
@@ -535,7 +511,7 @@ function watch(config, cb = () => {}, ignore = []) {
     const fp = vpath([config.cwd, p]).full;
 
     const watching = { [ext]: [fp] };
-    gen(config, watching);
+    gen(config, watching, ext);
     _cb();
   };
 

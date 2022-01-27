@@ -40,11 +40,14 @@ export function appendAssetsTo(to, assets) {
 
       if (!keep[asset.from]) {
         // this asset points back to objects that include it
-        keep[asset.from] = [to];
-      } else if (!keep[asset.from].includes(to)) {
+        keep[asset.from] = {
+          ...asset,
+          htmls: [to]
+        };
+      } else if (!keep[asset.from].htmls.includes(to)) {
         // append new generated html to the list of htmls
         // that link this asset
-        keep[asset.from].push(to);
+        keep[asset.from].htmls.push(to);
       }
     }
 

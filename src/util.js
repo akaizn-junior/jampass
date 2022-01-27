@@ -328,3 +328,11 @@ export function pathDistance(src, target) {
 
   return distance;
 }
+
+export function formatErrorName(name, prefix, exclude = []) {
+  if (exclude.includes(name)) {
+    return name;
+  }
+
+  return prefix.concat('_', name);
+}

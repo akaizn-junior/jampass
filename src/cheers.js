@@ -17,7 +17,7 @@ import { EOL } from 'os';
 import { promisify } from 'util';
 
 // local
-import { vpath, tmpdir, compress, makeHash } from './util.js';
+import { vpath, tmpdir, compress, makeHash, formatErrorName } from './util.js';
 
 function spliceCodeSnippet(code, lnumber, column = 0, range = 5) {
   const multiLineString = code;
@@ -162,7 +162,7 @@ export async function processJs(config, file, out) {
   };
 }
 
-export async function processCss(config, file, out) {
+export async function processCss(config, file, out, justCode = '') {
   const plugins = [
     postcssPresetEnv(),
     cssnano(),
@@ -180,7 +180,9 @@ export async function processCss(config, file, out) {
   );
 
   try {
-    const code = await promisify(fs.readFile)(file);
+    let code = justCode;
+    if (file && !justCode) code = await promisify(fs.readFile)(file);
+
     const processed = await postcss(plugins)
       .process(code, { from: file, to: out });
 
@@ -198,6 +200,7 @@ export async function processCss(config, file, out) {
       consola.log(snippet);
     }
 
+    err.name = formatErrorName(err.name, 'processCss', ['CssSyntaxError']);
     throw err;
   }
 }
@@ -280,7 +283,7 @@ export function updatedHtmlLinkedJs(code, linkedJs) {
 
   for (let i = 0; i < linkedJs.length; i++) {
     const it = linkedJs[i];
-    const el = $(`script[src="${it.from}"]`)
+    const el = $(`script[src="${it.from}"]`);
 
     const mod = el.attr('src', it.to);
     $(el).replaceWith(wrapCheerioElem(mod));
@@ -323,7 +326,7 @@ export async function updateStyleTagCss(config, code) {
 
   for (const elem of styleTags) {
     const innerCss = $(elem).html();
-    const res = await processCss(config, innerCss, '', '');
+    const res = await processCss(config, '', '', innerCss);
     $(elem).html(res.css);
   }
 
@@ -341,6 +344,7 @@ export async function minifyHtml(config, file) {
 
     return res;
   } catch (err) {
+    err.name = formatErrorName(err.name, 'minifyHtml');
     throw err;
   }
 }

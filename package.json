@@ -49,6 +49,7 @@
     "postcss": "^8.3.5",
     "postcss-hash": "^3.0.0",
     "postcss-preset-env": "^7.2.3",
+    "tmp": "^0.2.1",
     "webpack": "^5.44.0",
     "yargs": "^17.0.1"
   },
