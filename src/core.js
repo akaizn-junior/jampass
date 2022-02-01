@@ -35,8 +35,8 @@ import {
   updatedHtmlLinkedCss,
   updatedHtmlLinkedJs,
   updateStyleTagCss,
-  updateScriptTagJs
-  // minifyHtml
+  updateScriptTagJs,
+  minifyHtml
 } from './cheers.js';
 import * as keep from './keep.js';
 import defaultConfig from './default.config.js';
@@ -212,7 +212,7 @@ async function getLocales(config, files) {
 
   // const fromConfig = config.locales.map
 
-  const fromFiles = locales.map(async locale => {
+  const localesProm = locales.map(async locale => {
     const contents = JSON.parse(
       await fs.readFile(new URL(locale, import.meta.url))
     );
@@ -228,7 +228,8 @@ async function getLocales(config, files) {
     };
   });
 
-  const contents = (await Promise.all(fromFiles))
+  const fromFiles = await Promise.all(localesProm);
+  const contents = fromFiles
     .reduce((acc, item) => Object.assign(acc, { [item.locale]: item.contents }), {});
 
   const res = {
@@ -390,9 +391,13 @@ async function updateAndWriteHtml(config, parsed) {
     const uStyleTags = await updateStyleTagCss(config, uLinkedJs);
     const uScriptTags = await updateScriptTagJs(uStyleTags);
 
-    // writeFile(html.tmpfile, uScriptTags);
-    // const minHtml = await minifyHtml(config, html.tmpfile);
-    writeFile(html.out, uScriptTags);
+    let minHtml = uScriptTags;
+    if (!config.isDev) {
+      await writeFile(html.tmpfile, uScriptTags);
+      minHtml = await minifyHtml(config, html.tmpfile);
+    }
+
+    writeFile(html.out, minHtml);
   } catch (err) {
     throw err;
   }
@@ -516,7 +521,7 @@ async function gen(config, watching = null, more = {}) {
     parseAsset(config, asset, ext);
   }
 
-  funneled.locales = getLocales(config, read);
+  funneled.locales = await getLocales(config, read);
   parseViews(config, views, funneled);
 }
 

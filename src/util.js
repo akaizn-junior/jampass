@@ -329,7 +329,14 @@ export function pathDistance(src, target) {
   return distance;
 }
 
-export function formatErrorName(name, prefix, exclude = []) {
+/**
+ * format error name
+ * @param {string} name Error name
+ * @param {string} prefix Prefix the error name
+ * @param {string[]} exclude Exclude specific errors
+ * @returns string
+ */
+export function fErrName(name, prefix, exclude = []) {
   if (exclude.includes(name)) {
     return name;
   }

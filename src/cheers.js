@@ -17,7 +17,7 @@ import fs from 'fs/promises';
 import { EOL } from 'os';
 
 // local
-import { vpath, tmpdir, compress, createHash, formatErrorName } from './util.js';
+import { vpath, tmpdir, compress, createHash, fErrName } from './util.js';
 
 function spliceCodeSnippet(code, lnumber, column = 0, range = 5) {
   const multiLineString = code;
@@ -100,17 +100,17 @@ export async function writeFile(file, data, dry = false) {
   const safeFile = vpath(file);
   marky.mark('writing file');
 
-  const done = () => {
+  const done = async() => {
     if (!dry) {
-      fs.writeFile(safeFile.full, data, {
+      await fs.writeFile(safeFile.full, data, {
         encoding: 'utf-8',
         flag: 'w'
-      }).then(() => {
-        const timer = marky.stop('writing file');
-        const end = Math.floor(timer.duration) / 1000;
-        consola.log('finished writing %ss', end);
       });
     }
+
+    const timer = marky.stop('writing file');
+    const end = Math.floor(timer.duration) / 1000;
+    consola.log('finished writing %ss', end);
   };
 
   try {
@@ -119,12 +119,12 @@ export async function writeFile(file, data, dry = false) {
       throw Error('Public output must be a directory');
     }
 
-    done();
+    return done();
   } catch {
     if (!dry) {
       try {
-        fs.mkdir(safeFile.dir, { recursive: true });
-        done();
+        await fs.mkdir(safeFile.dir, { recursive: true });
+        return done();
       } catch (e) {
         throw e;
       }
@@ -147,7 +147,7 @@ export async function processJs(config, file, out) {
   });
 
   const res = await bundle(file);
-  writeFile(tmpfile, res);
+  await writeFile(tmpfile, res);
 
   const minCode = await compress(config, tmpfile, 'js', {
     compress: true,
@@ -205,7 +205,7 @@ export async function processCss(config, file, out, justCode = '') {
       consola.log(snippet);
     }
 
-    err.name = formatErrorName(err.name, 'processCss', ['CssSyntaxError']);
+    err.name = fErrName(err.name, 'processCss', ['CssSyntaxError']);
     throw err;
   }
 }
@@ -353,7 +353,7 @@ export async function minifyHtml(config, file) {
 
     return res;
   } catch (err) {
-    err.name = formatErrorName(err.name, 'minifyHtml');
+    err.name = fErrName(err.name, 'minifyHtml');
     throw err;
   }
 }
