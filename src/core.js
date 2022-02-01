@@ -40,6 +40,7 @@ import {
 } from './cheers.js';
 import * as keep from './keep.js';
 import defaultConfig from './default.config.js';
+import bSyncMiddleware from './bs.middleware.js';
 
 // quick setup
 
@@ -587,14 +588,21 @@ function watch(config, cb = () => {}, ignore = []) {
 function serve(config) {
   const serverRoot = vpath([config.owd, config.output.path]).full;
   const errorPagePath = config.devServer.pages['404'];
+  const port = config.port ?? 2000;
+  const host = 'http://localhost';
+  const entry = config.src;
 
   const bs = browserSync({
-    port: config.port ?? 2000,
+    port,
     open: config.open,
+    notify: false,
     server: {
       baseDir: serverRoot,
       directory: config.list
     },
+    middleware: bSyncMiddleware({
+      host, port, entry, serverRoot
+    }),
     /**
      * @see https://browsersync.io/docs/options/#option-callbacks
      */
@@ -603,16 +611,16 @@ function serve(config) {
        * This 'ready' callback can be used
        * to access the Browsersync instance
        */
-      ready(err, instance) {
+      ready(err, _bs) {
         if (err) {
           throw err;
         }
 
-        instance.addMiddleware('*', (_, res) => {
+        _bs.addMiddleware('*', (_, res) => {
           res.writeHead(302, {
             location: errorPagePath
           });
-          res.end('Redirecting!');
+          res.end('404');
         });
       }
     }

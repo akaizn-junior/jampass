@@ -3,7 +3,6 @@ import htmlValidator from 'html-validator';
 import cheerio from 'cheerio';
 import { bold, bgBlack, red } from 'colorette';
 import browserify from 'browserify';
-import * as marky from 'marky';
 
 // postcss and plugins
 import postcss from 'postcss';
@@ -17,7 +16,13 @@ import fs from 'fs/promises';
 import { EOL } from 'os';
 
 // local
-import { vpath, tmpdir, compress, createHash, fErrName } from './util.js';
+import {
+  vpath,
+  tmpdir,
+  compress,
+  createHash,
+  fErrName
+} from './util.js';
 
 function spliceCodeSnippet(code, lnumber, column = 0, range = 5) {
   const multiLineString = code;
@@ -98,7 +103,6 @@ export async function validateHtml(html, opts) {
 
 export async function writeFile(file, data, dry = false) {
   const safeFile = vpath(file);
-  marky.mark('writing file');
 
   const done = async() => {
     if (!dry) {
@@ -107,10 +111,6 @@ export async function writeFile(file, data, dry = false) {
         flag: 'w'
       });
     }
-
-    const timer = marky.stop('writing file');
-    const end = Math.floor(timer.duration) / 1000;
-    consola.log('finished writing %ss', end);
   };
 
   try {

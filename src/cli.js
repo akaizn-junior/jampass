@@ -12,7 +12,6 @@ import core from './core.js';
 import config from './default.config.js';
 
 // ++++++++++++++++++++++++
-//
 // Setup CLI
 // ++++++++++++++++++++++++
 
@@ -23,7 +22,6 @@ cli.version(config.version, '-v, --version', 'output the version number');
 cli.showHelpAfterError(true);
 
 // ++++++++++++++++++++++++
-//
 // Helpers
 // ++++++++++++++++++++++++
 
@@ -57,6 +55,7 @@ function loadUserConfig(args) {
   userOpts.config = opts.config || userOpts.config;
   userOpts.funnel = opts.funnel || userOpts.funnel;
   userOpts.output.path = opts.dist || userOpts.output.path;
+  userOpts.output.multi = opts.multi || userOpts.output.multi;
 
   // concatenate all args and return
   return Object.assign({}, cmdOpts, userOpts);
@@ -72,7 +71,6 @@ const withConfig = (args, done) => {
 };
 
 // ++++++++++++++++++++++++
-//
 // Global Options
 // ++++++++++++++++++++++++
 
@@ -81,10 +79,10 @@ cli.option('-s, --src <path>', 'reads the folder to build');
 cli.option('-C, --cwd <path>', 'define a custom cwd');
 cli.option('-D, --debug', 'toggle debug logs', false);
 cli.option('-d, --dist <path>', 'output directory', config.userOpts.output.path);
+cli.option('--multi', 'output multiple entries in public output', false);
 cli.option('-f, --funnel <path>', 'funnel data path', config.dataFile);
 
 // ++++++++++++++++++++++++
-//
 // Commands
 // ++++++++++++++++++++++++
 
@@ -114,7 +112,6 @@ cli
   .action((_, d) => withConfig(d, c => core.lint(c)));
 
 // ++++++++++++++++++++++++
-//
 // Parse CLI
 // ++++++++++++++++++++++++
 

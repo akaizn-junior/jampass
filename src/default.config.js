@@ -25,6 +25,7 @@ export default {
       path: 'views'
     },
     output: {
+      multi: false,
       remote: false,
       path: 'public'
     },
