@@ -3,6 +3,7 @@ import htmlValidator from 'html-validator';
 import cheerio from 'cheerio';
 import { bold, bgBlack, red } from 'colorette';
 import browserify from 'browserify';
+import * as marky from 'marky';
 
 // postcss and plugins
 import postcss from 'postcss';
@@ -12,9 +13,8 @@ import autoprefixer from 'autoprefixer';
 import postCssHash from 'postcss-hash';
 
 // node
-import fs from 'fs';
+import fs from 'fs/promises';
 import { EOL } from 'os';
-import { promisify } from 'util';
 
 // local
 import { vpath, tmpdir, compress, createHash, formatErrorName } from './util.js';
@@ -96,33 +96,38 @@ export async function validateHtml(html, opts) {
   }
 }
 
-export function writeFile(file, data, dry = false) {
+export async function writeFile(file, data, dry = false) {
   const safeFile = vpath(file);
+  marky.mark('writing file');
 
   const done = () => {
     if (!dry) {
       fs.writeFile(safeFile.full, data, {
         encoding: 'utf-8',
         flag: 'w'
-      }, err => {
-        if (err) throw err;
+      }).then(() => {
+        const timer = marky.stop('writing file');
+        const end = Math.floor(timer.duration) / 1000;
+        consola.log('finished writing %ss', end);
       });
     }
   };
 
   try {
-    const stats = fs.statSync(safeFile.dir);
+    const stats = await fs.stat(safeFile.dir);
     if (!stats.isDirectory()) {
       throw Error('Public output must be a directory');
-    } else {
-      done();
     }
-  } catch (err) {
+
+    done();
+  } catch {
     if (!dry) {
-      fs.mkdir(safeFile.dir, { recursive: true }, err => {
-        if (err) throw err;
+      try {
+        fs.mkdir(safeFile.dir, { recursive: true });
         done();
-      });
+      } catch (e) {
+        throw e;
+      }
     }
   }
 }
@@ -181,7 +186,7 @@ export async function processCss(config, file, out, justCode = '') {
 
   try {
     let code = justCode;
-    if (file && !justCode) code = await promisify(fs.readFile)(file);
+    if (file && !justCode) code = await fs.readFile(file);
 
     const processed = await postcss(plugins)
       .process(code, { from: file, to: out });

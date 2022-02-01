@@ -9,9 +9,8 @@ import * as marky from 'marky';
 import { bold } from 'colorette';
 
 // node
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
-import { promisify } from 'util';
 
 // local
 import {
@@ -204,7 +203,7 @@ async function parseLinkedAssets(config, assets) {
   return res;
 }
 
-function getLocales(config, files) {
+async function getLocales(config, files) {
   const dotjson = files['.json'] || [];
   const locales = dotjson.filter(file =>
     file.includes('/locales/')
@@ -213,9 +212,9 @@ function getLocales(config, files) {
 
   // const fromConfig = config.locales.map
 
-  const fromFiles = locales.map(locale => {
+  const fromFiles = locales.map(async locale => {
     const contents = JSON.parse(
-      fs.readFileSync(new URL(locale, import.meta.url))
+      await fs.readFile(new URL(locale, import.meta.url))
     );
 
     const name = vpath(locale).name;
@@ -229,7 +228,7 @@ function getLocales(config, files) {
     };
   });
 
-  const contents = fromFiles
+  const contents = (await Promise.all(fromFiles))
     .reduce((acc, item) => Object.assign(acc, { [item.locale]: item.contents }), {});
 
   const res = {
@@ -282,7 +281,7 @@ async function parseViews(config, views, funneled) {
     await views.reduce(async(acc, v) => {
       try {
         const exists = keep.get(v);
-        const code = await promisify(fs.readFile)(v);
+        const code = await fs.readFile(v);
         const checksum = createHash(code);
 
         // only allow views with new content

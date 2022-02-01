@@ -15,7 +15,7 @@ export default {
     src: './demos/site',
     debug: false,
     locales: [],
-    watchFunnel: false,
+    watchFunnel: true,
     views: {
       engine: {
         name: 'handlebars',
