@@ -1,7 +1,12 @@
 const keep = {};
+const isObj = o => o && typeof o === 'object' && o.constructor === Object;
 
-export function add(name) {
-  if (!keep[name]) keep[name] = {};
+export function add(name, value = {}) {
+  if (!keep[name]) keep[name] = isObj(value) ? value : {};
+}
+
+export function upsert(name, value = {}) {
+  keep[name] = isObj(value) ? value : {};
 }
 
 export function peek(at = 0) {

@@ -17,7 +17,7 @@ import { EOL } from 'os';
 import { promisify } from 'util';
 
 // local
-import { vpath, tmpdir, compress, makeHash, formatErrorName } from './util.js';
+import { vpath, tmpdir, compress, createHash, formatErrorName } from './util.js';
 
 function spliceCodeSnippet(code, lnumber, column = 0, range = 5) {
   const multiLineString = code;
@@ -150,7 +150,7 @@ export async function processJs(config, file, out) {
   });
 
   if (!config.isDev) {
-    const hash = makeHash(minCode, 10);
+    const hash = createHash(minCode, 10);
     to = outpath.noext.concat('.', hash, outpath.ext);
   }
 

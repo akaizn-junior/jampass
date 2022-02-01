@@ -78,9 +78,9 @@ export function compress(config, file, lang, opts) {
  * @param {string} content the data to hash
  * @param {number} len the desired length of the hash
  */
-export function makeHash(content, len = null) {
+export function createHash(content, len = null) {
   let hash = crypto
-    .createHash('md5')
+    .createHash('sha256')
     .update(content)
     .digest('hex');
 

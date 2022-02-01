@@ -6,6 +6,7 @@ import chokidar from 'chokidar';
 import del from 'del';
 import { ESLint } from 'eslint';
 import * as marky from 'marky';
+import { bold } from 'colorette';
 
 // node
 import fs from 'fs';
@@ -22,7 +23,7 @@ import {
   tmpdir,
   handleThrown,
   toggleDebug,
-  makeHash,
+  createHash,
   parseDynamicName,
   accessProperty,
   pathDistance
@@ -282,11 +283,11 @@ async function parseViews(config, views, funneled) {
       try {
         const exists = keep.get(v);
         const code = await promisify(fs.readFile)(v);
-        const contentHash = makeHash(code);
+        const checksum = createHash(code);
 
         // only allow views with new content
-        if (contentHash !== exists?.contentHash) {
-          (await acc).push({ path: v, contentHash });
+        if (checksum !== exists?.checksum) {
+          (await acc).push({ path: v, checksum });
         }
 
         return acc;
@@ -311,7 +312,7 @@ async function parseViews(config, views, funneled) {
 
   const ps = _views.map(async view => {
     const viewPath = vpath(view.path);
-    const contentHash = view.contentHash;
+    const checksum = view.checksum;
 
     const { htmls, names } = await funnel(config, viewPath.full, funneled);
     keep.add(viewPath.full);
@@ -319,7 +320,7 @@ async function parseViews(config, views, funneled) {
     const _ps = htmls.map((html, j) => validateAndUpdateHtml(config, {
       html,
       name: names[j],
-      contentHash,
+      checksum,
       srcBase,
       outputPath,
       viewPath: viewPath.full
@@ -350,7 +351,7 @@ async function validateAndUpdateHtml(config, data) {
     out: htmlOutFile,
     code: Buffer.from(compiled),
     tmpfile,
-    contentHash: data.contentHash
+    checksum: data.checksum
   };
 
   try {
@@ -398,15 +399,36 @@ async function updateAndWriteHtml(config, parsed) {
   }
 }
 
-async function getFunneled(config) {
+async function getFunneled(config, cacheBust = '') {
   const dataPath = vpath([config.cwd, config.src, config.funnel], true).full;
+  const cb = cacheBust || '';
+  const url = `${dataPath}?bust=${cb}`;
+
   log('funnel data path', dataPath);
+  log('funneled data cache bust', cacheBust);
+  log('funneled data url', url);
 
   try {
-    const imported = await import(dataPath);
-    const funneled = imported.default || imported;
-    return funneled;
+    const imported = await import(url);
+    const funneled = 'default' in imported ? imported.default : imported;
+
+    if (funneled) {
+      const funKeys = Array.isArray(funneled.data)
+        ? Object.keys(funneled.data[0])
+        : Object.keys(funneled.data || {});
+
+      if (!funneled.data) funneled.data = [];
+
+      return {
+        funneled,
+        funKeys
+      };
+    }
+
+    throw new Error(`invalid funneled data ${bold(funneled)}`);
   } catch (err) {
+    err.name = 'DataFunnelError';
+    err.message = dataPath.concat('\n\n', err.message);
     throw err;
   }
 }
@@ -477,23 +499,20 @@ function withConfig(config, done) {
 // ++++++++++++++++
 
 async function gen(config, watching = null, more = {}) {
-  const { ext, isDataFile } = more;
+  const { ext, watchFunnel } = more;
 
-  const funneled = await getFunneled(config);
-  const funneledKeys = (() => {
-    if (Array.isArray(funneled.data)) return Object.keys(funneled.data[0]);
-    Object.keys(funneled.data);
-  })();
+  const funCacheBust = watchFunnel ? Date.now() : null;
+  const { funneled, funKeys } = await getFunneled(config, funCacheBust);
 
-  log('preview funneled data', funneledKeys);
+  log('preview funneled data', funKeys);
 
   const srcPath = vpath([config.cwd, config.src]);
   const read = readSource(srcPath.full);
   // files read from source or currently being watched
   const files = watching || read;
-  const views = files['.html'] || [];
+  const views = watchFunnel ? read['.html'] : files['.html'] || [];
 
-  if (ext !== '.html') {
+  if (ext !== '.html' && !watchFunnel) {
     const asset = watching?.[ext] || [];
     parseAsset(config, asset, ext);
   }
@@ -535,12 +554,13 @@ function watch(config, cb = () => {}, ignore = []) {
     // the path here excludes the cwd defined above
     // add it back for the full path
     const fp = vpath([config.cwd, p]).full;
-    const isDataFile = p.endsWith(defaultConfig.dataFile);
-
     const watching = { [ext]: [fp] };
+    const isDataFile = p.endsWith(defaultConfig.dataFile);
+    const watchFunnel = isDataFile && config.watchFunnel;
+
     gen(config, watching, {
       ext,
-      isDataFile
+      watchFunnel
     });
 
     _cb();
