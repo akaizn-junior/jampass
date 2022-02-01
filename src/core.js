@@ -10,6 +10,7 @@ import * as marky from 'marky';
 // node
 import fs from 'fs';
 import path from 'path';
+import { promisify } from 'util';
 
 // local
 import {
@@ -38,6 +39,7 @@ import {
   // minifyHtml
 } from './cheers.js';
 import * as keep from './keep.js';
+import defaultConfig from './default.config.js';
 
 // quick setup
 
@@ -68,8 +70,6 @@ async function compileView(config, file, locals) {
 async function funnel(config, file, funneled) {
   log('funnel data to', file);
   const parsed = parseDynamicName(vpath(file).base);
-  const htmls = [];
-  const names = [];
 
   const keysToPath = (locals, i) => parsed.keys?.reduce((acc, item) => {
     const index = Number(item.index || i);
@@ -86,25 +86,36 @@ async function funnel(config, file, funneled) {
     const keysPath = parsed.place(prop);
     const dynamicView = vpath([config.cwd, config.src, parsed.name]).full;
 
-    names.push(keysPath);
-    htmls.push(
-      await compileView(config, dynamicView, {
+    return {
+      name: keysPath,
+      html: await compileView(config, dynamicView, {
         data: locals.data[i],
         locales: locals.locales
       })
-    );
+    };
   };
 
+  const htmls = [];
+  const names = [];
   const isArray = Array.isArray(funneled.data);
 
   if (!parsed.loop && parsed.keys) {
-    await funnelData(funneled, 0);
+    const res = await funnelData(funneled, 0);
+    htmls.push(res.html);
+    names.push(res.name);
   }
 
   if (parsed.loop && isArray) {
-    for (let i = 0; i < funneled.data.length; i++) {
-      await funnelData(funneled, i);
-    }
+    const ps = funneled.data.map((_, i) =>
+      funnelData(funneled, i)
+    );
+
+    const res = await Promise.all(ps);
+
+    return {
+      htmls: res.map(r => r.html),
+      names: res.map(r => r.name)
+    };
   }
 
   if (!parsed.keys) {
@@ -146,16 +157,12 @@ function readSource(src) {
 
 async function parseLinkedAssets(config, assets) {
   const srcBase = vpath([config.src]).base;
-
   // and the h is for helper
-  const h = async list => {
-    const result = [];
-
-    for (let i = 0; i < list.length; i++) {
-      const item = list[i];
+  const h = list => {
+    const ps = list.map(async item => {
+      const ext = item.ext;
       const entry = item.href || item.src;
       const exists = keep.get(entry);
-      const ext = item.ext;
 
       if (!exists) {
         const file = item.assetPath;
@@ -170,16 +177,16 @@ async function parseLinkedAssets(config, assets) {
             out: out.to
           };
 
-          result.push(passed);
+          return passed;
         } else {
           consola.error('failed processing asset');
         }
-      } else {
-        result.push(exists);
       }
-    }
 
-    return result;
+      return exists;
+    });
+
+    return Promise.all(ps);
   };
 
   const res = {};
@@ -232,8 +239,12 @@ function getLocales(config, files) {
   return res;
 }
 
-function writeAssets(config, assets) {
-  assets.forEach(asset => {
+function writeAssets(assets) {
+  // flatten all asset lists
+  const flat = Object.values(assets)
+    .reduce((acc, list) => acc.concat(list), []);
+
+  flat.forEach(asset => {
     const exists = keep.get(asset.from);
 
     if (!exists || exists.out !== asset.out) {
@@ -243,35 +254,53 @@ function writeAssets(config, assets) {
   });
 }
 
-function updateLinkedAssetsPaths(html, assets) {
-  return assets.map(list => list.map(asset => {
-    const res = pathDistance(html.out, asset.out);
-    asset.to = res.distance;
-    return asset;
-  }));
+function rearrangeAssetPaths(html, assets) {
+  for (const ext in assets) {
+    const list = assets[ext];
+
+    if (list) {
+      assets[ext] = list.map(asset => {
+        const res = pathDistance(html.out, asset.out);
+        asset.to = res.distance;
+        return asset;
+      });
+    }
+  }
+
+  return assets;
 }
 
 async function parseViews(config, views, funneled) {
   log('parsing src views');
   marky.mark('parsing views');
 
-  views = views.map(v => {
-    const code = fs.readFileSync(v);
-    const contentHash = makeHash(code);
-    return {
-      path: v,
-      contentHash
-    };
-  })
-    .filter(v => {
-      const item = keep.get(v.path);
-      // only allow views with new content
-      return v.contentHash !== item?.contentHash;
-    });
-
-  const result = [];
   const srcBase = vpath([config.cwd, config.src]).base;
   const outputPath = vpath([config.owd, config.output.path]);
+
+  const _views = await Promise.all(
+    await views.reduce(async(acc, v) => {
+      try {
+        const exists = keep.get(v);
+        const code = await promisify(fs.readFile)(v);
+        const contentHash = makeHash(code);
+
+        // only allow views with new content
+        if (contentHash !== exists?.contentHash) {
+          (await acc).push({ path: v, contentHash });
+        }
+
+        return acc;
+      } catch (err) {
+        if (err.code === 'ENOENT') {
+          watch(config);
+          return [];
+        }
+        throw err;
+      }
+    }, [])
+  );
+
+  log('views count', _views.length);
 
   if (!config.watch) {
     const cleaned = await del(
@@ -280,98 +309,93 @@ async function parseViews(config, views, funneled) {
     log('clean output', cleaned);
   }
 
-  for (let i = 0; i < views.length; i++) {
-    const viewPath = views[i].path;
-    const contentHash = views[i].hash;
+  const ps = _views.map(async view => {
+    const viewPath = vpath(view.path);
+    const contentHash = view.contentHash;
 
-    const { htmls, names } = await funnel(config, viewPath, funneled);
+    const { htmls, names } = await funnel(config, viewPath.full, funneled);
+    keep.add(viewPath.full);
 
-    // const exists = keep.get(viewPath);
-    keep.add(viewPath);
+    const _ps = htmls.map((html, j) => validateAndUpdateHtml(config, {
+      html,
+      name: names[j],
+      contentHash,
+      srcBase,
+      outputPath,
+      viewPath: viewPath.full
+    }));
 
-    let j = 0;
-    while (j < htmls.length) {
-      const compiled = htmls[j];
-      const outname = names[j];
+    const timer = marky.stop('parsing views');
+    const end = Math.floor(timer.duration) / 1000;
+    const no = _ps.length;
 
-      const tmpfile = vpath([tmpdir, srcBase, outname]).full;
-      const htmlOutFile = outputPath.join(srcBase, outname).full;
+    consola.info(`"${viewPath.base}" -`, no, `- ${end}s`);
+    log('parsed and output', no);
 
-      const html = {
-        from: viewPath,
-        out: htmlOutFile,
-        code: Buffer.from(compiled),
-        tmpfile,
-        contentHash
-      };
+    Promise.all(_ps);
+  });
 
-      try {
-        validateHtml(html.code.toString(), {
-          view: viewPath,
-          out: html.out
-        });
-
-        // parse html and get linked assets
-        const linked = parseHtmlLinked(config, html.code);
-        // an object of schema { [ext]: [] } / ex: { '.css': [] }
-        const assets = await parseLinkedAssets(config, linked);
-
-        const updatedValues = updateLinkedAssetsPaths(html, Object.values(assets));
-        const assetList = updatedValues.reduce((acc, arr) => acc.concat(arr), []);
-
-        writeAssets(config, assetList);
-
-        keep.appendHtmlTo(html.from, html.out, html);
-        keep.appendAssetsTo(html.from, assets);
-
-        result.push({
-          assets,
-          html
-        });
-      } catch (err) {
-        const d = await del([outputPath.full], { force: true });
-        log('clean output', d);
-        throw err;
-      }
-
-      j++;
-    }
-  }
-
-  return result;
+  Promise.all(ps);
 }
 
-async function prepareAndOutput(config, parsed) {
-  const result = [];
+async function validateAndUpdateHtml(config, data) {
+  const compiled = data.html;
+  const outname = data.name;
 
-  for (let i = 0; i < parsed.length; i++) {
-    const { html, assets } = parsed[i];
+  const tmpfile = vpath([tmpdir, data.srcBase, outname]).full;
+  const htmlOutFile = data.outputPath.join(data.srcBase, outname).full;
 
-    try {
-      // 'u' stands for 'updated'
-      // these variables hold HTML with updated content
-      const uLinkedCss = updatedHtmlLinkedCss(html.code, assets.css);
-      const uLinkedJs = updatedHtmlLinkedJs(uLinkedCss, assets.js);
-      const uStyleTags = await updateStyleTagCss(config, uLinkedJs);
-      const uScriptTags = await updateScriptTagJs(uStyleTags);
+  const html = {
+    from: data.viewPath,
+    out: htmlOutFile,
+    code: Buffer.from(compiled),
+    tmpfile,
+    contentHash: data.contentHash
+  };
 
-      // writeFile(html.tmpfile, uScriptTags);
-      // const minHtml = await minifyHtml(config, html.tmpfile);
-      writeFile(html.out, uScriptTags);
-      result.push(html.code);
-    } catch (err) {
-      throw err;
-    }
+  try {
+    validateHtml(html.code.toString(), {
+      view: data.viewPath,
+      out: html.out
+    });
+
+    // parse html and get linked assets
+    const linked = parseHtmlLinked(config, html.code);
+    // an object of schema { [ext]: [] } / ex: { '.css': [] }
+    const assets = await parseLinkedAssets(config, linked);
+    const reAssets = rearrangeAssetPaths(html, assets);
+
+    writeAssets(reAssets);
+
+    keep.appendHtmlTo(html.from, html.out, html);
+    keep.appendAssetsTo(html.from, reAssets);
+
+    return await updateAndWriteHtml(config, { html, assets: reAssets });
+  } catch (err) {
+    const d = await del([data.outputPath.full], { force: true });
+    log('clean output', d);
+    throw err;
   }
+}
 
-  const timer = marky.stop('parsing views');
-  const end = Math.floor(timer.duration) / 1000;
-  const no = result.length;
-  const s = n => n === 1 ? '' : 's';
-  consola.info('Generated', no, `file${s(no)} -`, `${end}s`);
+async function updateAndWriteHtml(config, parsed) {
+  const { html, assets } = parsed;
 
-  log('parsed and output', no, `file${s(no)}`);
-  return result;
+  try {
+    // 'u' stands for 'updated'
+    // these variables hold HTML with updated content
+    const uLinkedCss = updatedHtmlLinkedCss(html.code, assets['.css']);
+    const uLinkedJs = updatedHtmlLinkedJs(uLinkedCss, assets['.js']);
+
+    const uStyleTags = await updateStyleTagCss(config, uLinkedJs);
+    const uScriptTags = await updateScriptTagJs(uStyleTags);
+
+    // writeFile(html.tmpfile, uScriptTags);
+    // const minHtml = await minifyHtml(config, html.tmpfile);
+    writeFile(html.out, uScriptTags);
+  } catch (err) {
+    throw err;
+  }
 }
 
 async function getFunneled(config) {
@@ -396,6 +420,8 @@ async function parseAsset(config, asset, ext) {
     const fileBase = file.split(config.src + path.sep)[1];
     const exists = keep.get(fileBase);
 
+    // only parse asset if it exists
+    // meaning it has already been parsed by reading it from an html file
     if (exists) {
       const outputPath = vpath([config.owd, config.output.path, srcBase, fileBase]).full;
       const processed = await processAsset(ext, config, file, outputPath);
@@ -450,7 +476,9 @@ function withConfig(config, done) {
 // INTERFACE
 // ++++++++++++++++
 
-async function gen(config, watching = null, ext = null) {
+async function gen(config, watching = null, more = {}) {
+  const { ext, isDataFile } = more;
+
   const funneled = await getFunneled(config);
   const funneledKeys = (() => {
     if (Array.isArray(funneled.data)) return Object.keys(funneled.data[0]);
@@ -471,8 +499,7 @@ async function gen(config, watching = null, ext = null) {
   }
 
   funneled.locales = getLocales(config, read);
-  const parsedViews = await parseViews(config, views, funneled);
-  prepareAndOutput(config, parsedViews);
+  parseViews(config, views, funneled);
 }
 
 /**
@@ -502,24 +529,28 @@ function watch(config, cb = () => {}, ignore = []) {
     _cb();
   });
 
-  const run = () => p => {
+  const run = p => {
     log('compiled', p);
     const ext = vpath(p).ext;
-
     // the path here excludes the cwd defined above
     // add it back for the full path
     const fp = vpath([config.cwd, p]).full;
+    const isDataFile = p.endsWith(defaultConfig.dataFile);
 
     const watching = { [ext]: [fp] };
-    gen(config, watching, ext);
+    gen(config, watching, {
+      ext,
+      isDataFile
+    });
+
     _cb();
   };
 
   watcher
-    .on('change', run('change'))
-    .on('addDir', run('addDir'))
-    .on('unlink', run('unlink'))
-    .on('unlinkDir', run('unlinkDir'))
+    .on('change', run)
+    .on('addDir', run)
+    .on('unlink', run)
+    .on('unlinkDir', run)
     .on('error', err => {
       throw err;
     });

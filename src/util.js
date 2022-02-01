@@ -203,9 +203,9 @@ export function accessProperty(obj, key, start = 0) {
 
 export function parseDynamicName(fnm) {
   log('parsing dynamic name');
-  const localBeginIndex = fnm.indexOf(LOCALS_FIELD_BEGIN_TOKEN);
-  const localEndIndex = fnm.indexOf(LOCALS_FIELD_END_TOKEN);
-  const isDynamicName = localBeginIndex !== -1 && localEndIndex !== -1;
+  const dynBeginIndex = fnm.indexOf(LOCALS_FIELD_BEGIN_TOKEN);
+  const dynEndIndex = fnm.indexOf(LOCALS_FIELD_END_TOKEN);
+  const isDynamicName = dynBeginIndex !== -1 && dynEndIndex !== -1;
 
   log('dynamic filename', fnm);
 
@@ -216,9 +216,9 @@ export function parseDynamicName(fnm) {
   }
 
   if (isDynamicName) {
-    const prefix = fnm.substring(0, localBeginIndex);
-    const suffix = fnm.substring(localEndIndex + 1, fnm.length);
-    const localKeys = String(fnm).substring(localBeginIndex + 1, localEndIndex);
+    const prefix = fnm.substring(0, dynBeginIndex);
+    const suffix = fnm.substring(dynEndIndex + 1, fnm.length);
+    const localKeys = String(fnm).substring(dynBeginIndex + 1, dynEndIndex);
 
     // separate local keys per paths
     const localKeysAsPath = localKeys.split(LOCALS_PATH_TOKEN);

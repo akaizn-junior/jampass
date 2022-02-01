@@ -211,7 +211,11 @@ export function processAsset(ext, config, file, out) {
     '.js': processJs
   };
 
-  return fns[ext](config, file, out);
+  try {
+    return fns[ext](config, file, out);
+  } catch {
+    consola.info(ext, 'is not yet supported as an asset');
+  }
 }
 
 export function parseHtmlLinked(config, code) {
