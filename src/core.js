@@ -544,8 +544,16 @@ async function unlinkFiles(config, toDel) {
     onlyNames: true
   });
 
+  const srcBase = vpath([config.src]).base;
+  const fnms = names.map(n => vpath([
+    config.owd,
+    config.output.path,
+    srcBase,
+    n
+  ]).full);
+
   try {
-    await del(names, { force: true });
+    await del(fnms, { force: true });
     markyStop('deleting files', {
       label: strikethrough(delp.base),
       count: names.length
