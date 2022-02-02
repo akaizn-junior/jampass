@@ -6,7 +6,7 @@ import chokidar from 'chokidar';
 import del from 'del';
 import { ESLint } from 'eslint';
 import * as marky from 'marky';
-import { bold } from 'colorette';
+import { bold, strikethrough } from 'colorette';
 
 // node
 import fs from 'fs/promises';
@@ -25,7 +25,9 @@ import {
   createHash,
   parseDynamicName,
   accessProperty,
-  pathDistance
+  pathDistance,
+  fErrName,
+  markyStop
 } from './util.js';
 import {
   validateHtml,
@@ -64,11 +66,12 @@ async function compileView(config, file, locals) {
 
     return await engine(filePath.full, locals);
   } catch (err) {
+    err.name = fErrName(err.name, 'CompileView');
     throw err;
   }
 }
 
-async function funnel(config, file, funneled) {
+async function funnel(config, file, funneled, flags = { onlyNames: false }) {
   log('funnel data to', file);
   const parsed = parseDynamicName(vpath(file).base);
 
@@ -82,6 +85,11 @@ async function funnel(config, file, funneled) {
     return vpath([acc, prop]).full;
   }, '');
 
+  const withView = async(name, locals) => {
+    if (flags.onlyNames) return;
+    return compileView(config, name, locals);
+  };
+
   const funnelData = async(locals, i) => {
     const prop = keysToPath(locals.data, i);
     const keysPath = parsed.place(prop);
@@ -89,7 +97,7 @@ async function funnel(config, file, funneled) {
 
     return {
       name: keysPath,
-      html: await compileView(config, dynamicView, {
+      html: await withView(dynamicView, {
         data: locals.data[i],
         locales: locals.locales
       })
@@ -122,7 +130,7 @@ async function funnel(config, file, funneled) {
   if (!parsed.keys) {
     names.push(parsed.name);
     htmls.push(
-      await compileView(config, file, funneled)
+      await withView(file, funneled)
     );
   }
 
@@ -327,12 +335,13 @@ async function parseViews(config, views, funneled) {
       viewPath: viewPath.full
     }));
 
-    const timer = marky.stop('parsing views');
-    const end = Math.floor(timer.duration) / 1000;
-    const no = _ps.length;
 
-    consola.info(`"${viewPath.base}" -`, no, `- ${end}s`);
-    log('parsed and output', no);
+    markyStop('parsing views', {
+      label: viewPath.base,
+      count: _ps.length
+    });
+
+    log('parsed and output', _ps.length);
 
     Promise.all(_ps);
   });
@@ -526,6 +535,26 @@ async function gen(config, watching = null, more = {}) {
   parseViews(config, views, funneled);
 }
 
+async function unlinkFiles(config, toDel) {
+  marky.mark('deleting files');
+
+  const delp = vpath(toDel);
+  const { funneled } = await getFunneled(config);
+  const { names } = await funnel(config, delp.full, funneled, {
+    onlyNames: true
+  });
+
+  try {
+    await del(names, { force: true });
+    markyStop('deleting files', {
+      label: strikethrough(delp.base),
+      count: names.length
+    });
+  } catch (err) {
+    throw err;
+  }
+}
+
 /**
  * Watches changes on the templates
  * Powered by [Chokidar](https://www.npmjs.com/package/chokidar)
@@ -554,7 +583,7 @@ function watch(config, cb = () => {}, ignore = []) {
   });
 
   const run = p => {
-    log('compiled', p);
+    log('altered', p);
     const ext = vpath(p).ext;
     // the path here excludes the cwd defined above
     // add it back for the full path
@@ -571,11 +600,18 @@ function watch(config, cb = () => {}, ignore = []) {
     _cb();
   };
 
+  const unlink = async p => {
+    log('deleting', p);
+    const fp = vpath([config.cwd, p]).full;
+    unlinkFiles(config, fp);
+    _cb();
+  };
+
   watcher
     .on('change', run)
     .on('addDir', run)
-    .on('unlink', run)
-    .on('unlinkDir', run)
+    .on('unlink', unlink)
+    // .on('unlinkDir', unlink)
     .on('error', err => {
       throw err;
     });

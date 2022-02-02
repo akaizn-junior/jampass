@@ -205,7 +205,7 @@ export async function processCss(config, file, out, justCode = '') {
       consola.log(snippet);
     }
 
-    err.name = fErrName(err.name, 'processCss', ['CssSyntaxError']);
+    err.name = fErrName(err.name, 'ProcessCss', ['CssSyntaxError']);
     throw err;
   }
 }
@@ -353,7 +353,7 @@ export async function minifyHtml(config, file) {
 
     return res;
   } catch (err) {
-    err.name = fErrName(err.name, 'minifyHtml');
+    err.name = fErrName(err.name, 'MinifyHtml');
     throw err;
   }
 }

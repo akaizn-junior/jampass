@@ -4,6 +4,7 @@ import consola from 'consola';
 import del from 'del';
 import { minify } from 'minify';
 import dotenv from 'dotenv';
+import * as marky from 'marky';
 
 // node
 import fs from 'fs';
@@ -20,6 +21,7 @@ const LOCALS_FIELD_END_TOKEN = ']';
 const LOCALS_PATH_TOKEN = '_';
 const LOCALS_INDEX_TOKEN = ':';
 const LOCALS_LOOP_TOKEN = '-';
+const MAX_RECURSIVE_ACESS = 7;
 
 // quick setup
 export const cachedir = findCacheDir({ name: defaultconfig.name });
@@ -125,15 +127,14 @@ export function handleThrown(config) {
 
 /**
  * Validates and parses a path
- * @param {string|string[]} p The path to parse.
- * May also be a list of paths. The paths will be joined and used as one pathString
- * @param {boolean} withStats Indicates whether or not to verify if the path exists
+ * @param {string|string[]} p The path to parse or a list of paths
+ * @param {boolean} withStats Get path stats
  */
 export function vpath(p, withStats = false) {
   try {
     let stats = null;
     const str = Array.isArray(p) ? path.join(...p) : p;
-    if (withStats) stats = fs.statSync(str);
+    if (withStats) stats = fs.statSync(str); // for now this stays a sync op
     const parsed = path.parse(str);
 
     return {
@@ -184,20 +185,21 @@ export function accessProperty(obj, key, start = 0) {
     throw Error('Undefined key, key must be of type string');
   }
 
-  let i = start;
   const list = key.split('.');
-  const value = obj[list[i]];
+  let i = start;
+  const j = list[i];
+  const value = obj[j];
 
-  if (!value) throw Error(`Data key "${list[i]}" is undefined`);
+  if (!value) throw Error(`Data key "${j}" is undefined`);
 
-  if (list.length < 7) {
+  if (list.length < MAX_RECURSIVE_ACESS) {
     if (i < list.length - 1) {
       return accessProperty(value, key, ++i);
     } else {
       return value;
     }
   } else {
-    throw Error('This property is 7 levels deep. Flatten your data for better access.');
+    throw Error(`Reached max recursive acess ${MAX_RECURSIVE_ACESS}`);
   }
 }
 
@@ -209,13 +211,8 @@ export function parseDynamicName(fnm) {
 
   log('dynamic filename', fnm);
 
-  // fail if no dyanmic name found
-  // but has loop token
-  if (!isDynamicName && fnm.startsWith(LOCALS_LOOP_TOKEN)) {
-    throw Error('Please provide a dynamic name to loop');
-  }
-
   if (isDynamicName) {
+    const hasLoopToken = fnm.startsWith(LOCALS_LOOP_TOKEN);
     const prefix = fnm.substring(0, dynBeginIndex);
     const suffix = fnm.substring(dynEndIndex + 1, fnm.length);
     const localKeys = String(fnm).substring(dynBeginIndex + 1, dynEndIndex);
@@ -237,20 +234,20 @@ export function parseDynamicName(fnm) {
 
     log('dynamic keys', keys);
 
-    // remove any loop token in front of the prefix
-    const cleanPrefix = prefix.startsWith(LOCALS_LOOP_TOKEN)
+    // if is valid remove the loop token here
+    const cleanPrefix = hasLoopToken
       ? prefix.substring(1, prefix.length)
       : prefix;
 
     return {
       keys,
-      loop: fnm.startsWith(LOCALS_LOOP_TOKEN),
+      loop: hasLoopToken,
       name: fnm,
       prefix: cleanPrefix,
       suffix,
       place: str => {
         if (str.endsWith(path.sep) && suffix.startsWith('.')) {
-          return cleanPrefix.concat(str, 'index', suffix);
+          return cleanPrefix.concat(str, 'index.html');
         }
 
         return cleanPrefix.concat(str, suffix);
@@ -341,5 +338,12 @@ export function fErrName(name, prefix, exclude = []) {
     return name;
   }
 
-  return prefix.concat('_', name);
+  return prefix.concat(name);
+}
+
+export function markyStop(name, { label, count }) {
+  const timer = marky.stop(name);
+  const end = Math.floor(timer.duration) / 1000;
+
+  consola.info(`"${label}" -`, count, `- ${end}s`);
 }
