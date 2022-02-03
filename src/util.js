@@ -92,10 +92,6 @@ export function createHash(content, len = null) {
 
 export function handleThrown(config) {
   return err => {
-    const code = err.name || err.code || '';
-    consola.error(code);
-    consola.log(err);
-
     const end = () => {
       // eslint-disable-next-line no-process-exit
       process.exit(1);
@@ -109,7 +105,14 @@ export function handleThrown(config) {
       'HtmlValidatorError'
     ];
 
-    if (!(special.includes(code) && config.watch)) {
+    const errname = err.name || err.code || '';
+
+    if (!special.includes(errname)) {
+      consola.error(errname);
+      consola.log(err);
+    }
+
+    if (!config.watch) {
       // clean output folder
       const outputPath = vpath([config.cwd, config.output.path]).full;
       del(outputPath)
@@ -119,7 +122,6 @@ export function handleThrown(config) {
         .catch(err => {
           throw err;
         });
-
       end();
     }
   };
@@ -346,4 +348,12 @@ export function markyStop(name, { label, count }) {
   const end = Math.floor(timer.duration) / 1000;
 
   consola.info(`"${label}" -`, count, `- ${end}s`);
+}
+
+export function splitPathCwd(cwd, s) {
+  if (s.startsWith(cwd)) {
+    const p = s.split(cwd + path.sep)[1];
+    return p;
+  }
+  return s;
 }

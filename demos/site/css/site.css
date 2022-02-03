@@ -10,6 +10,11 @@ body {
   font-family: Verdana, Geneva, Tahoma, sans-serif;
 }
 
+.wrapper {
+  margin: 5% auto;
+  max-width: 1000px;
+}
+
 header {
   width: 100%;
   text-align: center;

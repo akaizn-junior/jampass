@@ -11,7 +11,7 @@ for (let i = 0; i < fakeItemsCount; i++) {
 
   fakeData.push({
     name: faker.name.firstName(),
-    description: faker.lorem.words(3),
+    description: faker.lorem.words(500),
     breed: faker.animal.cat(),
     insertedAt: `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`,
     photo: faker.image.dataUri(500, 500, colors[faker.datatype.number(colors.length)])

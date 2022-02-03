@@ -21,7 +21,8 @@ import {
   tmpdir,
   compress,
   createHash,
-  fErrName
+  fErrName,
+  splitPathCwd
 } from './util.js';
 
 function spliceCodeSnippet(code, lnumber, column = 0, range = 5) {
@@ -200,8 +201,10 @@ export async function processCss(config, file, out, justCode = '') {
       // this err object by postcss
       // conctains a few important keys
       const snippet = spliceCodeSnippet(err.source, err.line);
-      consola.info('processCss()', `"${err.file}" invalid css`, EOL);
-      consola.log(`${err.line}:${err.column}`, 'CssSyntaxError', `"${err.reason}"`, EOL);
+      const emsg = splitPathCwd(config.cwd, err.file || file)
+        .concat(':', err.line, ':', err.column);
+
+      consola.log(EOL, 'CssSyntaxError', emsg, `"${err.reason}"`, EOL);
       consola.log(snippet);
     }
 
@@ -329,13 +332,13 @@ export async function updateScriptTagJs(code) {
   return $.html();
 }
 
-export async function updateStyleTagCss(config, code) {
+export async function updateStyleTagCss(config, code, file = '') {
   const $ = cheerio.load(code);
   const styleTags = $('style');
 
   for (const elem of styleTags) {
     const innerCss = $(elem).html();
-    const res = await processCss(config, '', '', innerCss);
+    const res = await processCss(config, file, '', innerCss);
     $(elem).html(res.css);
   }
 

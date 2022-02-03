@@ -27,7 +27,8 @@ import {
   accessProperty,
   pathDistance,
   fErrName,
-  markyStop
+  markyStop,
+  splitPathCwd
 } from './util.js';
 import {
   validateHtml,
@@ -332,18 +333,18 @@ async function parseViews(config, views, funneled) {
       checksum,
       srcBase,
       outputPath,
+      count: htmls.length,
       viewPath: viewPath.full
     }));
 
+    log('parsed and output', _ps.length);
+
+    Promise.all(_ps);
 
     markyStop('parsing views', {
       label: viewPath.base,
       count: _ps.length
     });
-
-    log('parsed and output', _ps.length);
-
-    Promise.all(_ps);
   });
 
   Promise.all(ps);
@@ -383,8 +384,10 @@ async function validateAndUpdateHtml(config, data) {
 
     return await updateAndWriteHtml(config, { html, assets: reAssets });
   } catch (err) {
-    const d = await del([data.outputPath.full], { force: true });
-    log('clean output', d);
+    if (!config.watch) {
+      const d = await del([data.outputPath.full], { force: true });
+      log('clean output', d);
+    }
     throw err;
   }
 }
@@ -398,7 +401,7 @@ async function updateAndWriteHtml(config, parsed) {
     const uLinkedCss = updatedHtmlLinkedCss(html.code, assets['.css']);
     const uLinkedJs = updatedHtmlLinkedJs(uLinkedCss, assets['.js']);
 
-    const uStyleTags = await updateStyleTagCss(config, uLinkedJs);
+    const uStyleTags = await updateStyleTagCss(config, uLinkedJs, html.from);
     const uScriptTags = await updateScriptTagJs(uStyleTags);
 
     let minHtml = uScriptTags;
@@ -453,7 +456,7 @@ async function parseAsset(config, asset, ext) {
 
   for (let i = 0; i < asset.length; i++) {
     const file = asset[i];
-    const fileBase = file.split(config.src + path.sep)[1];
+    const fileBase = splitPathCwd(config.cwd, file);
     const exists = keep.get(fileBase);
 
     // only parse asset if it exists
@@ -471,7 +474,7 @@ async function parseAsset(config, asset, ext) {
         };
 
         writeFile(res.out, res.code);
-        consola.info('processed asset', file);
+        consola.info('processed asset', `"${fileBase}"`);
       } else {
         consola.error('failed processing asset');
       }
@@ -545,16 +548,16 @@ async function unlinkFiles(config, toDel) {
   });
 
   const srcBase = vpath([config.src]).base;
-  const fnms = names.map(n => vpath([
+  const fnms = names.map(nm => vpath([
     config.owd,
     config.output.path,
     srcBase,
-    n
+    nm
   ]).full);
 
   try {
-    await del(fnms, { force: true });
-    markyStop('deleting files', {
+    const deld = await del(fnms, { force: true });
+    deld.length && markyStop('deleting files', {
       label: strikethrough(delp.base),
       count: names.length
     });
@@ -608,7 +611,7 @@ function watch(config, cb = () => {}, ignore = []) {
     _cb();
   };
 
-  const unlink = async p => {
+  const unl = async p => {
     log('deleting', p);
     const fp = vpath([config.cwd, p]).full;
     unlinkFiles(config, fp);
@@ -618,7 +621,7 @@ function watch(config, cb = () => {}, ignore = []) {
   watcher
     .on('change', run)
     .on('addDir', run)
-    .on('unlink', unlink)
+    .on('unlink', unl)
     // .on('unlinkDir', unlink)
     .on('error', err => {
       throw err;
@@ -651,14 +654,8 @@ function serve(config) {
      * @see https://browsersync.io/docs/options/#option-callbacks
      */
     callbacks: {
-      /**
-       * This 'ready' callback can be used
-       * to access the Browsersync instance
-       */
       ready(err, _bs) {
-        if (err) {
-          throw err;
-        }
+        if (err) throw err;
 
         _bs.addMiddleware('*', (_, res) => {
           res.writeHead(302, {
