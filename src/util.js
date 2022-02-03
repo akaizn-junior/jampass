@@ -38,9 +38,19 @@ export const tmpdir = (() => {
   return dir;
 })();
 
+// consola instance
+export const logger = consola.create({
+  level: 4,
+  throttle: 3,
+  async: true,
+  reporters: [
+    new consola.FancyReporter()
+  ]
+});
+
 // bind debug log to consola info
-debug.log = consola.info.bind(consola);
-export const log = debug(defaultconfig.name);
+debug.log = logger.log.bind(logger);
+export const debuglog = debug(defaultconfig.name);
 
 export function toggleDebug(toggle) {
   if (toggle) debug.enable(defaultconfig.name);
@@ -97,7 +107,7 @@ export function handleThrown(config) {
       process.exit(1);
     };
 
-    log('error object keys', Object.keys(err));
+    debuglog('error object keys', Object.keys(err));
 
     // special cases
     const special = [
@@ -108,8 +118,8 @@ export function handleThrown(config) {
     const errname = err.name || err.code || '';
 
     if (!special.includes(errname)) {
-      consola.error(errname);
-      consola.log(err);
+      logger.error(errname);
+      logger.log(err);
     }
 
     if (!config.watch) {
@@ -117,10 +127,7 @@ export function handleThrown(config) {
       const outputPath = vpath([config.cwd, config.output.path]).full;
       del(outputPath)
         .then(cleaned => {
-          log('cleaned because of error: ', cleaned);
-        })
-        .catch(err => {
-          throw err;
+          debuglog('error! cleaned output', cleaned);
         });
       end();
     }
@@ -206,12 +213,12 @@ export function accessProperty(obj, key, start = 0) {
 }
 
 export function parseDynamicName(fnm) {
-  log('parsing dynamic name');
+  debuglog('parsing dynamic name');
   const dynBeginIndex = fnm.indexOf(LOCALS_FIELD_BEGIN_TOKEN);
   const dynEndIndex = fnm.indexOf(LOCALS_FIELD_END_TOKEN);
   const isDynamicName = dynBeginIndex !== -1 && dynEndIndex !== -1;
 
-  log('dynamic filename', fnm);
+  debuglog('dynamic filename', fnm);
 
   if (isDynamicName) {
     const hasLoopToken = fnm.startsWith(LOCALS_LOOP_TOKEN);
@@ -234,7 +241,7 @@ export function parseDynamicName(fnm) {
       };
     });
 
-    log('dynamic keys', keys);
+    debuglog('dynamic keys', keys);
 
     // if is valid remove the loop token here
     const cleanPrefix = hasLoopToken
@@ -346,8 +353,7 @@ export function fErrName(name, prefix, exclude = []) {
 export function markyStop(name, { label, count }) {
   const timer = marky.stop(name);
   const end = Math.floor(timer.duration) / 1000;
-
-  consola.info(`"${label}" -`, count, `- ${end}s`);
+  logger.success(`"${label}" -`, count, `- ${end}s`);
 }
 
 export function splitPathCwd(cwd, s) {

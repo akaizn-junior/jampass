@@ -1,4 +1,3 @@
-import consola from 'consola';
 import htmlValidator from 'html-validator';
 import cheerio from 'cheerio';
 import { bold, bgBlack, red } from 'colorette';
@@ -22,7 +21,8 @@ import {
   compress,
   createHash,
   fErrName,
-  splitPathCwd
+  splitPathCwd,
+  logger
 } from './util.js';
 
 function spliceCodeSnippet(code, lnumber, column = 0, range = 5) {
@@ -80,17 +80,17 @@ export async function validateHtml(html, opts) {
     // log('validate html result %o', res);
 
     if (!res.isValid) {
-      consola.info('validateHtml()', `"${opts.view}" invalid html`, EOL);
+      logger.info('validateHtml()', `"${opts.view}" invalid html`, EOL);
     }
 
     res.errors.forEach(err => {
-      consola.log(`${err.line}:${err.column}`, `"${err.ruleId}"`, err.message, EOL);
-      consola.log(spliceCodeSnippet(html, err.line, err.column));
+      logger.log(`${err.line}:${err.column}`, `"${err.ruleId}"`, err.message, EOL);
+      logger.log(spliceCodeSnippet(html, err.line, err.column));
     });
 
     res.warnings.forEach(warn => {
-      consola.log(`${warn.line}:${warn.column}`, `"${warn.ruleId}"`, warn.message);
-      consola.log(spliceCodeSnippet(html, warn.line, warn.column));
+      logger.log(`${warn.line}:${warn.column}`, `"${warn.ruleId}"`, warn.message);
+      logger.log(spliceCodeSnippet(html, warn.line, warn.column));
     });
 
     if (!res.isValid) throw Error('HTML validation');
@@ -204,8 +204,8 @@ export async function processCss(config, file, out, justCode = '') {
       const emsg = splitPathCwd(config.cwd, err.file || file)
         .concat(':', err.line, ':', err.column);
 
-      consola.log(EOL, 'CssSyntaxError', emsg, `"${err.reason}"`, EOL);
-      consola.log(snippet);
+      logger.log(EOL, 'CssSyntaxError', emsg, `"${err.reason}"`, EOL);
+      logger.log(snippet);
     }
 
     err.name = fErrName(err.name, 'ProcessCss', ['CssSyntaxError']);
@@ -222,7 +222,7 @@ export function processAsset(ext, config, file, out) {
   try {
     return fns[ext](config, file, out);
   } catch {
-    consola.info(ext, 'is not yet supported as an asset');
+    logger.info(ext, 'is not yet supported as an asset');
   }
 }
 
@@ -255,7 +255,7 @@ export function parseHtmlLinked(config, code) {
     } catch (err) {
       if (err.code === 'ENOENT') {
         err.name = 'HtmlLinkedCssWarn';
-        consola.info('file "%s" not found locally', el.attribs.href);
+        logger.info('file "%s" not found locally', el.attribs.href);
       }
     }
   });
@@ -277,7 +277,7 @@ export function parseHtmlLinked(config, code) {
     } catch (err) {
       if (err.code === 'ENOENT') {
         err.name = 'HtmlLinkedScriptWarn';
-        consola.info('file "%s" not found locally', el.attribs.src);
+        logger.info('file "%s" not found locally', el.attribs.src);
       } else {
         throw err;
       }

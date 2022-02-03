@@ -1,5 +1,4 @@
 // vendors
-import consola from 'consola';
 import cons from 'consolidate';
 import browserSync from 'browser-sync';
 import chokidar from 'chokidar';
@@ -14,7 +13,8 @@ import path from 'path';
 
 // local
 import {
-  log,
+  debuglog,
+  logger,
   vpath,
   loadUserEnv,
   safeFun,
@@ -48,7 +48,7 @@ import bSyncMiddleware from './bs.middleware.js';
 // quick setup
 
 const userEnv = loadUserEnv();
-log(userEnv);
+debuglog(userEnv);
 
 // ++++++++++++++++
 // HELPERS
@@ -73,7 +73,7 @@ async function compileView(config, file, locals) {
 }
 
 async function funnel(config, file, funneled, flags = { onlyNames: false }) {
-  log('funnel data to', file);
+  debuglog('funnel data to', file);
   const parsed = parseDynamicName(vpath(file).base);
 
   const keysToPath = (locals, i) => parsed.keys?.reduce((acc, item) => {
@@ -142,12 +142,8 @@ async function funnel(config, file, funneled, flags = { onlyNames: false }) {
 }
 
 function readSource(src) {
-  log('reading source');
-
   const files = getDirPaths(src, 'full');
-  log(files);
-
-  log('classify files read by extension');
+  debuglog('source data', files);
 
   const classified = files.reduce((acc, file) => {
     const ext = vpath(file).ext;
@@ -161,7 +157,7 @@ function readSource(src) {
     return acc;
   }, {});
 
-  log(classified);
+  debuglog('files classified by extension', classified);
   return classified;
 }
 
@@ -189,7 +185,7 @@ async function parseLinkedAssets(config, assets) {
 
           return passed;
         } else {
-          consola.error('failed processing asset');
+          logger.error('failed processing asset');
         }
       }
 
@@ -259,7 +255,7 @@ function writeAssets(assets) {
     const exists = keep.get(asset.from);
 
     if (!exists || exists.out !== asset.out) {
-      log('generated asset', asset.out);
+      debuglog('generated asset', asset.out);
       writeFile(asset.out, asset.code);
     }
   });
@@ -282,7 +278,7 @@ function rearrangeAssetPaths(html, assets) {
 }
 
 async function parseViews(config, views, funneled) {
-  log('parsing src views');
+  debuglog('parsing src views');
   marky.mark('parsing views');
 
   const srcBase = vpath([config.cwd, config.src]).base;
@@ -311,13 +307,13 @@ async function parseViews(config, views, funneled) {
     }, [])
   );
 
-  log('views count', _views.length);
+  debuglog('views count', _views.length);
 
   if (!config.watch) {
     const cleaned = await del(
       [`${outputPath.full}/**`, `!${outputPath.full}`]
     );
-    log('clean output', cleaned);
+    debuglog('clean output', cleaned);
   }
 
   const ps = _views.map(async view => {
@@ -337,7 +333,7 @@ async function parseViews(config, views, funneled) {
       viewPath: viewPath.full
     }));
 
-    log('parsed and output', _ps.length);
+    debuglog('parsed and output', _ps.length);
 
     Promise.all(_ps);
 
@@ -386,7 +382,7 @@ async function validateAndUpdateHtml(config, data) {
   } catch (err) {
     if (!config.watch) {
       const d = await del([data.outputPath.full], { force: true });
-      log('clean output', d);
+      debuglog('clean output', d);
     }
     throw err;
   }
@@ -421,9 +417,9 @@ async function getFunneled(config, cacheBust = '') {
   const cb = cacheBust || '';
   const url = `${dataPath}?bust=${cb}`;
 
-  log('funnel data path', dataPath);
-  log('funneled data cache bust', cacheBust);
-  log('funneled data url', url);
+  debuglog('funnel data path', dataPath);
+  debuglog('funneled data cache bust', cacheBust);
+  debuglog('funneled data url', url);
 
   try {
     const imported = await import(url);
@@ -451,7 +447,7 @@ async function getFunneled(config, cacheBust = '') {
 }
 
 async function parseAsset(config, asset, ext) {
-  log('parsing asset');
+  debuglog('parsing asset');
   const srcBase = vpath([config.cwd, config.src]).base;
 
   for (let i = 0; i < asset.length; i++) {
@@ -474,9 +470,9 @@ async function parseAsset(config, asset, ext) {
         };
 
         writeFile(res.out, res.code);
-        consola.info('processed asset', `"${fileBase}"`);
+        logger.info('processed asset', `"${fileBase}"`);
       } else {
-        consola.error('failed processing asset');
+        logger.error('failed processing asset');
       }
     }
   }
@@ -491,7 +487,7 @@ function withConfig(config, done) {
   process.on('unhandledRejection', handleThrown(config));
 
   toggleDebug(config.debug);
-  log('user config %O', config);
+  debuglog('user config %O', config);
 
   // output working directory
   config.owd = config.cwd;
@@ -503,10 +499,10 @@ function withConfig(config, done) {
   config.env = process.env.NODE_ENV;
   config.isDev = config.env !== 'production';
 
-  log('working environment', config.env);
-  log('watch mode', config.watch);
-  log('output working directory', config.owd);
-  log('public output directory', config.output.path);
+  debuglog('user environment "%s"', config.env);
+  debuglog('watch mode', config.watch);
+  debuglog('output working directory', config.owd);
+  debuglog('public output directory', config.output.path);
 
   return done(config);
 }
@@ -521,7 +517,7 @@ async function gen(config, watching = null, more = {}) {
   const funCacheBust = watchFunnel ? Date.now() : null;
   const { funneled, funKeys } = await getFunneled(config, funCacheBust);
 
-  log('preview funneled data', funKeys);
+  debuglog('preview funneled data', funKeys);
 
   const srcPath = vpath([config.cwd, config.src]);
   const read = readSource(srcPath.full);
@@ -588,13 +584,13 @@ function watch(config, cb = () => {}, ignore = []) {
   });
 
   watcher.on('ready', () => {
-    consola.info('watching', watchPath.full);
+    logger.info('watching', watchPath.full);
     gen(config);
     _cb();
   });
 
   const run = p => {
-    log('altered', p);
+    debuglog('altered', p);
     const ext = vpath(p).ext;
     // the path here excludes the cwd defined above
     // add it back for the full path
@@ -612,7 +608,7 @@ function watch(config, cb = () => {}, ignore = []) {
   };
 
   const unl = async p => {
-    log('deleting', p);
+    debuglog('deleting', p);
     const fp = vpath([config.cwd, p]).full;
     unlinkFiles(config, fp);
     _cb();
@@ -671,9 +667,9 @@ function serve(config) {
 }
 
 async function lint(config) {
-  log('linting source code');
-  log('auto fix linting', config.fix);
-  log('linting cwd', config.cwd);
+  debuglog('linting source code');
+  debuglog('auto fix linting', config.fix);
+  debuglog('linting cwd', config.cwd);
 
   const eslint = new ESLint({
     fix: config.fix,
@@ -688,7 +684,7 @@ async function lint(config) {
     // format res for stdout
     const fmtr = await eslint.loadFormatter('stylish');
     const text = fmtr.format(res);
-    text.length && consola.log(text);
+    text.length && logger.log(text);
   } catch (err) {
     throw err;
   }

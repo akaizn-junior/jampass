@@ -13,7 +13,7 @@
     "watch": "node src/cli watch -s demos/site",
     ":lint": "node src/cli lint -s demos/site",
     "start": "node src/cli -s demos/site",
-    "debug": "node --inspect src/cli watch -s demos/site"
+    "debug": "node --inspect src/cli watch -s demos/site -D"
   },
   "keywords": [
     "SSG",

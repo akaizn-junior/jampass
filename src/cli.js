@@ -2,6 +2,7 @@
 
 // vendors
 import { Command } from 'commander';
+import { logger } from './util.js';
 
 // node
 import fs from 'fs';
@@ -19,7 +20,8 @@ const cli = new Command();
 cli.name(config.name);
 cli.description('A static web builder');
 cli.version(config.version, '-v, --version', 'output the version number');
-cli.showHelpAfterError(true);
+cli.showSuggestionAfterError(true);
+cli.exitOverride(); // throw on parsing error
 
 // ++++++++++++++++++++++++
 // Helpers
@@ -102,6 +104,7 @@ cli
 cli
   .command('watch')
   .description('watch source edits')
+  .option('-wf', 'allow funnel changes to re-generate pages', false)
   .action((_, d) => withConfig(d, c => core.watch(c)));
 
 cli
@@ -115,4 +118,8 @@ cli
 // Parse CLI
 // ++++++++++++++++++++++++
 
-cli.parse(process.argv);
+try {
+  cli.parse(process.argv);
+} catch {
+  logger.log('Tchau.');
+}
