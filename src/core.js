@@ -362,7 +362,7 @@ async function validateAndUpdateHtml(config, data) {
   };
 
   try {
-    validateHtml(html.code.toString(), {
+    validateHtml(config, html.code.toString(), {
       view: data.viewPath,
       out: html.out
     });

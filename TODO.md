@@ -1,5 +1,5 @@
 # TODO
 
-- [] subdirectories should only exist on toplevel page or the user may configure this
+- [] check if postcss handles css imports, must process css imported files as well. note https://www.npmjs.com/package/get-css-data
 
-- [] allow the user to indicate their error page location instead to only ask for 404.html
+- [x] reajust line numbers in html css error, currently the lines are based on the css read and not the whole html file

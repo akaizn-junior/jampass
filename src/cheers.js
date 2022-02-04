@@ -1,6 +1,5 @@
 import htmlValidator from 'html-validator';
 import cheerio from 'cheerio';
-import { bold, bgBlack, red } from 'colorette';
 import browserify from 'browserify';
 
 // postcss and plugins
@@ -22,50 +21,12 @@ import {
   createHash,
   fErrName,
   splitPathCwd,
-  logger
+  logger,
+  spliceCodeSnippet
 } from './util.js';
 
-function spliceCodeSnippet(code, lnumber, column = 0, range = 5) {
-  const multiLineString = code;
-  const lines = multiLineString.split(EOL);
 
-  const cut = (a, b, max) => {
-    const lower = a < 0 ? 0 : a;
-    const upper = b > max ? max : b;
-    return { lower, upper };
-  };
-
-  const markLine = (s, a, b, max) => {
-    const prefix = s.substring(0, a);
-    const current = s.substring(a, b);
-    const suffix = s.substring(b, max);
-    return prefix.concat(red(current), suffix);
-  };
-
-  // get only lines withing a range
-  const lrange = cut(
-    lnumber - range,
-    lnumber + range,
-    lines.length
-  );
-  const slice = lines.map((l, i) => {
-    const ln = i + 1;
-
-    if (ln === lnumber) {
-      const c = cut(column - 1, column + 1, l.length);
-      const ml = markLine(l, c.lower, c.upper, l.length);
-      return bold(`${ln} ${ml}`);
-    }
-
-    return `${ln} ${l}`;
-  })
-    .slice(lrange.lower, lrange.upper);
-
-  const snippet = bgBlack(slice.join(EOL)).concat(EOL);
-  return snippet;
-}
-
-export async function validateHtml(html, opts) {
+export async function validateHtml(config, html, opts) {
   if (!html || typeof html !== 'string') {
     throw Error(`validateHtml() takes a html string. "${html}" given`);
   }
@@ -77,24 +38,23 @@ export async function validateHtml(html, opts) {
       validator: 'WHATWG'
     });
 
-    // log('validate html result %o', res);
-
-    if (!res.isValid) {
-      logger.info('validateHtml()', `"${opts.view}" invalid html`, EOL);
-    }
+    const msg = err => {
+      const emsg = splitPathCwd(config.cwd, opts.view)
+        .concat(':', err.line, ':', err.column);
+      logger.log(EOL, 'HtmlValidatorError', emsg, `"${err.ruleId}"`, err.message, EOL);
+    };
 
     res.errors.forEach(err => {
-      logger.log(`${err.line}:${err.column}`, `"${err.ruleId}"`, err.message, EOL);
+      msg(err);
       logger.log(spliceCodeSnippet(html, err.line, err.column));
     });
 
     res.warnings.forEach(warn => {
-      logger.log(`${warn.line}:${warn.column}`, `"${warn.ruleId}"`, warn.message);
+      msg(warn);
       logger.log(spliceCodeSnippet(html, warn.line, warn.column));
     });
 
-    if (!res.isValid) throw Error('HTML validation');
-
+    if (!res.isValid) throw Error('HtmlValidatorError');
     return res.isValid;
   } catch (err) {
     err.name = 'HtmlValidatorError';
@@ -168,7 +128,10 @@ export async function processJs(config, file, out) {
   };
 }
 
-export async function processCss(config, file, out, justCode = '') {
+export async function processCss(config, file, out, opts = {
+  justCode: '',
+  startIndex: 0
+}) {
   const plugins = [
     postcssPresetEnv(),
     cssnano(),
@@ -186,8 +149,8 @@ export async function processCss(config, file, out, justCode = '') {
   );
 
   try {
-    let code = justCode;
-    if (file && !justCode) code = await fs.readFile(file);
+    let code = opts.justCode;
+    if (file && !opts.justCode) code = await fs.readFile(file);
 
     const processed = await postcss(plugins)
       .process(code, { from: file, to: out });
@@ -198,11 +161,12 @@ export async function processCss(config, file, out, justCode = '') {
     };
   } catch (err) {
     if (err.name === 'CssSyntaxError') {
-      // this err object by postcss
-      // conctains a few important keys
-      const snippet = spliceCodeSnippet(err.source, err.line);
+      const snippet = spliceCodeSnippet(err.source, err.line, 0, {
+        startIndex: opts.startIndex
+      });
+
       const emsg = splitPathCwd(config.cwd, err.file || file)
-        .concat(':', err.line, ':', err.column);
+        .concat(':', err.line + opts.startIndex, ':', err.column);
 
       logger.log(EOL, 'CssSyntaxError', emsg, `"${err.reason}"`, EOL);
       logger.log(snippet);
@@ -338,7 +302,15 @@ export async function updateStyleTagCss(config, code, file = '') {
 
   for (const elem of styleTags) {
     const innerCss = $(elem).html();
-    const res = await processCss(config, file, '', innerCss);
+    // this element start index in the code
+    const eIndex = code.indexOf(innerCss);
+    const startIndex = code.substring(0, eIndex)
+      .split(EOL).length;
+
+    const res = await processCss(config, file, '', {
+      justCode: innerCss,
+      startIndex: startIndex - 1
+    });
     $(elem).html(res.css);
   }
 

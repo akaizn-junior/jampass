@@ -5,11 +5,12 @@ import del from 'del';
 import { minify } from 'minify';
 import dotenv from 'dotenv';
 import * as marky from 'marky';
+import { bold, bgBlack, red } from 'colorette';
 
 // node
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import os, { EOL } from 'os';
 import crypto from 'crypto';
 
 // local
@@ -362,4 +363,51 @@ export function splitPathCwd(cwd, s) {
     return p;
   }
   return s;
+}
+
+export function spliceCodeSnippet(code, lnumber, column = 0, opts = {}) {
+  const multiLineString = code;
+  const lines = multiLineString.split(EOL);
+  opts = Object.assign({
+    range: 5,
+    startIndex: 0
+  }, opts);
+
+  const cut = (a, b, max) => {
+    const lower = a < 0 ? 0 : a;
+    const upper = b > max ? max : b;
+    return { lower, upper };
+  };
+
+  const markLine = (s, a, b, max) => {
+    const prefix = s.substring(0, a);
+    const word = s.substring(a, b);
+    const suffix = s.substring(b, max);
+    return prefix.concat(red(word), suffix);
+  };
+
+  // get only lines withing a range
+  const lrange = cut(
+    lnumber - opts.range,
+    lnumber + opts.range,
+    lines.length
+  );
+
+  let maxLineLen = 50;
+  const slice = lines.map((line, i) => {
+    const ln = i + 1 + opts.startIndex;
+    maxLineLen = maxLineLen < line.length ? line.length : maxLineLen;
+
+    if (ln === lnumber + opts.startIndex) {
+      const c = cut(column - 1, column + 1, line.length);
+      const ml = markLine(line, c.lower, c.upper, line.length);
+      return bold(`${ln} ${ml}`);
+    }
+
+    return `${ln} ${line}`;
+  })
+    .slice(lrange.lower, lrange.upper);
+
+  const snippet = bgBlack(slice.join(EOL)).concat(EOL);
+  return snippet;
 }
