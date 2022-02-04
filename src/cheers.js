@@ -41,7 +41,9 @@ export async function validateHtml(config, html, opts) {
     const msg = err => {
       const emsg = splitPathCwd(config.cwd, opts.view)
         .concat(':', err.line, ':', err.column);
-      logger.log(EOL, 'HtmlValidatorError', emsg, `"${err.ruleId}"`, err.message, EOL);
+
+      logger.log(EOL);
+      logger.log('HtmlValidatorError', emsg, `"${err.ruleId}"`, err.message, EOL);
     };
 
     res.errors.forEach(err => {
@@ -168,8 +170,10 @@ export async function processCss(config, file, out, opts = {
       const emsg = splitPathCwd(config.cwd, err.file || file)
         .concat(':', err.line + opts.startIndex, ':', err.column);
 
-      logger.log(EOL, 'CssSyntaxError', emsg, `"${err.reason}"`, EOL);
-      logger.log(snippet);
+      logger.log(EOL);
+      logger.log('CssSyntaxError', emsg, `"${err.reason}"`, EOL);
+      process.stdout.write(snippet);
+      // console.log(snippet);
     }
 
     err.name = fErrName(err.name, 'ProcessCss', ['CssSyntaxError']);

@@ -5,7 +5,7 @@ import del from 'del';
 import { minify } from 'minify';
 import dotenv from 'dotenv';
 import * as marky from 'marky';
-import { bold, bgBlack, red } from 'colorette';
+import { bold, red } from 'colorette';
 
 // node
 import fs from 'fs';
@@ -393,21 +393,19 @@ export function spliceCodeSnippet(code, lnumber, column = 0, opts = {}) {
     lines.length
   );
 
-  let maxLineLen = 50;
   const slice = lines.map((line, i) => {
     const ln = i + 1 + opts.startIndex;
-    maxLineLen = maxLineLen < line.length ? line.length : maxLineLen;
 
     if (ln === lnumber + opts.startIndex) {
       const c = cut(column - 1, column + 1, line.length);
       const ml = markLine(line, c.lower, c.upper, line.length);
-      return bold(`${ln} ${ml}`);
+      return bold(`${ln}${ml}`).concat(EOL);
     }
 
-    return `${ln} ${line}`;
+    return `${ln}${line}`.concat(EOL);
   })
     .slice(lrange.lower, lrange.upper);
 
-  const snippet = bgBlack(slice.join(EOL)).concat(EOL);
+  const snippet = slice.join('').concat(EOL);
   return snippet;
 }
