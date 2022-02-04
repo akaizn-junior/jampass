@@ -9,13 +9,13 @@ export default {
   name: pkg.name,
   version: pkg.version,
   configFile: 'jampass.config.js',
-  dataFile: 'jampass.data.js',
   userOpts: {
     cwd: process.cwd(),
     src: './demos/site',
     debug: false,
     locales: [],
-    watchFunnel: true,
+    funnel: 'jampass.data.js',
+    watchFunnel: false,
     views: {
       engine: {
         name: 'handlebars',

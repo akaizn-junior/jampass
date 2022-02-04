@@ -22,7 +22,8 @@ import {
   fErrName,
   splitPathCwd,
   logger,
-  spliceCodeSnippet
+  spliceCodeSnippet,
+  getSrcBase
 } from './util.js';
 
 
@@ -101,7 +102,7 @@ export async function processJs(config, file, out) {
   let to = outpath.full;
 
   const name = vpath(file).base;
-  const srcBase = vpath([config.cwd, config.src]).base;
+  const srcBase = getSrcBase(config);
   const tmpfile = vpath([tmpdir, srcBase, name]).full;
 
   const bundle = f => new Promise((res, rej) => {

@@ -21,6 +21,7 @@ cli.name(config.name);
 cli.description('A static web builder');
 cli.version(config.version, '-v, --version', 'output the version number');
 cli.showSuggestionAfterError(true);
+cli.showHelpAfterError(true);
 cli.exitOverride(); // throw on parsing error
 
 // ++++++++++++++++++++++++
@@ -28,12 +29,9 @@ cli.exitOverride(); // throw on parsing error
 // ++++++++++++++++++++++++
 
 function loadUserConfig(args) {
-  const opts = args.opts;
-  const cmdOpts = args.cmdOpts;
-
   let userOpts = config.userOpts;
-  const userSource = opts.src || config.userOpts.src;
-  const configFile = opts.config || config.configFile;
+  const userSource = args.src || config.userOpts.src;
+  const configFile = args.config || config.configFile;
 
   try {
     const userConfig = path.join(process.cwd(), userSource, configFile);
@@ -51,23 +49,30 @@ function loadUserConfig(args) {
 
   // use command line opt if used
   // cli opts have priority over config file opts
-  userOpts.src = opts.src || userOpts.src;
-  userOpts.cwd = opts.cwd || userOpts.cwd;
-  userOpts.debug = opts.debug || userOpts.debug;
-  userOpts.config = opts.config || userOpts.config;
-  userOpts.funnel = opts.funnel || userOpts.funnel;
-  userOpts.output.path = opts.dist || userOpts.output.path;
-  userOpts.output.multi = opts.multi || userOpts.output.multi;
+  userOpts.cwd = args.cwd || userOpts.cwd;
+  userOpts.src = args.src || userOpts.src;
+  userOpts.debug = args.debug || userOpts.debug;
+
+  userOpts.funnel = args.funnel || userOpts.funnel;
+  userOpts.watchFunnel = args.watchFunnel || userOpts.watchFunnel;
+
+  userOpts.views.path = args.views || userOpts.views.path;
+
+  userOpts.output.path = args.dist || userOpts.output.path;
+  userOpts.output.multi = args.multi || userOpts.output.multi;
+
+  userOpts.devServer.port = args.port || userOpts.devServer.port;
+  userOpts.devServer.enableListing = args.list || userOpts.devServer.enableListing;
 
   // concatenate all args and return
-  return Object.assign({}, cmdOpts, userOpts);
+  return Object.assign({}, args, userOpts);
 }
 
 const withConfig = (args, done) => {
-  const conf = loadUserConfig({
-    cmdOpts: args.opts(),
-    opts: cli.opts()
-  });
+  const conf = loadUserConfig(Object.assign(
+    cli.opts(), // global options
+    args.opts() // current command options
+  ));
 
   return done(conf);
 };
@@ -83,6 +88,7 @@ cli.option('-D, --debug', 'toggle debug logs', false);
 cli.option('-d, --dist <path>', 'output directory', config.userOpts.output.path);
 cli.option('--multi', 'output multiple entries in public output', false);
 cli.option('-f, --funnel <path>', 'funnel data path', config.dataFile);
+cli.option('--views <path>', 'source views path', config.userOpts.views.path);
 
 // ++++++++++++++++++++++++
 // Commands
@@ -104,7 +110,7 @@ cli
 cli
   .command('watch')
   .description('watch source edits')
-  .option('-wf', 'allow funnel changes to re-generate pages', false)
+  .option('--watch-funnel', 'allow funnel changes to re-generate pages', false)
   .action((_, d) => withConfig(d, c => core.watch(c)));
 
 cli
@@ -120,6 +126,6 @@ cli
 
 try {
   cli.parse(process.argv);
-} catch {
+} catch (err) {
   logger.log('Tchau.');
 }

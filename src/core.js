@@ -28,7 +28,8 @@ import {
   pathDistance,
   fErrName,
   markyStop,
-  splitPathCwd
+  splitPathCwd,
+  getSrcBase
 } from './util.js';
 import {
   validateHtml,
@@ -42,7 +43,6 @@ import {
   minifyHtml
 } from './cheers.js';
 import * as keep from './keep.js';
-import defaultConfig from './default.config.js';
 import bSyncMiddleware from './bs.middleware.js';
 
 // quick setup
@@ -162,7 +162,7 @@ function readSource(src) {
 }
 
 async function parseLinkedAssets(config, assets) {
-  const srcBase = vpath([config.src]).base;
+  const srcBase = getSrcBase(config, false);
   // and the h is for helper
   const h = list => {
     const ps = list.map(async item => {
@@ -281,7 +281,7 @@ async function parseViews(config, views, funneled) {
   debuglog('parsing src views');
   marky.mark('parsing views');
 
-  const srcBase = vpath([config.cwd, config.src]).base;
+  const srcBase = getSrcBase(config);
   const outputPath = vpath([config.owd, config.output.path]);
 
   const _views = await Promise.all(
@@ -448,7 +448,7 @@ async function getFunneled(config, cacheBust = '') {
 
 async function parseAsset(config, asset, ext) {
   debuglog('parsing asset');
-  const srcBase = vpath([config.cwd, config.src]).base;
+  const srcBase = getSrcBase(config);
 
   for (let i = 0; i < asset.length; i++) {
     const file = asset[i];
@@ -543,7 +543,7 @@ async function unlinkFiles(config, toDel) {
     onlyNames: true
   });
 
-  const srcBase = vpath([config.src]).base;
+  const srcBase = getSrcBase(config, false);
   const fnms = names.map(nm => vpath([
     config.owd,
     config.output.path,
@@ -596,8 +596,8 @@ function watch(config, cb = () => {}, ignore = []) {
     // add it back for the full path
     const fp = vpath([config.cwd, p]).full;
     const watching = { [ext]: [fp] };
-    const isDataFile = p.endsWith(defaultConfig.dataFile);
-    const watchFunnel = isDataFile && config.watchFunnel;
+    const isFunnel = p.endsWith(config.funnel);
+    const watchFunnel = isFunnel && config.watchFunnel;
 
     gen(config, watching, {
       ext,

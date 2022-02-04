@@ -409,3 +409,13 @@ export function spliceCodeSnippet(code, lnumber, column = 0, opts = {}) {
   const snippet = slice.join('').concat(EOL);
   return snippet;
 }
+
+export function getSrcBase(config, withCwd = true) {
+  // allow multiple folders in the output directory
+  const isMulti = config.multi;
+  if (isMulti) {
+    return vpath([withCwd ? config.cwd : '', config.src]).base;
+  }
+
+  return '';
+}
