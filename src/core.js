@@ -141,26 +141,6 @@ async function funnel(config, file, funneled, flags = { onlyNames: false }) {
   };
 }
 
-function readSource(src) {
-  const files = getDirPaths(src, 'full');
-  debuglog('source data', files);
-
-  const classified = files.reduce((acc, file) => {
-    const ext = vpath(file).ext;
-
-    if (!acc[ext]) {
-      acc[ext] = [file];
-    } else {
-      acc[ext].push(file);
-    }
-
-    return acc;
-  }, {});
-
-  debuglog('files classified by extension', classified);
-  return classified;
-}
-
 async function parseLinkedAssets(config, assets) {
   const srcBase = getSrcBase(config, false);
   // and the h is for helper
@@ -478,6 +458,54 @@ async function parseAsset(config, asset, ext) {
   }
 }
 
+function readSource(src) {
+  const files = getDirPaths(src, 'full');
+  debuglog('source data', files);
+
+  const classified = files.reduce((acc, file) => {
+    const ext = vpath(file).ext;
+
+    if (!acc[ext]) {
+      acc[ext] = [file];
+    } else {
+      acc[ext].push(file);
+    }
+
+    return acc;
+  }, {});
+
+  debuglog('files classified by extension', classified);
+  return classified;
+}
+
+async function unlinkFiles(config, toDel) {
+  marky.mark('deleting files');
+
+  const delp = vpath(toDel);
+  const { funneled } = await getFunneled(config);
+  const { names } = await funnel(config, delp.full, funneled, {
+    onlyNames: true
+  });
+
+  const srcBase = getSrcBase(config, false);
+  const fnms = names.map(nm => vpath([
+    config.owd,
+    config.output.path,
+    srcBase,
+    nm
+  ]).full);
+
+  try {
+    const deld = await del(fnms, { force: true });
+    deld.length && markyStop('deleting files', {
+      label: strikethrough(delp.base),
+      count: names.length
+    });
+  } catch (err) {
+    throw err;
+  }
+}
+
 // +++++++++++++++++++++++++++++++
 // RUN WITH CONFIG
 // +++++++++++++++++++++++++++++++
@@ -532,34 +560,6 @@ async function gen(config, watching = null, more = {}) {
 
   funneled.locales = await getLocales(config, read);
   parseViews(config, views, funneled);
-}
-
-async function unlinkFiles(config, toDel) {
-  marky.mark('deleting files');
-
-  const delp = vpath(toDel);
-  const { funneled } = await getFunneled(config);
-  const { names } = await funnel(config, delp.full, funneled, {
-    onlyNames: true
-  });
-
-  const srcBase = getSrcBase(config, false);
-  const fnms = names.map(nm => vpath([
-    config.owd,
-    config.output.path,
-    srcBase,
-    nm
-  ]).full);
-
-  try {
-    const deld = await del(fnms, { force: true });
-    deld.length && markyStop('deleting files', {
-      label: strikethrough(delp.base),
-      count: names.length
-    });
-  } catch (err) {
-    throw err;
-  }
 }
 
 /**
@@ -631,17 +631,17 @@ function watch(config, cb = () => {}, ignore = []) {
 function serve(config) {
   const serverRoot = vpath([config.owd, config.output.path]).full;
   const errorPagePath = config.devServer.pages['404'];
-  const port = config.port ?? 2000;
+  const port = config.devServer.port ?? 2000;
   const host = 'http://localhost';
   const entry = config.src;
 
   const bs = browserSync({
     port,
-    open: config.open,
+    open: config.devServer.open,
     notify: false,
     server: {
       baseDir: serverRoot,
-      directory: config.list
+      directory: config.devServer.directory
     },
     middleware: bSyncMiddleware({
       host, port, entry, serverRoot
@@ -668,13 +668,13 @@ function serve(config) {
 
 async function lint(config) {
   debuglog('linting source code');
-  debuglog('auto fix linting', config.fix);
+  debuglog('auto fix linting', config.lint.fix);
   debuglog('linting cwd', config.cwd);
 
   const eslint = new ESLint({
-    fix: config.fix,
+    fix: config.lint.fix,
     cwd: config.cwd,
-    overrideConfigFile: config.esrc
+    overrideConfigFile: config.lint.esrc
   });
 
   try {

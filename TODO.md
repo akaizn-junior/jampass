@@ -5,3 +5,7 @@
 - [x] reajust line numbers in html css error, currently the lines are based on the css read and not the whole html file
 
 - [] improve code snippet styling
+
+- [] include better js handling
+
+- [] add search index build

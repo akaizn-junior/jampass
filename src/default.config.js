@@ -8,7 +8,7 @@ const pkg = JSON.parse(
 export default {
   name: pkg.name,
   version: pkg.version,
-  configFile: 'jampass.config.js',
+  rcFileName: 'jampass.config.js',
   userOpts: {
     cwd: process.cwd(),
     src: './demos/site',
@@ -31,9 +31,10 @@ export default {
     },
     devServer: {
       port: 2000,
-      enableListing: false,
+      directory: false,
+      open: false,
       pages: {
-        404: '/site/404.html'
+        404: '/404.html'
       }
     }
   }
