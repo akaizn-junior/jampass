@@ -510,21 +510,21 @@ async function unlinkFiles(config, toDel) {
 }
 
 function buildSearch(config, funneled) {
-  marky.mark('build index');
+  const { indexes, indexKeyMaxSize } = config.build.search;
 
-  const searchIndexes = config.build.search;
+  const searchIndexes = indexes;
   if (!searchIndexes || !searchIndexes.length) return;
 
-  const indexKeyMaxSize = 100;
+  const _indexKeyMaxSize = indexKeyMaxSize || 100;
   const data = funneled.data;
   const isArray = Array.isArray(data);
-  let indexes = {};
+  let file = {};
 
   const getIndexes = locals => searchIndexes
     .reduce((acc, index) => {
       try {
         const value = accessProperty(locals, index);
-        const isIndex = value.length <= indexKeyMaxSize;
+        const isIndex = value.length <= _indexKeyMaxSize;
 
         if (isIndex) {
           acc[value] = {
@@ -539,28 +539,31 @@ function buildSearch(config, funneled) {
     }, {});
 
   if (isArray) {
-    indexes = data.reduce((acc, locals) => ({ ...acc, ...getIndexes(locals) }), {});
+    file = data.reduce((acc, locals) => ({ ...acc, ...getIndexes(locals) }), {});
   } else {
-    indexes = getIndexes(data);
+    file = getIndexes(data);
   }
 
   const fnm = 'indexes.json';
   const srcBase = getSrcBase(config, false);
   const out = nm => vpath([config.owd, config.output.path, srcBase, nm]).full;
 
-  writeFile(out(fnm), JSON.stringify(indexes, null, 2));
+  writeFile(out(fnm), JSON.stringify(file, null, 2));
   bundleSearchFeature(config, 'src/search/index.js', out('search.min.js'));
-
-  markyStop('build index', { label: fnm, count: 1 });
+  logger.success('generated indexes "%s"', fnm);
 }
 
 async function bundleSearchFeature(config, file, out) {
-  const { to, code } = await processJs(config, file, out, {
-    libName: 'Search',
-    hash: false
-  });
+  if (config.build.search?.lib) {
+    const { to, code } = await processJs(config, file, out, {
+      libName: 'Search',
+      hash: false
+    });
 
-  writeFile(to, code);
+    const size = code.length;
+    writeFile(to, code);
+    logger.success('bundled search "search.min.js"', '-', size, 'bytes');
+  }
 }
 
 // +++++++++++++++++++++++++++++++

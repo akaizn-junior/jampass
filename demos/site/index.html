@@ -66,17 +66,7 @@
     <script>
       let srch = document.getElementById('search')
       let results = document.getElementById('search-results')
-      srch.onkeyup = (e) => {
-        let val = e.target.value;
-        console.log(val);
-        let res = Search.trie.search(val)
-        console.log(res);
-        results.innerHTML = res.map(r => {
-          const i = r.value.index;
-          const v = r.value.value;
-          return `<p>${v[i]}</p>`;
-        }).join('');
-      }
+      Search.render(srch, results);
     </script>
   </body>
 

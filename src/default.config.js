@@ -18,11 +18,15 @@ export default {
     build: {
       debug: false,
       watchFunnel: false,
-      search: [
-        'name',
-        'breed',
-        'description'
-      ]
+      search: {
+        indexKeyMaxSize: 60,
+        lib: true,
+        indexes: [
+          'name',
+          'breed',
+          'description'
+        ]
+      }
     },
     views: {
       engine: {

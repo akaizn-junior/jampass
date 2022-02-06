@@ -11,6 +11,28 @@ async function init() {
 
 init();
 
+/**
+ * render search
+ * @param {HTMLElement} inputEl the search input
+ * @param {HTMLElement} resEl element to attach results to
+ */
+function render(inputEl, resEl) {
+  inputEl.addEventListener('keyup', e => {
+    e.preventDefault();
+    const term = e.target.value;
+    const results = trie.search(term);
+
+    resEl.innerHTML = results.map(result => {
+      const index = result.value.index;
+      const value = result.value.value;
+      const found = value[index];
+
+      return `<p>${found}</p>`;
+    }).join('');
+  }, false);
+}
+
 module.exports = {
-  trie
+  trie,
+  render
 };
