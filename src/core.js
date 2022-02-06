@@ -40,7 +40,8 @@ import {
   updatedHtmlLinkedJs,
   updateStyleTagCss,
   updateScriptTagJs,
-  minifyHtml
+  minifyHtml,
+  processJs
 } from './cheers.js';
 import * as keep from './keep.js';
 import bSyncMiddleware from './bs.middleware.js';
@@ -511,38 +512,55 @@ async function unlinkFiles(config, toDel) {
 function buildSearch(config, funneled) {
   marky.mark('build index');
 
-  const searchKeys = config.build.search;
-  if (!searchKeys || !searchKeys.length) return;
+  const searchIndexes = config.build.search;
+  if (!searchIndexes || !searchIndexes.length) return;
 
+  const indexKeyMaxSize = 100;
   const data = funneled.data;
   const isArray = Array.isArray(data);
-  let index = [];
+  let indexes = {};
 
-  const getIndex = locals => searchKeys
-    .reduce((acc, key) => {
+  const getIndexes = locals => searchIndexes
+    .reduce((acc, index) => {
       try {
-        acc[key] = accessProperty(locals, key);
+        const value = accessProperty(locals, index);
+        const isIndex = value.length <= indexKeyMaxSize;
+
+        if (isIndex) {
+          acc[value] = {
+            index,
+            value: locals
+          };
+        }
       } catch (err) {
-        logger.info('key "%s" is undefined.', key, 'Skipped index');
+        logger.info('key "%s" is undefined.', index, 'Skipped index');
       }
       return acc;
     }, {});
 
-  !isArray && index.push(getIndex(data));
-
   if (isArray) {
-    index = data.reduce((acc, locals) => {
-      acc.push(getIndex(locals));
-      return acc;
-    }, []);
+    indexes = data.reduce((acc, locals) => ({ ...acc, ...getIndexes(locals) }), {});
+  } else {
+    indexes = getIndexes(data);
   }
 
-  const fnm = 'index.json';
+  const fnm = 'indexes.json';
   const srcBase = getSrcBase(config, false);
-  const out = vpath([config.owd, srcBase, fnm]).full;
+  const out = nm => vpath([config.owd, config.output.path, srcBase, nm]).full;
 
-  writeFile(out, JSON.stringify(index, null, 2));
+  writeFile(out(fnm), JSON.stringify(indexes, null, 2));
+  bundleSearchFeature(config, 'src/search/index.js', out('search.min.js'));
+
   markyStop('build index', { label: fnm, count: 1 });
+}
+
+async function bundleSearchFeature(config, file, out) {
+  const { to, code } = await processJs(config, file, out, {
+    libName: 'Search',
+    hash: false
+  });
+
+  writeFile(to, code);
 }
 
 // +++++++++++++++++++++++++++++++

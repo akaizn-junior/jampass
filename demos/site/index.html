@@ -1,59 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Jampass</title>
-  <link rel="stylesheet" href="css/site.css">
-  <script defer src="js/site.js"></script>
-  <style>
-    .data-list {
-      padding: 10px;
-      list-style-type: none;
-      margin: 0 auto;
-      max-width: 900px;
-    }
 
-    .data {
-      border: 1px solid #333333;
-      width: 90%;
-      height: 300px;
-      margin: 50px auto;
-    }
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jampass</title>
+    <link rel="stylesheet" href="css/site.css">
+    <script defer src="js/site.js"></script>
+    <style>
+      .data-list {
+        padding: 10px;
+        list-style-type: none;
+        margin: 0 auto;
+        max-width: 900px;
+      }
 
-    .data img {
-      width: 100%;
-      height: 100%;
-    }
+      .data {
+        border: 1px solid #333333;
+        width: 90%;
+        height: 300px;
+        margin: 50px auto;
+      }
 
-    .data p {
-      font-size: 2em;
-    }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Jampass</h1>
-    <div class="locales">
-      {{#each locales.meta}}
-      <a href="{{ locale }}">
-        {{ lang }}-<i class="country">{{ region }}</i>
-      </a>
-      {{/each}}
-    </div>
-  </header>
-  <main>
-    <ul class="data-list">
-      {{#each data}}
-      <li>
-        <div class="data">
-          <img src="{{ photo }}" alt="{{ name }}" title="{{ name }}" width="200">
-          <p><a href="blog/{{ name }}">{{ name }}</a></p>
-        </div>
-      </li>
-      {{/each}}
-    </ul>
-  </main>
-</body>
+      .data img {
+        width: 100%;
+        height: 100%;
+      }
+
+      .data p {
+        font-size: 2em;
+      }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <h1>Jampass</h1>
+      <div class="locales">
+        {{#each locales.meta}}
+          <a href="{{ locale }}">
+            {{ lang }}-<i class="country">{{ region }}</i>
+          </a>
+        {{/each}}
+      </div>
+    </header>
+    <main>
+      <div id="search-box">
+        <input type="search" id="search" placeholder="Search" aria-label="Search" autocomplete="true" autocorrect="off"
+          spellcheck="false">
+        <div id="search-results"></div>
+      </div>
+      <ul class="data-list">
+        {{#each data}}
+          <li>
+            <div class="data">
+              <img src="{{ photo }}" alt="{{ name }}" title="{{ name }}" width="200">
+              <p><a href="blog/{{ name }}">{{ name }}</a></p>
+            </div>
+          </li>
+        {{/each}}
+      </ul>
+    </main>
+    <script src="search.min.js"></script>
+    <script>
+      let srch = document.getElementById('search')
+      let results = document.getElementById('search-results')
+      srch.onkeyup = (e) => {
+        let val = e.target.value;
+        console.log(val);
+        let res = Search.trie.search(val)
+        console.log(res);
+        results.innerHTML = res.map(r => {
+          const i = r.value.index;
+          const v = r.value.value;
+          return `<p>${v[i]}</p>`;
+        }).join('');
+      }
+    </script>
+  </body>
+
 </html>

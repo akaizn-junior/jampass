@@ -96,8 +96,16 @@ export async function writeFile(file, data, dry = false) {
   }
 }
 
-export async function processJs(config, file, out) {
-  const b = browserify();
+export async function processJs(config, file, out, opts = {}) {
+  const _opts = Object.assign({
+    libName: undefined,
+    hash: true
+  }, opts);
+
+  const b = browserify({
+    standalone: _opts.libName
+  });
+
   const outpath = vpath(out);
   let to = outpath.full;
 
@@ -118,7 +126,7 @@ export async function processJs(config, file, out) {
     mangle: true
   });
 
-  if (!config.isDev) {
+  if (!config.isDev && _opts.hash) {
     const hash = createHash(minCode, 10);
     to = outpath.noext.concat('.', hash, outpath.ext);
   }
@@ -224,7 +232,7 @@ export function parseHtmlLinked(config, code) {
     } catch (err) {
       if (err.code === 'ENOENT') {
         err.name = 'HtmlLinkedCssWarn';
-        logger.info('file "%s" not found locally', el.attribs.href);
+        logger.info('"%s" not found locally. skipped', el.attribs.href);
       }
     }
   });
@@ -246,7 +254,7 @@ export function parseHtmlLinked(config, code) {
     } catch (err) {
       if (err.code === 'ENOENT') {
         err.name = 'HtmlLinkedScriptWarn';
-        logger.info('file "%s" not found locally', el.attribs.src);
+        logger.info('skipped "%s". Asset not found locally', el.attribs.src);
       } else {
         throw err;
       }

@@ -18,7 +18,11 @@ export default {
     build: {
       debug: false,
       watchFunnel: false,
-      search: ['name', 'description', 'breed']
+      search: [
+        'name',
+        'breed',
+        'description'
+      ]
     },
     views: {
       engine: {
