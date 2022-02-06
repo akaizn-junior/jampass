@@ -44,6 +44,7 @@ import {
 } from './cheers.js';
 import * as keep from './keep.js';
 import bSyncMiddleware from './bs.middleware.js';
+import defaultConfig from './default.config.js';
 
 // quick setup
 
@@ -393,7 +394,8 @@ async function updateAndWriteHtml(config, parsed) {
 }
 
 async function getFunneled(config, cacheBust = '') {
-  const dataPath = vpath([config.cwd, config.src, config.funnel], true).full;
+  // if no config.funnel
+  const dataPath = vpath([config.cwd, config.src, defaultConfig.funnelName], true).full;
   const cb = cacheBust || '';
   const url = `${dataPath}?bust=${cb}`;
 
@@ -506,6 +508,43 @@ async function unlinkFiles(config, toDel) {
   }
 }
 
+function buildSearch(config, funneled) {
+  marky.mark('build index');
+
+  const searchKeys = config.build.search;
+  if (!searchKeys || !searchKeys.length) return;
+
+  const data = funneled.data;
+  const isArray = Array.isArray(data);
+  let index = [];
+
+  const getIndex = locals => searchKeys
+    .reduce((acc, key) => {
+      try {
+        acc[key] = accessProperty(locals, key);
+      } catch (err) {
+        logger.info('key "%s" is undefined.', key, 'Skipped index');
+      }
+      return acc;
+    }, {});
+
+  !isArray && index.push(getIndex(data));
+
+  if (isArray) {
+    index = data.reduce((acc, locals) => {
+      acc.push(getIndex(locals));
+      return acc;
+    }, []);
+  }
+
+  const fnm = 'index.json';
+  const srcBase = getSrcBase(config, false);
+  const out = vpath([config.owd, srcBase, fnm]).full;
+
+  writeFile(out, JSON.stringify(index, null, 2));
+  markyStop('build index', { label: fnm, count: 1 });
+}
+
 // +++++++++++++++++++++++++++++++
 // RUN WITH CONFIG
 // +++++++++++++++++++++++++++++++
@@ -514,7 +553,7 @@ function withConfig(config, done) {
   process.on('uncaughtException', handleThrown(config));
   process.on('unhandledRejection', handleThrown(config));
 
-  toggleDebug(config.debug);
+  toggleDebug(config.build.debug);
   debuglog('user config %O', config);
 
   // output working directory
@@ -560,6 +599,7 @@ async function gen(config, watching = null, more = {}) {
 
   funneled.locales = await getLocales(config, read);
   parseViews(config, views, funneled);
+  buildSearch(config, funneled);
 }
 
 /**
@@ -596,8 +636,8 @@ function watch(config, cb = () => {}, ignore = []) {
     // add it back for the full path
     const fp = vpath([config.cwd, p]).full;
     const watching = { [ext]: [fp] };
-    const isFunnel = p.endsWith(config.funnel);
-    const watchFunnel = isFunnel && config.watchFunnel;
+    const isFunnel = p.endsWith(defaultConfig.funnelName);
+    const watchFunnel = isFunnel && config.build.watchFunnel;
 
     gen(config, watching, {
       ext,

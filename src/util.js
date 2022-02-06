@@ -119,8 +119,7 @@ export function handleThrown(config) {
     const errname = err.name || err.code || '';
 
     if (!special.includes(errname)) {
-      logger.error(errname);
-      logger.log(err);
+      logger.error(errname, err);
     }
 
     if (!config.watch) {

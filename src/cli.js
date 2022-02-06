@@ -54,10 +54,10 @@ function loadUserConfig(args) {
   // cli opts have priority over config file opts
   userOpts.cwd = _opts.cwd || userOpts.cwd;
   userOpts.src = _opts.src || userOpts.src;
-  userOpts.debug = _opts.debug || userOpts.debug;
-
   userOpts.funnel = _opts.funnel || userOpts.funnel;
-  userOpts.watchFunnel = _opts.watchFunnel || userOpts.watchFunnel;
+
+  userOpts.build.debug = _opts.debug || userOpts.build.debug;
+  userOpts.build.watchFunnel = _opts.watchFunnel || userOpts.build.watchFunnel;
 
   userOpts.views.path = _opts.views || userOpts.views.path;
 
@@ -93,13 +93,21 @@ const withConfig = (args, done) => {
 // ++++++++++++++++++++++++
 
 cli.option('-c, --config <path>', 'user config path');
-cli.option('-s, --src <path>', 'reads the folder to build', defaultConfig.userOpts.src);
+cli.option('-s, --src <path>', 'reads the folder to build',
+  defaultConfig.userOpts.src
+);
+
 cli.option('-C, --cwd <path>', 'define a custom cwd', defaultConfig.userOpts.cwd);
-cli.option('-D, --debug', 'toggle debug logs', defaultConfig.userOpts.debug);
-cli.option('-d, --dist <path>', 'output directory', defaultConfig.userOpts.output.path);
+cli.option('-D, --debug', 'toggle debug logs', defaultConfig.userOpts.build.debug);
+cli.option('-d, --dist <path>', 'output directory',
+  defaultConfig.userOpts.output.path
+);
+
 cli.option('--multi', 'output multiple entries in public output', false);
 cli.option('-f, --funnel <path>', 'funnel data path', defaultConfig.dataFile);
-cli.option('--views <path>', 'source views path', defaultConfig.userOpts.views.path);
+cli.option('--views <path>', 'source views path',
+  defaultConfig.userOpts.views.path
+);
 
 // ++++++++++++++++++++++++
 // Commands
@@ -113,16 +121,27 @@ cli
 cli
   .command('serve')
   .description('serve static site')
-  .option('-p, --port [number]', 'serve site on this port', defaultConfig.userOpts.devServer.port)
-  .option('-o, --open', 'open default browser on serve', defaultConfig.userOpts.devServer.open)
-  .option('--list', 'enable server directory listing', defaultConfig.userOpts.devServer.directory)
-  .option('--pages-404', 'path to 404 page', defaultConfig.userOpts.devServer.pages[404])
+  .option('-p, --port [number]', 'serve site on this port',
+    defaultConfig.userOpts.devServer.port
+  )
+  .option('-o, --open', 'open default browser on serve',
+    defaultConfig.userOpts.devServer.open
+  )
+  .option('--list', 'enable server directory listing',
+    defaultConfig.userOpts.devServer.directory
+  )
+  .option('--pages-404', 'path to 404 page',
+    defaultConfig.userOpts.devServer.pages[404]
+  )
   .action((_, d) => withConfig(d, c => core.serve(c)));
 
 cli
   .command('watch')
   .description('watch source edits')
-  .option('--watch-funnel', 'allow funnel changes to re-generate pages', defaultConfig.userOpts.watchFunnel)
+  .option('--watch-funnel',
+    'allow funnel changes to re-generate pages',
+    defaultConfig.userOpts.build.watchFunnel
+  )
   .action((_, d) => withConfig(d, c => core.watch(c)));
 
 cli

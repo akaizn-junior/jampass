@@ -9,13 +9,17 @@ export default {
   name: pkg.name,
   version: pkg.version,
   rcFileName: 'jampass.config.js',
+  funnelName: 'jampass.data.js',
   userOpts: {
     cwd: process.cwd(),
     src: './demos/site',
-    debug: false,
+    funnel: '',
     locales: [],
-    funnel: 'jampass.data.js',
-    watchFunnel: false,
+    build: {
+      debug: false,
+      watchFunnel: false,
+      search: ['name', 'description', 'breed']
+    },
     views: {
       engine: {
         name: 'handlebars',
