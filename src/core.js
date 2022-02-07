@@ -305,7 +305,7 @@ async function parseViews(config, views, funneled) {
     const { htmls, names } = await funnel(config, viewPath.full, funneled);
     keep.upsert(viewPath.full, { checksum });
 
-    const _ps = htmls.map((html, j) => validateAndUpdateHtml(config, {
+    const _ps = htmls.map(async(html, j) => validateAndUpdateHtml(config, {
       html,
       name: names[j],
       srcBase,
@@ -388,7 +388,7 @@ async function updateAndWriteHtml(config, parsed) {
       minHtml = await minifyHtml(config, html.tmpfile);
     }
 
-    writeFile(html.out, minHtml);
+    await writeFile(html.out, minHtml);
   } catch (err) {
     throw err;
   }
@@ -461,17 +461,18 @@ async function parseAsset(config, asset, ext) {
   }
 }
 
-function readSource(src) {
-  const files = getDirPaths(src, 'full');
+async function readSource(src) {
+  const files = await getDirPaths(src, 'full');
   debuglog('source data', files);
 
-  const classified = files.reduce((acc, file) => {
-    const ext = vpath(file).ext;
+  const classified = files.reduce(async(acc, file) => {
+    const f = await file;
+    const ext = vpath(f).ext;
 
     if (!acc[ext]) {
-      acc[ext] = [file];
+      acc[ext] = [f];
     } else {
-      acc[ext].push(file);
+      acc[ext].push(f);
     }
 
     return acc;
@@ -611,7 +612,7 @@ async function gen(config, watching = null, ext) {
   debuglog('preview funneled data', funKeys);
 
   const srcPath = vpath([config.cwd, config.src]);
-  const read = readSource(srcPath.full);
+  const read = await readSource(srcPath.full);
   // files read from source or currently being watched
   const files = watching || read;
   const views = config.watchFunnel ? read['.html'] : files['.html'] || [];
@@ -635,7 +636,7 @@ async function gen(config, watching = null, ext) {
  * @param {Function} cb Runs on triggered events
  * @param {string[]} ignore paths/globs to ignore
  */
-function watch(config, cb = () => {}, ignore = []) {
+async function watch(config, cb = () => {}, ignore = []) {
   const watchPath = vpath([config.cwd, config.src], true);
   const _cb = safeFun(cb);
 
@@ -692,7 +693,7 @@ function watch(config, cb = () => {}, ignore = []) {
  * Starts a development server.
  * Powered by [BrowserSync](https://browsersync.io/docs/api)
  */
-function serve(config) {
+async function serve(config) {
   const serverRoot = vpath([config.owd, config.output.path]).full;
   const errorPagePath = config.devServer.pages['404'];
   const port = config.devServer.port ?? 2000;

@@ -164,21 +164,27 @@ export function vpath(p, withStats = false) {
  * @param {string} dirType How to list files, full directories or subdir only
  * @param {string} dir Private recursive dir to build directory filenames
  */
-export function getDirPaths(srcPath, dirType = 'sub', dir = '') {
+export async function getDirPaths(srcPath, dirType = 'sub', dir = '') {
   try {
     const ignore = [
       'node_modules'
     ];
 
-    const dirents = fs.readdirSync(srcPath, {
-      withFileTypes: true
-    })
+    let dirents = await fs.promises
+      .readdir(srcPath, {
+        withFileTypes: true
+      });
+
+    dirents = dirents
       .filter(d => !ignore.includes(d.name))
       .filter(d => !d.name.startsWith('.'));
 
     return dirents.flatMap(dirent => {
       if (dirent.isDirectory()) {
-        return getDirPaths(path.join(srcPath, dirent.name), dirType, path.join(dir, dirent.name));
+        return getDirPaths(path.join(srcPath, dirent.name),
+          dirType,
+          path.join(dir, dirent.name)
+        );
       }
       return dirType === 'full' ? path.join(srcPath, dirent.name)
         : path.join(path.parse(dir).dir, path.parse(dir).base, dirent.name);
