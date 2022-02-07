@@ -65,8 +65,14 @@
     <script src="search.min.js"></script>
     <script>
       let srch = document.getElementById('search')
-      let results = document.getElementById('search-results')
-      Search.render(srch, results);
+      let resEl = document.getElementById('search-results')
+
+      function paint(res) {
+        const v = res.value[res.index]
+        return `<p>${v}</p>`
+      }
+
+      Search.render(srch, resEl, paint);
     </script>
   </body>
 

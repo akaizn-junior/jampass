@@ -8,4 +8,4 @@
 
 - [] include better js handling
 
-- [] add search index build
+- [x] add search index build

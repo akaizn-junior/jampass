@@ -271,7 +271,7 @@ async function parseViews(config, views, funneled) {
       try {
         const exists = keep.get(v);
         const code = await fs.readFile(v);
-        const checksum = createHash(code);
+        const checksum = createHash(code, 64);
 
         // only allow views with new content
         if (checksum !== exists?.checksum) {
@@ -303,12 +303,11 @@ async function parseViews(config, views, funneled) {
     const checksum = view.checksum;
 
     const { htmls, names } = await funnel(config, viewPath.full, funneled);
-    keep.add(viewPath.full);
+    keep.add(viewPath.full, { checksum });
 
     const _ps = htmls.map((html, j) => validateAndUpdateHtml(config, {
       html,
       name: names[j],
-      checksum,
       srcBase,
       outputPath,
       count: htmls.length,
@@ -339,8 +338,7 @@ async function validateAndUpdateHtml(config, data) {
     from: data.viewPath,
     out: htmlOutFile,
     code: Buffer.from(compiled),
-    tmpfile,
-    checksum: data.checksum
+    tmpfile
   };
 
   try {
@@ -538,19 +536,24 @@ function buildSearch(config, funneled) {
       return acc;
     }, {});
 
-  if (isArray) {
-    file = data.reduce((acc, locals) => ({ ...acc, ...getIndexes(locals) }), {});
-  } else {
-    file = getIndexes(data);
-  }
-
   const fnm = 'indexes.json';
-  const srcBase = getSrcBase(config, false);
-  const out = nm => vpath([config.owd, config.output.path, srcBase, nm]).full;
+  const exists = keep.get(fnm);
 
-  writeFile(out(fnm), JSON.stringify(file, null, 2));
-  bundleSearchFeature(config, 'src/search/index.js', out('search.min.js'));
-  logger.success('generated indexes "%s"', fnm);
+  if (!exists || config.watchFunnel) {
+    if (isArray) {
+      file = data.reduce((acc, locals) => ({ ...acc, ...getIndexes(locals) }), {});
+    } else {
+      file = getIndexes(data);
+    }
+
+    const srcBase = getSrcBase(config, false);
+    const out = nm => vpath([config.owd, config.output.path, srcBase, nm]).full;
+
+    writeFile(out(fnm), JSON.stringify(file, null, 2));
+    bundleSearchFeature(config, 'src/search/index.js', out('search.min.js'));
+    logger.success('generated indexes "%s"', fnm);
+    keep.upsert(fnm, file);
+  }
 }
 
 async function bundleSearchFeature(config, file, out) {
@@ -599,10 +602,8 @@ function withConfig(config, done) {
 // INTERFACE
 // ++++++++++++++++
 
-async function gen(config, watching = null, more = {}) {
-  const { ext, watchFunnel } = more;
-
-  const funCacheBust = watchFunnel ? Date.now() : null;
+async function gen(config, watching = null, ext) {
+  const funCacheBust = config.watchFunnel ? Date.now() : null;
   const { funneled, funKeys } = await getFunneled(config, funCacheBust);
 
   debuglog('preview funneled data', funKeys);
@@ -611,9 +612,9 @@ async function gen(config, watching = null, more = {}) {
   const read = readSource(srcPath.full);
   // files read from source or currently being watched
   const files = watching || read;
-  const views = watchFunnel ? read['.html'] : files['.html'] || [];
+  const views = config.watchFunnel ? read['.html'] : files['.html'] || [];
 
-  if (ext !== '.html' && !watchFunnel) {
+  if (ext !== '.html' && !config.watchFunnel) {
     const asset = watching?.[ext] || [];
     parseAsset(config, asset, ext);
   }
@@ -658,12 +659,9 @@ function watch(config, cb = () => {}, ignore = []) {
     const fp = vpath([config.cwd, p]).full;
     const watching = { [ext]: [fp] };
     const isFunnel = p.endsWith(defaultConfig.funnelName);
-    const watchFunnel = isFunnel && config.build.watchFunnel;
+    config.watchFunnel = isFunnel && config.build.watchFunnel;
 
-    gen(config, watching, {
-      ext,
-      watchFunnel
-    });
+    gen(config, watching, ext);
 
     _cb();
   };
