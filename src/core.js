@@ -303,7 +303,7 @@ async function parseViews(config, views, funneled) {
     const checksum = view.checksum;
 
     const { htmls, names } = await funnel(config, viewPath.full, funneled);
-    keep.add(viewPath.full, { checksum });
+    keep.upsert(viewPath.full, { checksum });
 
     const _ps = htmls.map((html, j) => validateAndUpdateHtml(config, {
       html,
@@ -322,9 +322,11 @@ async function parseViews(config, views, funneled) {
       label: viewPath.base,
       count: _ps.length
     });
+
+    return checksum;
   });
 
-  Promise.all(ps);
+  return Promise.all(ps);
 }
 
 async function validateAndUpdateHtml(config, data) {
@@ -620,8 +622,10 @@ async function gen(config, watching = null, ext) {
   }
 
   funneled.locales = await getLocales(config, read);
-  parseViews(config, views, funneled);
+
   buildSearch(config, funneled);
+  const parsed = parseViews(config, views, funneled);
+  return parsed;
 }
 
 /**
@@ -661,9 +665,10 @@ function watch(config, cb = () => {}, ignore = []) {
     const isFunnel = p.endsWith(defaultConfig.funnelName);
     config.watchFunnel = isFunnel && config.build.watchFunnel;
 
-    gen(config, watching, ext);
-
-    _cb();
+    gen(config, watching, ext)
+      .then(res => {
+        res.length && _cb();
+      });
   };
 
   const unl = async p => {
