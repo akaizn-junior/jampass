@@ -10,6 +10,7 @@ import { bold, strikethrough } from 'colorette';
 // node
 import fs from 'fs/promises';
 import path from 'path';
+import { Readable } from 'stream';
 
 // local
 import {
@@ -56,6 +57,13 @@ debuglog(userEnv);
 // HELPERS
 // ++++++++++++++++
 
+const newReadable = data => {
+  const rs = new Readable();
+  rs.push(data);
+  rs.push(null);
+  return rs;
+};
+
 async function compileView(config, file, locals) {
   const filePath = vpath(file);
   const name = config.views.engine.name ?? 'handlebars';
@@ -67,6 +75,7 @@ async function compileView(config, file, locals) {
     const templateEngine = await import(name);
     engineConfig(templateEngine);
 
+    locals.cache = true; // some engines support cache
     return await engine(filePath.full, locals);
   } catch (err) {
     err.name = fErrName(err.name, 'CompileView');
@@ -238,7 +247,7 @@ function writeAssets(assets) {
 
     if (!exists || exists.out !== asset.out) {
       debuglog('generated asset', asset.out);
-      writeFile(asset.out, asset.code);
+      writeFile(newReadable(asset.code), asset.out);
     }
   });
 }
@@ -339,7 +348,7 @@ async function validateAndUpdateHtml(config, data) {
   const html = {
     from: data.viewPath,
     out: htmlOutFile,
-    code: Buffer.from(compiled),
+    code: compiled,
     tmpfile
   };
 
@@ -383,12 +392,13 @@ async function updateAndWriteHtml(config, parsed) {
     const uScriptTags = await updateScriptTagJs(uStyleTags);
 
     let minHtml = uScriptTags;
+
     if (!config.isDev) {
-      await writeFile(html.tmpfile, uScriptTags);
+      await writeFile(newReadable(minHtml), html.tmpfile);
       minHtml = await minifyHtml(config, html.tmpfile);
     }
 
-    await writeFile(html.out, minHtml);
+    await writeFile(newReadable(minHtml), html.out);
   } catch (err) {
     throw err;
   }
@@ -448,11 +458,11 @@ async function parseAsset(config, asset, ext) {
         const res = {
           from: fileBase,
           to: vpath(processed.to).base,
-          code: Buffer.from(processed.code),
+          code: processed.code,
           out: processed.to
         };
 
-        writeFile(res.out, res.code);
+        writeFile(newReadable(res.code), res.out);
         logger.info('processed asset', `"${fileBase}"`);
       } else {
         logger.error('failed processing asset');
@@ -465,14 +475,13 @@ async function readSource(src) {
   const files = await getDirPaths(src, 'full');
   debuglog('source data', files);
 
-  const classified = files.reduce(async(acc, file) => {
-    const f = await file;
-    const ext = vpath(f).ext;
+  const classified = files.reduce((acc, file) => {
+    const ext = vpath(file).ext;
 
     if (!acc[ext]) {
-      acc[ext] = [f];
+      acc[ext] = [file];
     } else {
-      acc[ext].push(f);
+      acc[ext].push(file);
     }
 
     return acc;
@@ -552,7 +561,8 @@ function buildSearch(config, funneled) {
     const srcBase = getSrcBase(config, false);
     const out = nm => vpath([config.owd, config.output.path, srcBase, nm]).full;
 
-    writeFile(out(fnm), JSON.stringify(file, null, 2));
+    const dataStr = JSON.stringify(file, null, 2);
+    writeFile(newReadable(dataStr), out(fnm));
     bundleSearchFeature(config, 'src/search/index.js', out('search.min.js'));
     logger.success('generated indexes "%s"', fnm);
     keep.upsert(fnm, file);
@@ -567,7 +577,7 @@ async function bundleSearchFeature(config, file, out) {
     });
 
     const size = code.length;
-    writeFile(to, code);
+    writeFile(newReadable(code), to);
     logger.success('bundled search "search.min.js"', '-', size, 'bytes');
   }
 }

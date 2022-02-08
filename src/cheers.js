@@ -65,20 +65,30 @@ export async function validateHtml(config, html, opts) {
   }
 }
 
-export async function writeFile(file, data, dry = false) {
-  const safeFile = vpath(file);
+import { createWriteStream, createReadStream } from 'fs';
+
+/**
+ * write data to file
+ * @param {string|object} from source file, Readable or ReadStream
+ * @param {string} to destination file
+ * @param {boolean} dry toggle dry mode
+ * @returns
+ */
+export async function writeFile(from, to, dry = false) {
+  const source = typeof from === 'string' ? vpath(from, true).full : from;
+  const dest = vpath(to);
 
   const done = async() => {
     if (!dry) {
-      await fs.writeFile(safeFile.full, data, {
-        encoding: 'utf-8',
-        flag: 'w'
-      });
+      let rs = source;
+      if (typeof source === 'string') rs = createReadStream(source);
+      const ws = createWriteStream(dest.full);
+      rs.pipe(ws);
     }
   };
 
   try {
-    const stats = await fs.stat(safeFile.dir);
+    const stats = await fs.stat(dest.dir);
     if (!stats.isDirectory()) {
       throw Error('Public output must be a directory');
     }
@@ -87,7 +97,7 @@ export async function writeFile(file, data, dry = false) {
   } catch {
     if (!dry) {
       try {
-        await fs.mkdir(safeFile.dir, { recursive: true });
+        await fs.mkdir(dest.dir, { recursive: true });
         return done();
       } catch (e) {
         throw e;
@@ -118,13 +128,17 @@ export async function processJs(config, file, out, opts = {}) {
     b.bundle((err, data) => err ? rej(err) : res(data));
   });
 
-  const res = await bundle(file);
-  await writeFile(tmpfile, res);
+  // b.add(file);
+  // const readStream = b.bundle();
 
-  const minCode = await compress(config, tmpfile, 'js', {
-    compress: true,
-    mangle: true
-  });
+  // await writeFile(, tmpfile);
+
+  // const minCode = await compress(config, tmpfile, 'js', {
+  //   compress: true,
+  //   mangle: true
+  // });
+
+  const minCode = await bundle(file);
 
   if (!config.isDev && _opts.hash) {
     const hash = createHash(minCode, 10);
@@ -181,8 +195,7 @@ export async function processCss(config, file, out, opts = {
 
       logger.log(EOL);
       logger.log('CssSyntaxError', emsg, `"${err.reason}"`, EOL);
-      process.stdout.write(snippet);
-      // console.log(snippet);
+      logger.log(snippet);
     }
 
     err.name = fErrName(err.name, 'ProcessCss', ['CssSyntaxError']);

@@ -170,18 +170,17 @@ export async function getDirPaths(srcPath, dirType = 'sub', dir = '') {
       'node_modules'
     ];
 
-    let dirents = await fs.promises
-      .readdir(srcPath, {
-        withFileTypes: true
-      });
+    let dirents = await fs.promises.readdir(srcPath, {
+      withFileTypes: true
+    });
 
     dirents = dirents
       .filter(d => !ignore.includes(d.name))
       .filter(d => !d.name.startsWith('.'));
 
-    return dirents.flatMap(dirent => {
+    const ps = dirents.map(async dirent => {
       if (dirent.isDirectory()) {
-        return getDirPaths(path.join(srcPath, dirent.name),
+        return await getDirPaths(path.join(srcPath, dirent.name),
           dirType,
           path.join(dir, dirent.name)
         );
@@ -189,6 +188,15 @@ export async function getDirPaths(srcPath, dirType = 'sub', dir = '') {
       return dirType === 'full' ? path.join(srcPath, dirent.name)
         : path.join(path.parse(dir).dir, path.parse(dir).base, dirent.name);
     });
+
+    // something like an async flat map
+    return Promise.all(
+      [].concat(
+        ...await Promise.all(
+          ps
+        )
+      )
+    );
   } catch (err) {
     if (err.code === 'ENOENT') return [];
     throw err;
