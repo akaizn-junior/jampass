@@ -1,5 +1,5 @@
-import fs from 'fs/promises';
 import { existsSync } from 'fs';
+import { asyncRead } from './util.js';
 
 function redirectToEntryWithSlash(opts) {
   return (req, res, next) => {
@@ -57,7 +57,7 @@ function writePageContent(opts) {
     const exists = possible.filter(u => existsSync(u));
     if (exists.length) {
       const file = exists[0];
-      const content = await fs.readFile(file);
+      const content = await asyncRead(file);
 
       res.write(content);
       res.writeHead(200);

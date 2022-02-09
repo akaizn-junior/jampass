@@ -12,6 +12,7 @@ import postCssHash from 'postcss-hash';
 // node
 import fs from 'fs/promises';
 import { EOL } from 'os';
+import { createWriteStream, createReadStream } from 'fs';
 
 // local
 import {
@@ -23,7 +24,9 @@ import {
   splitPathCwd,
   logger,
   spliceCodeSnippet,
-  getSrcBase
+  getSrcBase,
+  newReadable,
+  asyncRead
 } from './util.js';
 
 
@@ -65,25 +68,32 @@ export async function validateHtml(config, html, opts) {
   }
 }
 
-import { createWriteStream, createReadStream } from 'fs';
-
 /**
  * write data to file
  * @param {string|object} from source file, Readable or ReadStream
  * @param {string} to destination file
+ * @param {function} onend runs at the end of the stream
  * @param {boolean} dry toggle dry mode
  * @returns
  */
-export async function writeFile(from, to, dry = false) {
+export async function writeFile(from, to, onend = null, dry = false) {
   const source = typeof from === 'string' ? vpath(from, true).full : from;
   const dest = vpath(to);
 
-  const done = async() => {
+  async function asyncWrite(rs, ws) {
+    for await (const chunk of rs) {
+      ws.write(chunk);
+    }
+  }
+
+  const done = () => {
     if (!dry) {
       let rs = source;
       if (typeof source === 'string') rs = createReadStream(source);
       const ws = createWriteStream(dest.full);
-      rs.pipe(ws);
+
+      asyncWrite(rs, ws);
+      onend && rs.on('end', onend);
     }
   };
 
@@ -128,19 +138,14 @@ export async function processJs(config, file, out, opts = {}) {
     b.bundle((err, data) => err ? rej(err) : res(data));
   });
 
-  // b.add(file);
-  // const readStream = b.bundle();
-
-  // await writeFile(, tmpfile);
-
-  // const minCode = await compress(config, tmpfile, 'js', {
-  //   compress: true,
-  //   mangle: true
-  // });
-
-  const minCode = await bundle(file);
+  let minCode = await bundle(file);
+  writeFile(newReadable(minCode), tmpfile);
 
   if (!config.isDev && _opts.hash) {
+    minCode = await compress(config, tmpfile, 'js', {
+      compress: true,
+      mangle: true
+    });
     const hash = createHash(minCode, 10);
     to = outpath.noext.concat('.', hash, outpath.ext);
   }
@@ -175,7 +180,10 @@ export async function processCss(config, file, out, opts = {
 
   try {
     let code = opts.justCode;
-    if (file && !opts.justCode) code = await fs.readFile(file);
+    if (file && !opts.justCode) {
+      const rs = createReadStream(file);
+      code = await asyncRead(rs);
+    }
 
     const processed = await postcss(plugins)
       .process(code, { from: file, to: out });

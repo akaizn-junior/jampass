@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import os, { EOL } from 'os';
 import crypto from 'crypto';
+import { Readable } from 'stream';
 
 // local
 import defaultconfig from './default.config.js';
@@ -21,7 +22,7 @@ const LOCALS_FIELD_BEGIN_TOKEN = '[';
 const LOCALS_FIELD_END_TOKEN = ']';
 const LOCALS_PATH_TOKEN = '_';
 const LOCALS_INDEX_TOKEN = ':';
-const LOCALS_LOOP_TOKEN = '-';
+export const LOCALS_LOOP_TOKEN = '-';
 const MAX_RECURSIVE_ACESS = 7;
 
 // quick setup
@@ -175,8 +176,7 @@ export async function getDirPaths(srcPath, dirType = 'sub', dir = '') {
     });
 
     dirents = dirents
-      .filter(d => !ignore.includes(d.name))
-      .filter(d => !d.name.startsWith('.'));
+      .filter(d => !(d.name.startsWith('.') || ignore.includes(d.name)));
 
     const ps = dirents.map(async dirent => {
       if (dirent.isDirectory()) {
@@ -364,10 +364,14 @@ export function fErrName(name, prefix, exclude = []) {
   return prefix.concat(name);
 }
 
-export function markyStop(name, { label, count }) {
+export function markyStop(name, opts = {}) {
+  const { log, label, count = 1 } = opts;
+
   const timer = marky.stop(name);
   const end = Math.floor(timer.duration) / 1000;
-  logger.success(`"${label}" -`, count, `- ${end}s`);
+
+  opts.label && logger.success(`"${label}" -`, count, `- ${end}s`);
+  opts.log && log(end);
 }
 
 export function splitPathCwd(cwd, s) {
@@ -431,4 +435,33 @@ export function getSrcBase(config, withCwd = true) {
   }
 
   return '';
+}
+
+export function newReadable(data) {
+  const rs = new Readable({
+    read(size) {
+      // increase the size 'highWaterMark'
+      // from the default 16kb to ReadStreams's 64kb
+      const _size = size;
+      let i = 0;
+      while (i <= data.length) {
+        const chunk = String(data).substring(i, _size + i);
+        rs.push(chunk);
+
+        i += _size;
+      }
+      rs.push(null);
+    }
+  });
+  return rs;
+}
+
+export async function asyncRead(rs, proc = c => c) {
+  const _proc = safeFun(proc);
+  let res = '';
+  for await (const chunk of rs) {
+    res += _proc(chunk);
+  }
+
+  return res;
 }

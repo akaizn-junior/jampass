@@ -8,9 +8,7 @@ import * as marky from 'marky';
 import { bold, strikethrough } from 'colorette';
 
 // node
-import fs from 'fs/promises';
 import path from 'path';
-import { Readable } from 'stream';
 
 // local
 import {
@@ -24,13 +22,16 @@ import {
   handleThrown,
   toggleDebug,
   createHash,
+  asyncRead,
   parseDynamicName,
   accessProperty,
   pathDistance,
   fErrName,
   markyStop,
   splitPathCwd,
-  getSrcBase
+  getSrcBase,
+  LOCALS_LOOP_TOKEN,
+  newReadable
 } from './util.js';
 import {
   validateHtml,
@@ -47,6 +48,7 @@ import {
 import * as keep from './keep.js';
 import bSyncMiddleware from './bs.middleware.js';
 import defaultConfig from './default.config.js';
+import { createReadStream } from 'fs';
 
 // quick setup
 
@@ -56,13 +58,6 @@ debuglog(userEnv);
 // ++++++++++++++++
 // HELPERS
 // ++++++++++++++++
-
-const newReadable = data => {
-  const rs = new Readable();
-  rs.push(data);
-  rs.push(null);
-  return rs;
-};
 
 async function compileView(config, file, locals) {
   const filePath = vpath(file);
@@ -170,7 +165,7 @@ async function parseLinkedAssets(config, assets) {
           const passed = {
             from: entry,
             to: vpath(out.to).base,
-            code: Buffer.from(out.code),
+            code: out.code,
             out: out.to
           };
 
@@ -201,6 +196,7 @@ async function parseLinkedAssets(config, assets) {
 }
 
 async function getLocales(config, files) {
+  marky.mark('get locales');
   const dotjson = files['.json'] || [];
   const locales = dotjson.filter(file =>
     file.includes('/locales/')
@@ -210,8 +206,11 @@ async function getLocales(config, files) {
   // const fromConfig = config.locales.map
 
   const localesProm = locales.map(async locale => {
+    const url = new URL(locale, import.meta.url);
+    const rs = createReadStream(url);
+
     const contents = JSON.parse(
-      await fs.readFile(new URL(locale, import.meta.url))
+      await asyncRead(rs)
     );
 
     const name = vpath(locale).name;
@@ -233,6 +232,12 @@ async function getLocales(config, files) {
     meta: fromFiles,
     ...contents
   };
+
+  markyStop('get locales', {
+    log(end) {
+      logger.success('read', fromFiles.length, 'locales', `- ${end}s`);
+    }
+  });
 
   return res;
 }
@@ -279,8 +284,8 @@ async function parseViews(config, views, funneled) {
     await views.reduce(async(acc, v) => {
       try {
         const exists = keep.get(v);
-        const code = await fs.readFile(v);
-        const checksum = createHash(code, 64);
+        const rs = createReadStream(v);
+        const checksum = asyncRead(rs, c => createHash(c, 64));
 
         // only allow views with new content
         if (checksum !== exists?.checksum) {
@@ -307,12 +312,12 @@ async function parseViews(config, views, funneled) {
     debuglog('clean output', cleaned);
   }
 
-  const ps = _views.map(async view => {
+  const loop = arr => arr.map(async view => {
     const viewPath = vpath(view.path);
     const checksum = view.checksum;
 
     const { htmls, names } = await funnel(config, viewPath.full, funneled);
-    keep.upsert(viewPath.full, { checksum });
+    keep.upsert(viewPath.full, { checksum, isValidHtml: false });
 
     const _ps = htmls.map(async(html, j) => validateAndUpdateHtml(config, {
       html,
@@ -335,7 +340,19 @@ async function parseViews(config, views, funneled) {
     return checksum;
   });
 
-  return Promise.all(ps);
+  // separate costly operations
+  // by splitting views that generate multiple pages and single pages
+  const isMultiple = s => s.startsWith(LOCALS_LOOP_TOKEN);
+  const isSingle = s => !s.startsWith(LOCALS_LOOP_TOKEN);
+
+  const single = _views.filter(v => isSingle(v.path));
+  const multiple = _views.filter(v => isMultiple(v.path));
+
+  // independly resolve all pages
+  Promise.all(loop(single));
+  Promise.all(loop(multiple));
+
+  return _views;
 }
 
 async function validateAndUpdateHtml(config, data) {
@@ -353,10 +370,13 @@ async function validateAndUpdateHtml(config, data) {
   };
 
   try {
-    validateHtml(config, html.code.toString(), {
-      view: data.viewPath,
-      out: html.out
-    });
+    const exists = keep.get(html.from);
+    if (!exists.isValidHtml) {
+      validateHtml(config, html.code.toString(), {
+        view: data.viewPath
+      });
+      exists.isValidHtml = true;
+    }
 
     // parse html and get linked assets
     const linked = parseHtmlLinked(config, html.code);
@@ -424,11 +444,9 @@ async function getFunneled(config, cacheBust = '') {
         : Object.keys(funneled.data || {});
 
       if (!funneled.data) funneled.data = [];
+      debuglog('preview funneled data', funKeys);
 
-      return {
-        funneled,
-        funKeys
-      };
+      return funneled;
     }
 
     throw new Error(`invalid funneled data ${bold(funneled)}`);
@@ -444,7 +462,7 @@ async function parseAsset(config, asset, ext) {
   const srcBase = getSrcBase(config);
 
   for (let i = 0; i < asset.length; i++) {
-    const file = asset[i];
+    const file = asset[0];
     const fileBase = splitPathCwd(config.cwd, file);
     const exists = keep.get(fileBase);
 
@@ -495,7 +513,7 @@ async function unlinkFiles(config, toDel) {
   marky.mark('deleting files');
 
   const delp = vpath(toDel);
-  const { funneled } = await getFunneled(config);
+  const funneled = await getFunneled(config);
   const { names } = await funnel(config, delp.full, funneled, {
     onlyNames: true
   });
@@ -519,25 +537,27 @@ async function unlinkFiles(config, toDel) {
   }
 }
 
-function buildSearch(config, funneled) {
+async function buildSearch(config, funneled) {
+  marky.mark('build search');
   const { indexes, indexKeyMaxSize } = config.build.search;
 
-  const searchIndexes = indexes;
-  if (!searchIndexes || !searchIndexes.length) return;
+  if (!indexes || !indexes.length) return;
 
   const _indexKeyMaxSize = indexKeyMaxSize || 100;
   const data = funneled.data;
   const isArray = Array.isArray(data);
-  let file = {};
+  let file = '';
 
-  const getIndexes = locals => searchIndexes
+  const getIndexes = locals => indexes
     .reduce((acc, index) => {
+      const _acc = JSON.parse(acc);
+
       try {
         const value = accessProperty(locals, index);
         const isIndex = value.length <= _indexKeyMaxSize;
 
         if (isIndex) {
-          acc[value] = {
+          _acc[value] = {
             index,
             value: locals
           };
@@ -545,40 +565,65 @@ function buildSearch(config, funneled) {
       } catch (err) {
         logger.info('key "%s" is undefined.', index, 'Skipped index');
       }
-      return acc;
-    }, {});
+
+      return JSON.stringify(_acc);
+    }, '{}');
 
   const fnm = 'indexes.json';
   const exists = keep.get(fnm);
 
   if (!exists || config.watchFunnel) {
     if (isArray) {
-      file = data.reduce((acc, locals) => ({ ...acc, ...getIndexes(locals) }), {});
+      file = data.reduce((acc, locals) => {
+        const _acc = JSON.parse(acc);
+        const ind = JSON.parse(getIndexes(locals));
+        const res = Object.assign(_acc, ind);
+        return JSON.stringify(res);
+      }, '{}');
     } else {
       file = getIndexes(data);
     }
 
     const srcBase = getSrcBase(config, false);
-    const out = nm => vpath([config.owd, config.output.path, srcBase, nm]).full;
+    const out = vpath([config.owd, config.output.path, srcBase, fnm]).full;
 
-    const dataStr = JSON.stringify(file, null, 2);
-    writeFile(newReadable(dataStr), out(fnm));
-    bundleSearchFeature(config, 'src/search/index.js', out('search.min.js'));
-    logger.success('generated indexes "%s"', fnm);
-    keep.upsert(fnm, file);
+    writeFile(newReadable(file), out, () => {
+      markyStop('build search', {
+        log: end => logger.success('generated indexes "%s" -', fnm,
+          file.length,
+          `bytes - ${end}s`)
+      });
+    });
+
+    keep.upsert(fnm, { name: fnm, processed: true });
   }
 }
 
-async function bundleSearchFeature(config, file, out) {
-  if (config.build.search?.lib) {
+async function bundleSearchFeature(config, file, name) {
+  const exists = keep.get(name);
+  const { indexes, lib } = config.build.search;
+
+  if (!indexes || !indexes.length) return;
+
+  if (!exists && lib) {
+    const srcBase = getSrcBase(config, false);
+    const out = vpath([config.owd, config.output.path, srcBase, name]).full;
+
+    marky.mark('bundle search');
     const { to, code } = await processJs(config, file, out, {
       libName: 'Search',
       hash: false
     });
 
-    const size = code.length;
-    writeFile(newReadable(code), to);
-    logger.success('bundled search "search.min.js"', '-', size, 'bytes');
+    writeFile(newReadable(code), to, () => {
+      markyStop('bundle search', {
+        log: end => logger.success('bundled search "search.min.js" -',
+          code.length,
+          `bytes - ${end}s`)
+      });
+    });
+
+    keep.add(name, { name, processed: true });
   }
 }
 
@@ -617,9 +662,7 @@ function withConfig(config, done) {
 
 async function gen(config, watching = null, ext) {
   const funCacheBust = config.watchFunnel ? Date.now() : null;
-  const { funneled, funKeys } = await getFunneled(config, funCacheBust);
-
-  debuglog('preview funneled data', funKeys);
+  const funneled = await getFunneled(config, funCacheBust);
 
   const srcPath = vpath([config.cwd, config.src]);
   const read = await readSource(srcPath.full);
@@ -635,6 +678,8 @@ async function gen(config, watching = null, ext) {
   funneled.locales = await getLocales(config, read);
 
   buildSearch(config, funneled);
+  bundleSearchFeature(config, 'src/search/index.js', 'search.min.js');
+
   const parsed = parseViews(config, views, funneled);
   return parsed;
 }
