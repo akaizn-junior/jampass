@@ -9,6 +9,8 @@ import { bold, strikethrough } from 'colorette';
 
 // node
 import path from 'path';
+import { createReadStream } from 'fs';
+import { Readable } from 'stream';
 
 // local
 import {
@@ -48,7 +50,6 @@ import {
 import * as keep from './keep.js';
 import bSyncMiddleware from './bs.middleware.js';
 import defaultConfig from './default.config.js';
-import { createReadStream } from 'fs';
 
 // quick setup
 
@@ -319,23 +320,42 @@ async function parseViews(config, views, funneled) {
     const { htmls, names } = await funnel(config, viewPath.full, funneled);
     keep.upsert(viewPath.full, { checksum, isValidHtml: false });
 
-    const _ps = htmls.map(async(html, j) => validateAndUpdateHtml(config, {
-      html,
-      name: names[j],
-      srcBase,
-      outputPath,
-      count: htmls.length,
-      viewPath: viewPath.full
-    }));
+    async function * generate() {
+      const size = 500;
 
-    debuglog('parsed and output', _ps.length);
+      if (htmls.length > size) {
+        const chunks = Math.floor(htmls.length / size);
 
-    Promise.all(_ps);
+        for (let i = 0; i < chunks; i++) {
+          yield htmls.splice(0, size);
+        }
+      }
 
-    markyStop('parsing views', {
-      label: viewPath.base,
-      count: _ps.length
-    });
+      yield htmls.splice(0, htmls.length);
+    }
+
+    const rs = Readable.from(generate());
+
+    for await (const chunk of rs) {
+      const _ps = chunk.map(async(html, j) => validateAndUpdateHtml(config, {
+        html,
+        name: names[j],
+        srcBase,
+        outputPath,
+        count: htmls.length,
+        viewPath: viewPath.full
+      }));
+
+      if (_ps.length) {
+        debuglog('parsed and output', _ps.length);
+        Promise.all(_ps);
+
+        markyStop('parsing views', {
+          label: viewPath.base,
+          count: _ps.length
+        });
+      }
+    }
 
     return checksum;
   });
@@ -345,8 +365,11 @@ async function parseViews(config, views, funneled) {
   const isMultiple = s => s.startsWith(LOCALS_LOOP_TOKEN);
   const isSingle = s => !s.startsWith(LOCALS_LOOP_TOKEN);
 
-  const single = _views.filter(v => isSingle(v.path));
-  const multiple = _views.filter(v => isMultiple(v.path));
+  const single = _views.filter(v => isSingle(vpath(v.path).name));
+  const multiple = _views.filter(v => isMultiple(vpath(v.path).name));
+
+  debuglog('single page view', single.length);
+  debuglog('multiple pages view', multiple.length);
 
   // independly resolve all pages
   Promise.all(loop(single));
@@ -641,8 +664,10 @@ function withConfig(config, done) {
   // output working directory
   config.owd = config.cwd;
   if (config.watch) {
+    const nm = 'tmpout';
     config.owd = tmpdir;
-    config.output.path = 'tmpout';
+    config.output.path = nm;
+    config.serveTmpRoot = `${nm}-serve`;
   }
 
   config.env = process.env.NODE_ENV;
@@ -777,7 +802,7 @@ async function serve(config) {
           res.writeHead(302, {
             location: errorPagePath
           });
-          res.end('404');
+          res.end('404! redirecting');
         });
       }
     }

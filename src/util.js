@@ -59,8 +59,7 @@ export function toggleDebug(toggle) {
   else debug.disable();
 }
 
-// eslint-disable-next-line no-extra-parens
-export const safeFun = cb => (cb !== void 0 && typeof cb === 'function' ? cb : () => {});
+export const safeFun = cb => cb !== void 0 && typeof cb === 'function' ? cb : () => {};
 
 export const loadUserEnv = () => dotenv.config({
   path: path.join(process.cwd(), '.env')
@@ -439,6 +438,7 @@ export function getSrcBase(config, withCwd = true) {
 
 export function newReadable(data) {
   const rs = new Readable({
+    highWaterMark: 64 * 1024, // ReadStream high water mark
     read(size) {
       // increase the size 'highWaterMark'
       // from the default 16kb to ReadStreams's 64kb

@@ -26,7 +26,8 @@ import {
   spliceCodeSnippet,
   getSrcBase,
   newReadable,
-  asyncRead
+  asyncRead,
+  safeFun
 } from './util.js';
 
 
@@ -93,14 +94,21 @@ export async function writeFile(from, to, onend = null, dry = false) {
       const ws = createWriteStream(dest.full);
 
       asyncWrite(rs, ws);
-      onend && rs.on('end', onend);
+
+      rs.on('end', async() => {
+        safeFun(onend)();
+
+        // const linkPath = to.split('tmpout').join('tmpout-serve');
+        // const link = await symlink(to, linkPath);
+        // if (!link) logger.log('windows suck');
+      });
     }
   };
 
   try {
     const stats = await fs.stat(dest.dir);
     if (!stats.isDirectory()) {
-      throw Error('Public output must be a directory');
+      throw Error('public output must be a directory');
     }
 
     return done();
@@ -112,6 +120,35 @@ export async function writeFile(from, to, onend = null, dry = false) {
       } catch (e) {
         throw e;
       }
+    }
+  }
+}
+
+async function symlink(to, dest) {
+  const linkPath = vpath(dest);
+
+  const done = async exists => {
+    if (!exists) {
+      const link = await fs.link(to, linkPath.full, 'junction');
+      return link;
+    }
+
+    return 1;
+  };
+
+  try {
+    const stats = await fs.stat(linkPath.dir);
+    if (!stats.isDirectory()) {
+      throw Error('');
+    }
+
+    return done((await fs.stat(linkPath.full)).isFile());
+  } catch {
+    try {
+      await fs.mkdir(linkPath.dir, { recursive: true });
+      return done();
+    } catch (e) {
+      throw e;
     }
   }
 }

@@ -19,13 +19,13 @@ export default {
       debug: false,
       watchFunnel: false,
       search: {
-        indexKeyMaxSize: 60,
-        lib: true,
-        indexes: [
-          'name',
-          'breed',
-          'description'
-        ]
+        // indexKeyMaxSize: 60,
+        // lib: true,
+        // indexes: [
+        //   'name',
+        //   'breed',
+        //   'description'
+        // ]
       }
     },
     views: {
