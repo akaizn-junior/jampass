@@ -1,5 +1,5 @@
 import { existsSync } from 'fs';
-import { asyncRead } from './util.js';
+import { asyncRead } from './stream.js';
 
 function redirectToEntryWithSlash(opts) {
   return (req, res, next) => {

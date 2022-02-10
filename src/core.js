@@ -1,4 +1,3 @@
-// vendors
 import cons from 'consolidate';
 import browserSync from 'browser-sync';
 import chokidar from 'chokidar';
@@ -14,41 +13,38 @@ import { Readable } from 'stream';
 
 // local
 import {
-  debuglog,
-  logger,
+  validateAndUpdateHtml
+} from './utils/parse.js';
+
+import { LOCALS_LOOP_TOKEN } from './utils/tokens.js';
+import { bundleSearchFeature, buildSearch } from './utils/search.js';
+import { asyncRead } from './utils/stream.js';
+
+import {
   vpath,
-  loadUserEnv,
-  safeFun,
   getDirPaths,
-  tmpdir,
-  handleThrown,
-  toggleDebug,
-  createHash,
-  asyncRead,
+  getSrcBase
+} from './utils/path.js';
+import {
   parseDynamicName,
   accessProperty,
-  pathDistance,
+  processWatchedAsset
+} from './utils/process.js';
+import {
+  loadUserEnv,
+  logger,
+  debuglog,
+  safeFun,
   fErrName,
   markyStop,
-  splitPathCwd,
-  getSrcBase,
-  LOCALS_LOOP_TOKEN,
-  newReadable
-} from './util.js';
-import {
-  validateHtml,
-  writeFile,
-  parseHtmlLinked,
-  processAsset,
-  updatedHtmlLinkedCss,
-  updatedHtmlLinkedJs,
-  updateStyleTagCss,
-  updateScriptTagJs,
-  minifyHtml,
-  processJs
-} from './cheers.js';
-import * as keep from './keep.js';
-import bSyncMiddleware from './bs.middleware.js';
+  createHash,
+  tmpdir,
+  handleThrown,
+  toggleDebug
+} from './utils/helpers.js';
+
+import * as keep from './utils/keep.js';
+import bSyncMiddleware from './utils/bs.middleware.js';
 import defaultConfig from './default.config.js';
 
 // quick setup
@@ -148,54 +144,6 @@ async function funnel(config, file, funneled, flags = { onlyNames: false }) {
   };
 }
 
-async function parseLinkedAssets(config, assets) {
-  const srcBase = getSrcBase(config, false);
-  // and the h is for helper
-  const h = list => {
-    const ps = list.map(async item => {
-      const ext = item.ext;
-      const entry = item.href || item.src;
-      const exists = keep.get(entry);
-
-      if (!exists) {
-        const file = item.assetPath;
-        const outputPath = vpath([config.owd, config.output.path, srcBase, entry]).full;
-        const out = await processAsset(ext, config, file, outputPath);
-
-        if (out) {
-          const passed = {
-            from: entry,
-            to: vpath(out.to).base,
-            code: out.code,
-            out: out.to
-          };
-
-          return passed;
-        } else {
-          logger.error('failed processing asset');
-        }
-      }
-
-      return exists;
-    });
-
-    return Promise.all(ps);
-  };
-
-  const res = {};
-
-  for (const ext in assets) {
-    if (assets[ext]) {
-      // list of assets of a specific extension
-      const list = assets[ext];
-      const data = await h(list);
-      res[ext] = data;
-    }
-  }
-
-  return res;
-}
-
 async function getLocales(config, files) {
   marky.mark('get locales');
   const dotjson = files['.json'] || [];
@@ -241,37 +189,6 @@ async function getLocales(config, files) {
   });
 
   return res;
-}
-
-function writeAssets(assets) {
-  // flatten all asset lists
-  const flat = Object.values(assets)
-    .reduce((acc, list) => acc.concat(list), []);
-
-  flat.forEach(asset => {
-    const exists = keep.get(asset.from);
-
-    if (!exists || exists.out !== asset.out) {
-      debuglog('generated asset', asset.out);
-      writeFile(newReadable(asset.code), asset.out);
-    }
-  });
-}
-
-function rearrangeAssetPaths(html, assets) {
-  for (const ext in assets) {
-    const list = assets[ext];
-
-    if (list) {
-      assets[ext] = list.map(asset => {
-        const res = pathDistance(html.out, asset.out);
-        asset.to = res.distance;
-        return asset;
-      });
-    }
-  }
-
-  return assets;
 }
 
 async function parseViews(config, views, funneled) {
@@ -327,19 +244,25 @@ async function parseViews(config, views, funneled) {
         const chunks = Math.floor(htmls.length / size);
 
         for (let i = 0; i < chunks; i++) {
-          yield htmls.splice(0, size);
+          yield {
+            htmls: htmls.splice(0, size),
+            names: names.splice(0, size)
+          };
         }
       }
 
-      yield htmls.splice(0, htmls.length);
+      yield {
+        htmls: htmls.splice(0, htmls.length),
+        names: names.splice(0, names.length)
+      };
     }
 
     const rs = Readable.from(generate());
 
     for await (const chunk of rs) {
-      const _ps = chunk.map(async(html, j) => validateAndUpdateHtml(config, {
+      const _ps = chunk.htmls.map(async(html, j) => validateAndUpdateHtml(config, {
         html,
-        name: names[j],
+        name: chunk.names[j],
         srcBase,
         outputPath,
         count: htmls.length,
@@ -378,75 +301,6 @@ async function parseViews(config, views, funneled) {
   return _views;
 }
 
-async function validateAndUpdateHtml(config, data) {
-  const compiled = data.html;
-  const outname = data.name;
-
-  const tmpfile = vpath([tmpdir, data.srcBase, outname]).full;
-  const htmlOutFile = data.outputPath.join(data.srcBase, outname).full;
-
-  const html = {
-    from: data.viewPath,
-    out: htmlOutFile,
-    code: compiled,
-    tmpfile
-  };
-
-  try {
-    const exists = keep.get(html.from);
-    if (!exists.isValidHtml) {
-      validateHtml(config, html.code.toString(), {
-        view: data.viewPath
-      });
-      exists.isValidHtml = true;
-    }
-
-    // parse html and get linked assets
-    const linked = parseHtmlLinked(config, html.code);
-    // an object of schema { [ext]: [] } / ex: { '.css': [] }
-    const assets = await parseLinkedAssets(config, linked);
-    const reAssets = rearrangeAssetPaths(html, assets);
-
-    writeAssets(reAssets);
-
-    keep.appendHtmlTo(html.from, html.out, html);
-    keep.appendAssetsTo(html.from, reAssets);
-
-    return await updateAndWriteHtml(config, { html, assets: reAssets });
-  } catch (err) {
-    if (!config.watch) {
-      const d = await del([data.outputPath.full], { force: true });
-      debuglog('clean output', d);
-    }
-    throw err;
-  }
-}
-
-async function updateAndWriteHtml(config, parsed) {
-  const { html, assets } = parsed;
-
-  try {
-    // 'u' stands for 'updated'
-    // these variables hold HTML with updated content
-    const uLinkedCss = updatedHtmlLinkedCss(html.code, assets['.css']);
-    const uLinkedJs = updatedHtmlLinkedJs(uLinkedCss, assets['.js']);
-
-    const uStyleTags = await updateStyleTagCss(config, uLinkedJs, html.from);
-    const uScriptTags = await updateScriptTagJs(uStyleTags);
-
-    let minHtml = uScriptTags;
-
-    if (!config.isDev) {
-      await writeFile(newReadable(minHtml), html.tmpfile);
-      minHtml = await minifyHtml(config, html.tmpfile);
-    }
-
-    await writeFile(newReadable(minHtml), html.out);
-  } catch (err) {
-    throw err;
-  }
-}
-
 async function getFunneled(config, cacheBust = '') {
   // if no config.funnel
   const dataPath = vpath([config.cwd, config.src, defaultConfig.funnelName], true).full;
@@ -477,38 +331,6 @@ async function getFunneled(config, cacheBust = '') {
     err.name = 'DataFunnelError';
     err.message = dataPath.concat('\n\n', err.message);
     throw err;
-  }
-}
-
-async function parseAsset(config, asset, ext) {
-  debuglog('parsing asset');
-  const srcBase = getSrcBase(config);
-
-  for (let i = 0; i < asset.length; i++) {
-    const file = asset[0];
-    const fileBase = splitPathCwd(config.cwd, file);
-    const exists = keep.get(fileBase);
-
-    // only parse asset if it exists
-    // meaning it has already been parsed by reading it from an html file
-    if (exists) {
-      const outputPath = vpath([config.owd, config.output.path, srcBase, fileBase]).full;
-      const processed = await processAsset(ext, config, file, outputPath);
-
-      if (processed) {
-        const res = {
-          from: fileBase,
-          to: vpath(processed.to).base,
-          code: processed.code,
-          out: processed.to
-        };
-
-        writeFile(newReadable(res.code), res.out);
-        logger.info('processed asset', `"${fileBase}"`);
-      } else {
-        logger.error('failed processing asset');
-      }
-    }
   }
 }
 
@@ -560,96 +382,6 @@ async function unlinkFiles(config, toDel) {
   }
 }
 
-async function buildSearch(config, funneled) {
-  marky.mark('build search');
-  const { indexes, indexKeyMaxSize } = config.build.search;
-
-  if (!indexes || !indexes.length) return;
-
-  const _indexKeyMaxSize = indexKeyMaxSize || 100;
-  const data = funneled.data;
-  const isArray = Array.isArray(data);
-  let file = '';
-
-  const getIndexes = locals => indexes
-    .reduce((acc, index) => {
-      const _acc = JSON.parse(acc);
-
-      try {
-        const value = accessProperty(locals, index);
-        const isIndex = value.length <= _indexKeyMaxSize;
-
-        if (isIndex) {
-          _acc[value] = {
-            index,
-            value: locals
-          };
-        }
-      } catch (err) {
-        logger.info('key "%s" is undefined.', index, 'Skipped index');
-      }
-
-      return JSON.stringify(_acc);
-    }, '{}');
-
-  const fnm = 'indexes.json';
-  const exists = keep.get(fnm);
-
-  if (!exists || config.watchFunnel) {
-    if (isArray) {
-      file = data.reduce((acc, locals) => {
-        const _acc = JSON.parse(acc);
-        const ind = JSON.parse(getIndexes(locals));
-        const res = Object.assign(_acc, ind);
-        return JSON.stringify(res);
-      }, '{}');
-    } else {
-      file = getIndexes(data);
-    }
-
-    const srcBase = getSrcBase(config, false);
-    const out = vpath([config.owd, config.output.path, srcBase, fnm]).full;
-
-    writeFile(newReadable(file), out, () => {
-      markyStop('build search', {
-        log: end => logger.success('generated indexes "%s" -', fnm,
-          file.length,
-          `bytes - ${end}s`)
-      });
-    });
-
-    keep.upsert(fnm, { name: fnm, processed: true });
-  }
-}
-
-async function bundleSearchFeature(config, file, name) {
-  const exists = keep.get(name);
-  const { indexes, lib } = config.build.search;
-
-  if (!indexes || !indexes.length) return;
-
-  if (!exists && lib) {
-    const srcBase = getSrcBase(config, false);
-    const out = vpath([config.owd, config.output.path, srcBase, name]).full;
-
-    marky.mark('bundle search');
-    const { to, code } = await processJs(config, file, out, {
-      libName: 'Search',
-      hash: false
-    });
-
-    writeFile(newReadable(code), to, () => {
-      markyStop('bundle search', {
-        log: end => logger.success('bundled search "search.min.js" -',
-          code.length,
-          `bytes - ${end}s`)
-      });
-    });
-
-    keep.add(name, { name, processed: true });
-  }
-}
-
 // +++++++++++++++++++++++++++++++
 // RUN WITH CONFIG
 // +++++++++++++++++++++++++++++++
@@ -667,7 +399,6 @@ function withConfig(config, done) {
     const nm = 'tmpout';
     config.owd = tmpdir;
     config.output.path = nm;
-    config.serveTmpRoot = `${nm}-serve`;
   }
 
   config.env = process.env.NODE_ENV;
@@ -677,6 +408,14 @@ function withConfig(config, done) {
   debuglog('watch mode', config.watch);
   debuglog('output working directory', config.owd);
   debuglog('public output directory', config.output.path);
+
+  if (config.watch) {
+    const outputPath = vpath([config.owd, config.output.path]).full;
+    del(outputPath, { force: true })
+      .then(cleaned => {
+        debuglog('init! cleaned output', cleaned);
+      });
+  }
 
   return done(config);
 }
@@ -697,7 +436,7 @@ async function gen(config, watching = null, ext) {
 
   if (ext !== '.html' && !config.watchFunnel) {
     const asset = watching?.[ext] || [];
-    parseAsset(config, asset, ext);
+    processWatchedAsset(config, asset, ext);
   }
 
   funneled.locales = await getLocales(config, read);

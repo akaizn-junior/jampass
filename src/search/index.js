@@ -1,12 +1,12 @@
 /* globals fetch */
 
 const TrieSearch = require('trie-search');
-const t = new TrieSearch();
+const root = new TrieSearch();
 
 async function init() {
   const res = await fetch('/indexes.json');
   const data = await res.json();
-  t.addFromObject(data);
+  root.addFromObject(data);
 }
 
 init();
@@ -21,7 +21,7 @@ function _paint(result) {
  * @param {HTMLElement} resEl element to attach results to
  * @param {function|null} paint a callback for search results
  */
-function render(inputEl, resEl, paint = null, trie = t) {
+function render(inputEl, resEl, paint = null, trie = root) {
   const p = paint && typeof paint === 'function'
     ? paint : _paint;
 
@@ -38,7 +38,7 @@ function render(inputEl, resEl, paint = null, trie = t) {
 }
 
 module.exports = {
-  trie: t,
+  trie: root,
   render,
   TrieSearch
 };
