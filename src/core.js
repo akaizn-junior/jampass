@@ -18,7 +18,7 @@ import {
 
 import { LOCALS_LOOP_TOKEN } from './utils/tokens.js';
 import { bundleSearchFeature, buildSearch } from './utils/search.js';
-import { asyncRead } from './utils/stream.js';
+import { asyncRead, htmlsNamesGenerator } from './utils/stream.js';
 
 import {
   vpath,
@@ -33,14 +33,15 @@ import {
 import {
   loadUserEnv,
   logger,
+  history,
   debuglog,
   safeFun,
   fErrName,
   markyStop,
-  createHash,
   tmpdir,
   handleThrown,
-  toggleDebug
+  toggleDebug,
+  reduceViewsByChecksum
 } from './utils/helpers.js';
 
 import * as keep from './utils/keep.js';
@@ -199,26 +200,7 @@ async function parseViews(config, views, funneled) {
   const outputPath = vpath([config.owd, config.output.path]);
 
   const _views = await Promise.all(
-    await views.reduce(async(acc, v) => {
-      try {
-        const exists = keep.get(v);
-        const rs = createReadStream(v);
-        const checksum = asyncRead(rs, c => createHash(c, 64));
-
-        // only allow views with new content
-        if (checksum !== exists?.checksum) {
-          (await acc).push({ path: v, checksum });
-        }
-
-        return acc;
-      } catch (err) {
-        if (err.code === 'ENOENT') {
-          watch(config);
-          return [];
-        }
-        throw err;
-      }
-    }, [])
+    await views.reduce(reduceViewsByChecksum(() => watch(config)), [])
   );
 
   debuglog('views count', _views.length);
@@ -237,29 +219,9 @@ async function parseViews(config, views, funneled) {
     const { htmls, names } = await funnel(config, viewPath.full, funneled);
     keep.upsert(viewPath.full, { checksum, isValidHtml: false });
 
-    async function * generate() {
-      const size = 500;
+    const asyncGen = Readable.from(htmlsNamesGenerator(htmls, names));
 
-      if (htmls.length > size) {
-        const chunks = Math.floor(htmls.length / size);
-
-        for (let i = 0; i < chunks; i++) {
-          yield {
-            htmls: htmls.splice(0, size),
-            names: names.splice(0, size)
-          };
-        }
-      }
-
-      yield {
-        htmls: htmls.splice(0, htmls.length),
-        names: names.splice(0, names.length)
-      };
-    }
-
-    const rs = Readable.from(generate());
-
-    for await (const chunk of rs) {
+    for await (const chunk of asyncGen) {
       const _ps = chunk.htmls.map(async(html, j) => validateAndUpdateHtml(config, {
         html,
         name: chunk.names[j],
@@ -417,6 +379,8 @@ function withConfig(config, done) {
       });
   }
 
+  history.log('command', done.name);
+
   return done(config);
 }
 
@@ -426,7 +390,11 @@ function withConfig(config, done) {
 
 async function gen(config, watching = null, ext) {
   const funCacheBust = config.watchFunnel ? Date.now() : null;
-  const funneled = await getFunneled(config, funCacheBust);
+  let funneled;
+
+  if (!funCacheBust) {
+    funneled = await getFunneled(config, funCacheBust);
+  }
 
   const srcPath = vpath([config.cwd, config.src]);
   const read = await readSource(srcPath.full);
@@ -439,12 +407,16 @@ async function gen(config, watching = null, ext) {
     processWatchedAsset(config, asset, ext);
   }
 
-  funneled.locales = await getLocales(config, read);
+  !funneled.locales && (funneled.locales = await getLocales(config, read));
 
   buildSearch(config, funneled);
   bundleSearchFeature(config, 'src/search/index.js', 'search.min.js');
-
   const parsed = parseViews(config, views, funneled);
+
+  parsed.then(res => {
+    history.success('generated pages from', res.length, 'views');
+  });
+
   return parsed;
 }
 

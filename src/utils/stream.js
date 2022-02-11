@@ -15,7 +15,7 @@ import { safeFun } from './helpers.js';
  * @param {boolean} dry toggle dry mode
  * @returns
  */
-export async function writeFile(from, to, onend = null, dry = false) {
+export async function writeFile(from, to, onend = null, flags = 'w+', dry = false) {
   const source = typeof from === 'string' ? vpath(from, true).full : from;
   const dest = vpath(to);
 
@@ -29,8 +29,7 @@ export async function writeFile(from, to, onend = null, dry = false) {
     if (!dry) {
       let rs = source;
       if (typeof source === 'string') rs = createReadStream(source);
-      const ws = createWriteStream(dest.full);
-
+      const ws = createWriteStream(dest.full, { flags });
       asyncWrite(rs, ws);
 
       rs.on('end', async() => {
@@ -86,4 +85,24 @@ export async function asyncRead(rs, proc = c => c) {
   }
 
   return res;
+}
+
+export async function * htmlsNamesGenerator(htmls, names) {
+  const size = 500;
+
+  if (htmls.length > size) {
+    const chunks = Math.floor(htmls.length / size);
+
+    for (let i = 0; i < chunks; i++) {
+      yield {
+        htmls: htmls.splice(0, size),
+        names: names.splice(0, size)
+      };
+    }
+  }
+
+  yield {
+    htmls: htmls.splice(0, htmls.length),
+    names: names.splice(0, names.length)
+  };
 }

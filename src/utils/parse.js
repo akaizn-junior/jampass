@@ -95,6 +95,11 @@ export function parseHtmlLinked(config, code) {
     }
   };
 
+  const notFoundLog = asset => {
+    const exists = keep.get(`${asset}-404`);
+    !exists && logger.log('"%s" not found locally. skipped', asset);
+  };
+
   $('link[rel]').each((_, el) => {
     try {
       const hrefPath = vpath(
@@ -112,7 +117,8 @@ export function parseHtmlLinked(config, code) {
     } catch (err) {
       if (err.code === 'ENOENT') {
         err.name = 'HtmlLinkedCssWarn';
-        logger.info('"%s" not found locally. skipped', el.attribs.href);
+        notFoundLog(el.attribs.href);
+        keep.add(`${el.attribs.href}-404`, { skipped: true });
       }
     }
   });
@@ -134,7 +140,8 @@ export function parseHtmlLinked(config, code) {
     } catch (err) {
       if (err.code === 'ENOENT') {
         err.name = 'HtmlLinkedScriptWarn';
-        logger.info('skipped "%s". Asset not found locally', el.attribs.src);
+        notFoundLog(el.attribs.src);
+        keep.add(`${el.attribs.src}-404`, { skipped: true });
       } else {
         throw err;
       }

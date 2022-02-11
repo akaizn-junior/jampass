@@ -6,7 +6,7 @@ import { minify } from 'minify';
 import * as marky from 'marky';
 
 // node
-import fs from 'fs';
+import fs, { createReadStream } from 'fs';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
@@ -14,6 +14,8 @@ import crypto from 'crypto';
 // local
 import defaultconfig from '../default.config.js';
 import { vpath } from './path.js';
+import { writeFile, asyncRead, newReadable } from './stream.js';
+import * as keep from './keep.js';
 
 export const tmpdir = (() => {
   const dir = path.join(os.tmpdir(), defaultconfig.name);
@@ -31,9 +33,21 @@ export const tmpdir = (() => {
 // consola instance
 
 class HomeDirReporter extends consola.BasicReporter {
-  static homedir = vpath([os.homedir(), defaultconfig.name]).full;
+  constructor(options) {
+    super(options);
+    this.homedir = vpath([os.homedir(), `.${defaultconfig.name}`]).full;
+    this.historyName = '.history';
+    this.historyFile = vpath([this.homedir, this.historyName]).full;
+  }
 
-  log() {
+  log(logObj, { stdout } = {}) {
+    let line = this.formatLogObj(logObj, {
+      width: stdout.columns || 0
+    });
+
+    line = ''.concat(Date.now(), ';', line, '\n');
+    writeFile(newReadable(line), this.historyFile, null, 'a+');
+    return;
   }
 }
 
@@ -42,7 +56,13 @@ export const logger = consola.create({
   throttle: 3,
   async: true,
   reporters: [
-    new consola.FancyReporter(),
+    new consola.FancyReporter()
+  ]
+});
+
+export const history = consola.create({
+  async: true,
+  reporters: [
     new HomeDirReporter()
   ]
 });
@@ -170,4 +190,27 @@ export async function minifyHtml(config, file) {
     err.name = fErrName(err.name, 'MinifyHtml');
     throw err;
   }
+}
+
+export function reduceViewsByChecksum(rewatch = null) {
+  return async(acc, v) => {
+    try {
+      const exists = keep.get(v);
+      const rs = createReadStream(v);
+      const checksum = await asyncRead(rs, c => createHash(c, 64));
+
+      // only allow views with new content
+      if (checksum !== exists?.checksum) {
+        (await acc).push({ path: v, checksum });
+      }
+
+      return acc;
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        safeFun(rewatch)();
+        return [];
+      }
+      throw err;
+    }
+  };
 }
