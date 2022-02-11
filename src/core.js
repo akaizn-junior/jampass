@@ -7,8 +7,8 @@ import * as marky from 'marky';
 import { bold, strikethrough } from 'colorette';
 
 // node
+import fs from 'fs';
 import path from 'path';
-import { createReadStream } from 'fs';
 import { Readable } from 'stream';
 
 // local
@@ -157,7 +157,7 @@ async function getLocales(config, files) {
 
   const localesProm = locales.map(async locale => {
     const url = new URL(locale, import.meta.url);
-    const rs = createReadStream(url);
+    const rs = fs.createReadStream(url);
 
     const contents = JSON.parse(
       await asyncRead(rs)
@@ -355,6 +355,8 @@ function withConfig(config, done) {
   toggleDebug(config.build.debug);
   debuglog('user config %O', config);
 
+  config.watch = ['watch', 'serve'].includes(done.name);
+
   // output working directory
   config.owd = config.cwd;
   if (config.watch) {
@@ -371,7 +373,7 @@ function withConfig(config, done) {
   debuglog('output working directory', config.owd);
   debuglog('public output directory', config.output.path);
 
-  if (config.watch) {
+  if (done.name === 'watch') {
     const outputPath = vpath([config.owd, config.output.path]).full;
     del(outputPath, { force: true })
       .then(cleaned => {
@@ -411,13 +413,16 @@ async function gen(config, watching = null, ext) {
 
   buildSearch(config, funneled);
   bundleSearchFeature(config, 'src/search/index.js', 'search.min.js');
-  const parsed = parseViews(config, views, funneled);
 
-  parsed.then(res => {
-    history.success('generated pages from', res.length, 'views');
-  });
+  try {
+    const parsed = await parseViews(config, views, funneled);
+    history.success('successful build');
 
-  return parsed;
+    return parsed;
+  } catch (e) {
+    history.error('failed build');
+    throw e;
+  }
 }
 
 /**
@@ -485,7 +490,9 @@ async function watch(config, cb = () => {}, ignore = []) {
  * Powered by [BrowserSync](https://browsersync.io/docs/api)
  */
 async function serve(config) {
+  const srcPath = vpath([config.cwd, config.src]).full;
   const serverRoot = vpath([config.owd, config.output.path]).full;
+
   const errorPagePath = config.devServer.pages['404'];
   const port = config.devServer.port ?? 2000;
   const host = 'http://localhost';
@@ -503,8 +510,8 @@ async function serve(config) {
       host, port, entry, serverRoot
     }),
     /**
-     * @see https://browsersync.io/docs/options/#option-callbacks
-     */
+   * @see https://browsersync.io/docs/options/#option-callbacks
+   */
     callbacks: {
       ready(err, _bs) {
         if (err) throw err;
@@ -519,7 +526,22 @@ async function serve(config) {
     }
   });
 
-  watch(config, bs.reload);
+  try {
+    const srcStats = await fs.promises.stat(srcPath);
+    const serverRootStats = await fs.promises.stat(serverRoot);
+
+    // if the user has edited src more recently
+    // than generated pages, generate pages
+    if (srcStats.mtimeMs > serverRootStats.mtimeMs) {
+      watch(config, bs.reload);
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      throw err;
+    }
+
+    watch(config, bs.reload);
+  }
 }
 
 async function lint(config) {
@@ -548,13 +570,7 @@ async function lint(config) {
 
 export default {
   gen: c => withConfig(c, gen),
-  watch: c => {
-    c.watch = true;
-    return withConfig(c, watch);
-  },
-  serve: c => {
-    c.watch = true;
-    return withConfig(c, serve);
-  },
+  watch: c => withConfig(c, watch),
+  serve: c => withConfig(c, serve),
   lint: c => withConfig(c, lint)
 };

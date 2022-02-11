@@ -13,6 +13,7 @@ import { safeFun } from './helpers.js';
  * @param {string} to destination file
  * @param {function} onend runs at the end of the stream
  * @param {boolean} dry toggle dry mode
+
  */
 export async function writeFile(from, to, onend = null, flags = 'w+', dry = false) {
   const source = typeof from === 'string' ? vpath(from, true).full : from;

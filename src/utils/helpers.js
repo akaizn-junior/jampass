@@ -35,9 +35,8 @@ export const tmpdir = (() => {
 class HomeDirReporter extends consola.BasicReporter {
   constructor(options) {
     super(options);
-    this.homedir = vpath([os.homedir(), `.${defaultconfig.name}`]).full;
-    this.historyName = '.history';
-    this.historyFile = vpath([this.homedir, this.historyName]).full;
+    this.historyFile = defaultconfig.historyFilePath;
+    this.lastFile = defaultconfig.lastCmdFilePath;
   }
 
   log(logObj, { stdout } = {}) {

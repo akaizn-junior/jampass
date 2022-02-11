@@ -1,4 +1,4 @@
-import { existsSync } from 'fs';
+import fs from 'fs';
 import { asyncRead } from './stream.js';
 
 function redirectToEntryWithSlash(opts) {
@@ -54,12 +54,15 @@ function writePageContent(opts) {
       `${opts.serverRoot + uri}/index.html`
     ];
 
-    const exists = possible.filter(u => existsSync(u));
+    const exists = possible.filter(u => fs.existsSync(u));
     if (exists.length) {
       const file = exists[0];
-      const content = await asyncRead(file);
+      const rs = fs.createReadStream(file);
 
-      res.write(content);
+      await asyncRead(rs, chunk => {
+        res.write(chunk);
+      });
+
       res.writeHead(200);
       res.end();
       return;
