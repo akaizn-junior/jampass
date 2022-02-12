@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import del from 'del';
 import { minify } from 'minify';
 import * as marky from 'marky';
+import { bold } from 'colorette';
 
 // node
 import fs from 'fs';
@@ -128,14 +129,10 @@ export function fErrName(name, prefix, exclude = []) {
   return prefix.concat(name);
 }
 
-export function markyStop(name, opts = {}) {
-  const { log, label, count = 1 } = opts;
-
+export function markyStop(name, log = null) {
   const timer = marky.stop(name);
   const end = Math.floor(timer.duration) / 1000;
-
-  opts.label && logger.success(`"${label}" -`, count, `- ${end}s`);
-  opts.log && log(end);
+  return log ? safeFun(log)(end) : end;
 }
 
 /**
@@ -210,4 +207,10 @@ export function reduceViewsByChecksum(rewatch = null) {
       throw err;
     }
   };
+}
+
+export function showTime(end, lap, show = true) {
+  return show
+    ? `(${bold(`${end}s`)} \u00b7 ${lap}s)`
+    : '';
 }

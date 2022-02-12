@@ -39,7 +39,8 @@ import {
   tmpdir,
   handleThrown,
   toggleDebug,
-  reduceViewsByChecksum
+  reduceViewsByChecksum,
+  showTime
 } from './utils/helpers.js';
 
 import * as keep from './utils/keep.js';
@@ -144,6 +145,7 @@ async function funnel(config, file, funneled, flags = { onlyNames: false }) {
 
 async function getLocales(config, files) {
   marky.mark('get locales');
+
   const dotjson = files['.json'] || [];
   const locales = dotjson.filter(file =>
     file.includes('/locales/')
@@ -179,10 +181,10 @@ async function getLocales(config, files) {
     ...contents
   };
 
-  markyStop('get locales', {
-    log(end) {
-      logger.success('read', fromFiles.length, 'locales', `- ${end}s`);
-    }
+  markyStop('get locales', end => {
+    const lap = markyStop('build time');
+    const time = showTime(end, lap);
+    logger.success('loaded', fromFiles.length, 'locales', time);
   });
 
   return res;
@@ -190,7 +192,6 @@ async function getLocales(config, files) {
 
 async function parseViews(config, views, funneled) {
   debuglog('parsing src views');
-  marky.mark('parsing views');
 
   const srcBase = getSrcBase(config);
   const outputPath = vpath([config.owd, config.output.path]);
@@ -215,9 +216,11 @@ async function parseViews(config, views, funneled) {
     const { htmls, names } = await funnel(config, viewPath.full, funneled);
     keep.upsert(viewPath.full, { checksum, isValidHtml: false });
 
-    const asyncGen = Readable.from(htmlsNamesGenerator(htmls, names));
+    const asyncChunks = Readable.from(htmlsNamesGenerator(htmls, names));
 
-    for await (const chunk of asyncGen) {
+    for await (const chunk of asyncChunks) {
+      marky.mark('build views');
+
       const _ps = chunk.htmls.map(async(html, j) => validateAndUpdateHtml(config, {
         html,
         name: chunk.names[j],
@@ -231,9 +234,10 @@ async function parseViews(config, views, funneled) {
         debuglog('parsed and output', _ps.length);
         Promise.all(_ps);
 
-        markyStop('parsing views', {
-          label: viewPath.base,
-          count: _ps.length
+        markyStop('build views', end => {
+          const lap = markyStop('build time');
+          const time = showTime(end, lap);
+          logger.success(`"${viewPath.base}" -`, _ps.length, time);
         });
       }
     }
@@ -331,9 +335,11 @@ async function unlinkFiles(config, toDel) {
 
   try {
     const deld = await del(fnms, { force: true });
-    deld.length && markyStop('deleting files', {
-      label: strikethrough(delp.base),
-      count: names.length
+
+    deld.length && markyStop('deleting files', end => {
+      const label = strikethrough(delp.base);
+      const count = names.length;
+      logger.success(`"${label}" -`, count, `- ${end}s`);
     });
   } catch (err) {
     throw err;
@@ -385,6 +391,8 @@ function withConfig(config, done) {
 // ++++++++++++++++
 
 async function gen(config, watching = null, ext) {
+  marky.mark('build time');
+
   const funCacheBust = config.watchFunnel ? Date.now() : null;
   let funneled;
 

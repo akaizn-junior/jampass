@@ -2,13 +2,12 @@ import * as marky from 'marky';
 
 // local
 import { accessProperty, processJs } from './process.js';
-import { logger, markyStop } from './helpers.js';
+import { logger, markyStop, showTime } from './helpers.js';
 import { getSrcBase, vpath } from './path.js';
 import { writeFile, newReadable } from './stream.js';
 import * as keep from './keep.js';
 
 export async function buildSearch(config, funneled) {
-  marky.mark('build search');
   const { indexes, indexKeyMaxSize } = config.build.search;
 
   if (!indexes || !indexes.length) return;
@@ -18,6 +17,10 @@ export async function buildSearch(config, funneled) {
   const isArray = Array.isArray(data);
   let file = '';
 
+  // indexes may be too BIG
+  // lets just use string and the ever fast JSON.parse
+  // of course with 'reduce'
+  // JSON parse and JSON.stringify are used with lesser data
   const getIndexes = locals => indexes
     .reduce((acc, index) => {
       const _acc = JSON.parse(acc);
@@ -43,6 +46,8 @@ export async function buildSearch(config, funneled) {
   const exists = keep.get(fnm);
 
   if (!exists || config.watchFunnel) {
+    marky.mark('build search');
+
     if (isArray) {
       file = data.reduce((acc, locals) => {
         const _acc = JSON.parse(acc);
@@ -58,10 +63,12 @@ export async function buildSearch(config, funneled) {
     const out = vpath([config.owd, config.output.path, srcBase, fnm]).full;
 
     writeFile(newReadable(file), out, () => {
-      markyStop('build search', {
-        log: end => logger.success('generated indexes "%s" -', fnm,
-          file.length,
-          `bytes - ${end}s`)
+      markyStop('build search', end => {
+        const lap = markyStop('build time');
+        const time = showTime(end, lap);
+
+        logger.success('generated indexes "%s" -', fnm,
+          file.length, 'bytes', time);
       });
     });
 
@@ -76,20 +83,23 @@ export async function bundleSearchFeature(config, file, name) {
   if (!indexes || !indexes.length) return;
 
   if (!exists && lib) {
+    marky.mark('bundle search');
+
     const srcBase = getSrcBase(config, false);
     const out = vpath([config.owd, config.output.path, srcBase, name]).full;
 
-    marky.mark('bundle search');
     const { to, code } = await processJs(config, file, out, {
       libName: 'Search',
       hash: false
     });
 
     writeFile(newReadable(code), to, () => {
-      markyStop('bundle search', {
-        log: end => logger.success('bundled search "search.min.js" -',
-          code.length,
-          `bytes - ${end}s`)
+      markyStop('bundle search', end => {
+        const lap = markyStop('build time');
+        const time = showTime(end, lap);
+
+        logger.success('bundled search "search.min.js" -',
+          code.length, 'bytes', time);
       });
     });
 
