@@ -23,13 +23,13 @@ export default {
       debug: false,
       watchFunnel: false,
       search: {
-        // indexKeyMaxSize: 60,
-        // lib: true,
-        // indexes: [
-        //   'name',
-        //   'breed',
-        //   'description'
-        // ]
+        indexKeyMaxSize: 60,
+        lib: true,
+        indexes: [
+          'name',
+          'breed',
+          'description'
+        ]
       }
     },
     views: {
@@ -50,7 +50,7 @@ export default {
       directory: false,
       open: false,
       pages: {
-        404: '/404.html'
+        404: '/'
       }
     }
   }

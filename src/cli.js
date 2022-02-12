@@ -116,7 +116,7 @@ cli.option('--views <path>', 'source views path',
 cli
   .command('gen', { isDefault: true })
   .description('build source')
-  .action((_, d) => withConfig(d, c => core.gen(c)));
+  .action((_, d) => withConfig(d, core.gen));
 
 cli
   .command('serve')
@@ -133,7 +133,7 @@ cli
   .option('--pages-404', 'path to 404 page',
     defaultConfig.userOpts.devServer.pages[404]
   )
-  .action((_, d) => withConfig(d, c => core.serve(c)));
+  .action((_, d) => withConfig(d, core.serve));
 
 cli
   .command('watch')
@@ -142,14 +142,14 @@ cli
     'allow funnel changes to re-generate pages',
     defaultConfig.userOpts.build.watchFunnel
   )
-  .action((_, d) => withConfig(d, c => core.watch(c)));
+  .action((_, d) => withConfig(d, core.watch));
 
 cli
   .command('lint')
   .description('lint source files')
   .option('--fix', 'auto fix linting errors', false)
   .option('--esrc <path>', 'eslint configuration file path', null)
-  .action((_, d) => withConfig(d, c => core.lint(c)));
+  .action((_, d) => withConfig(d, core.lint));
 
 // ++++++++++++++++++++++++
 // Parse CLI

@@ -1,7 +1,7 @@
 import faker from 'faker';
 
 const fakeData = [];
-const fakeItemsCount = 1;
+const fakeItemsCount = 50;
 const colors = ['pink', 'black', 'red', 'cyan', 'orange', 'purple'];
 
 faker.seed(fakeItemsCount);
@@ -10,7 +10,7 @@ for (let i = 0; i < fakeItemsCount; i++) {
   const date = faker.date.recent(2);
 
   fakeData.push({
-    name: faker.name.firstName() + Date.now() + Math.random(),
+    name: faker.name.firstName() + Date.now(),
     description: faker.lorem.words(500),
     breed: faker.animal.cat(),
     insertedAt: `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`,
@@ -20,7 +20,7 @@ for (let i = 0; i < fakeItemsCount; i++) {
 
 const date = faker.date.recent(5);
 fakeData.push({
-  name: faker.name.firstName() + Date.now() + Math.random(),
+  name: faker.name.firstName() + Date.now(),
   description: 'Doggo surprise',
   breed: faker.animal.dog(),
   insertedAt: `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`,

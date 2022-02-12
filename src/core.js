@@ -68,7 +68,6 @@ async function compileView(config, file, locals) {
     const templateEngine = await import(name);
     engineConfig(templateEngine);
 
-    locals.cache = true; // some engines support cache
     return await engine(filePath.full, locals);
   } catch (err) {
     err.name = fErrName(err.name, 'CompileView');
@@ -381,8 +380,6 @@ function withConfig(config, done) {
       });
   }
 
-  history.log('command', done.name);
-
   return done(config);
 }
 
@@ -416,11 +413,8 @@ async function gen(config, watching = null, ext) {
 
   try {
     const parsed = await parseViews(config, views, funneled);
-    history.success('successful build');
-
     return parsed;
   } catch (e) {
-    history.error('failed build');
     throw e;
   }
 }
@@ -430,9 +424,8 @@ async function gen(config, watching = null, ext) {
  * Powered by [Chokidar](https://www.npmjs.com/package/chokidar)
  * @param {object} config user configurations
  * @param {Function} cb Runs on triggered events
- * @param {string[]} ignore paths/globs to ignore
  */
-async function watch(config, cb = () => {}, ignore = []) {
+async function watch(config, cb = () => {}) {
   const watchPath = vpath([config.cwd, config.src], true);
   const _cb = safeFun(cb);
 
@@ -443,7 +436,7 @@ async function watch(config, cb = () => {}, ignore = []) {
     `${watchPath.full}/**/*.mjs`
   ], {
     cwd: config.cwd,
-    ignored: ignore
+    ignored: []
   });
 
   watcher.on('ready', () => {
@@ -490,10 +483,9 @@ async function watch(config, cb = () => {}, ignore = []) {
  * Powered by [BrowserSync](https://browsersync.io/docs/api)
  */
 async function serve(config) {
-  const srcPath = vpath([config.cwd, config.src]).full;
   const serverRoot = vpath([config.owd, config.output.path]).full;
 
-  const errorPagePath = config.devServer.pages['404'];
+  const fallbackPagePath = config.devServer.pages['404'];
   const port = config.devServer.port ?? 2000;
   const host = 'http://localhost';
   const entry = config.src;
@@ -518,30 +510,15 @@ async function serve(config) {
 
         _bs.addMiddleware('*', (_, res) => {
           res.writeHead(302, {
-            location: errorPagePath
+            location: fallbackPagePath
           });
-          res.end('404! redirecting');
+          res.end('404! fallback');
         });
       }
     }
   });
 
-  try {
-    const srcStats = await fs.promises.stat(srcPath);
-    const serverRootStats = await fs.promises.stat(serverRoot);
-
-    // if the user has edited src more recently
-    // than generated pages, generate pages
-    if (srcStats.mtimeMs > serverRootStats.mtimeMs) {
-      watch(config, bs.reload);
-    }
-  } catch (err) {
-    if (err.code !== 'ENOENT') {
-      throw err;
-    }
-
-    watch(config, bs.reload);
-  }
+  watch(config, bs.reload);
 }
 
 async function lint(config) {
