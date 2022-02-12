@@ -7,7 +7,6 @@ import * as marky from 'marky';
 import { bold, strikethrough } from 'colorette';
 
 // node
-import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
 
@@ -33,7 +32,6 @@ import {
 import {
   loadUserEnv,
   logger,
-  history,
   debuglog,
   safeFun,
   fErrName,
@@ -156,10 +154,9 @@ async function getLocales(config, files) {
 
   const localesProm = locales.map(async locale => {
     const url = new URL(locale, import.meta.url);
-    const rs = fs.createReadStream(url);
 
     const contents = JSON.parse(
-      await asyncRead(rs)
+      await asyncRead(url)
     );
 
     const name = vpath(locale).name;

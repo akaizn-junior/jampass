@@ -57,9 +57,8 @@ function writePageContent(opts) {
     const exists = possible.filter(u => fs.existsSync(u));
     if (exists.length) {
       const file = exists[0];
-      const rs = fs.createReadStream(file);
 
-      await asyncRead(rs, chunk => {
+      await asyncRead(file, chunk => {
         res.write(chunk);
       });
 

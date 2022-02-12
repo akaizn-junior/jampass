@@ -6,7 +6,7 @@ import { minify } from 'minify';
 import * as marky from 'marky';
 
 // node
-import fs, { createReadStream } from 'fs';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
@@ -191,15 +191,14 @@ export async function minifyHtml(config, file) {
 }
 
 export function reduceViewsByChecksum(rewatch = null) {
-  return async(acc, v) => {
+  return async(acc, view) => {
     try {
-      const exists = keep.get(v);
-      const rs = createReadStream(v);
-      const checksum = await asyncRead(rs, c => createHash(c, 64));
+      const exists = keep.get(view);
+      const checksum = await asyncRead(view, c => createHash(c, 64));
 
       // only allow views with new content
       if (checksum !== exists?.checksum) {
-        (await acc).push({ path: v, checksum });
+        (await acc).push({ path: view, checksum });
       }
 
       return acc;

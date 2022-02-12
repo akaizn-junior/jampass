@@ -12,10 +12,13 @@ import { safeFun } from './helpers.js';
  * @param {string|object} from source file, Readable or ReadStream
  * @param {string} to destination file
  * @param {function} onend runs at the end of the stream
- * @param {boolean} dry toggle dry mode
-
+ * @param {object} opts options
  */
-export async function writeFile(from, to, onend = null, flags = 'w+', dry = false) {
+export async function writeFile(from, to, onend = null, opts = {}) {
+  const _opts = Object.assign({
+    flags: 'w+', dry: false
+  }, opts);
+
   const source = typeof from === 'string' ? vpath(from, true).full : from;
   const dest = vpath(to);
 
@@ -26,10 +29,11 @@ export async function writeFile(from, to, onend = null, flags = 'w+', dry = fals
   }
 
   const done = () => {
-    if (!dry) {
-      let rs = source;
+    if (!_opts.dry) {
+      let rs = source; // source is a Readable or ReadStream
       if (typeof source === 'string') rs = createReadStream(source);
-      const ws = createWriteStream(dest.full, { flags });
+
+      const ws = createWriteStream(dest.full, { flags: _opts.flags });
       asyncWrite(rs, ws);
 
       rs.on('end', async() => {
@@ -46,7 +50,7 @@ export async function writeFile(from, to, onend = null, flags = 'w+', dry = fals
 
     return done();
   } catch {
-    if (!dry) {
+    if (!_opts.dry) {
       try {
         await fs.mkdir(dest.dir, { recursive: true });
         return done();
@@ -77,9 +81,11 @@ export function newReadable(data) {
   return rs;
 }
 
-export async function asyncRead(rs, proc = c => c) {
+export async function asyncRead(file, proc = c => c) {
+  const rs = createReadStream(file);
   const _proc = safeFun(proc);
   let res = '';
+
   for await (const chunk of rs) {
     res += _proc(chunk);
   }

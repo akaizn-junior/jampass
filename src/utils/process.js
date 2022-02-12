@@ -11,7 +11,6 @@ import postCssHash from 'postcss-hash';
 // node
 import { EOL } from 'os';
 import path from 'path';
-import { createReadStream } from 'fs';
 
 // local
 import {
@@ -226,8 +225,7 @@ export async function processCss(config, file, out, opts = {
   try {
     let code = opts.justCode;
     if (file && !opts.justCode) {
-      const rs = createReadStream(file);
-      code = await asyncRead(rs);
+      code = await asyncRead(file);
     }
 
     const processed = await postcss(plugins)
