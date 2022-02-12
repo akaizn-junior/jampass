@@ -18,9 +18,9 @@ export async function buildSearch(config, funneled) {
   let file = '';
 
   // indexes may be too BIG
-  // lets just use string and the ever fast JSON.parse
+  // lets just use string and the super fast JSON.parse
   // of course with 'reduce'
-  // JSON parse and JSON.stringify are used with lesser data
+  // JSON parse and JSON.stringify work with chunks
   const getIndexes = locals => indexes
     .reduce((acc, index) => {
       const _acc = JSON.parse(acc);

@@ -44,7 +44,7 @@ import {
 } from './utils/helpers.js';
 
 import * as keep from './utils/keep.js';
-import bSyncMiddleware from './utils/bs.middleware.js';
+import * as bSync from './utils/bs.middleware.js';
 import defaultConfig from './default.config.js';
 
 // quick setup
@@ -503,22 +503,16 @@ async function serve(config) {
       baseDir: serverRoot,
       directory: config.devServer.directory
     },
-    middleware: bSyncMiddleware({
+    middleware: bSync.getMiddlewareList({
       host, port, entry, serverRoot
     }),
     /**
-   * @see https://browsersync.io/docs/options/#option-callbacks
-   */
+     * @see https://browsersync.io/docs/options/#option-callbacks
+     */
     callbacks: {
       ready(err, _bs) {
         if (err) throw err;
-
-        _bs.addMiddleware('*', (_, res) => {
-          res.writeHead(302, {
-            location: fallbackPagePath
-          });
-          res.end('404! fallback');
-        });
+        _bs.addMiddleware('*', bSync.handleRestMiddleware(fallbackPagePath));
       }
     }
   });

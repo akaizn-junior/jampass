@@ -71,7 +71,17 @@ function writePageContent(opts) {
   };
 }
 
-export default function middleware(opts) {
+export function handleRestMiddleware(pagePath) {
+  return async(_, res) => {
+    res.writeHead(302, {
+      location: pagePath
+    });
+
+    res.end('404');
+  };
+}
+
+export function getMiddlewareList(opts) {
   return [
     redirectToEntryWithSlash(opts),
     redirectIfEndsWith(opts),

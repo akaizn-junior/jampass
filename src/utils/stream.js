@@ -82,15 +82,19 @@ export function newReadable(data) {
 }
 
 export async function asyncRead(file, proc = c => c) {
-  const rs = createReadStream(file);
-  const _proc = safeFun(proc);
-  let res = '';
+  try {
+    const rs = createReadStream(file);
+    const _proc = safeFun(proc);
+    let res = '';
 
-  for await (const chunk of rs) {
-    res += _proc(chunk);
+    for await (const chunk of rs) {
+      res += _proc(chunk);
+    }
+
+    return res;
+  } catch (err) {
+    throw err;
   }
-
-  return res;
 }
 
 export async function * htmlsNamesGenerator(htmls, names) {

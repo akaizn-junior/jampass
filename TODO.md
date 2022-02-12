@@ -9,3 +9,7 @@
 - [] include better js handling
 
 - [x] add search index build
+
+- [] add pagination
+
+- [] maybe include bytes formatter like 1000 bytes = 1kb
