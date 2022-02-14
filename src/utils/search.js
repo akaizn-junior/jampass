@@ -2,18 +2,19 @@ import * as marky from 'marky';
 
 // local
 import { accessProperty, processJs } from './process.js';
-import { logger, markyStop, showTime } from './helpers.js';
+import { logger } from './init.js';
+import { markyStop, showTime } from './helpers.js';
 import { getSrcBase, vpath } from './path.js';
 import { writeFile, newReadable } from './stream.js';
 import * as keep from './keep.js';
 
-export async function buildSearch(config, funneled) {
+export async function buildSearch(config) {
   const { indexes, indexKeyMaxSize } = config.build.search;
 
   if (!indexes || !indexes.length) return;
 
   const _indexKeyMaxSize = indexKeyMaxSize || 100;
-  const data = funneled.data;
+  const data = config.funneled.data;
   const isArray = Array.isArray(data);
   let file = '';
 

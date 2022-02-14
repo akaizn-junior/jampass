@@ -1,4 +1,4 @@
-import { bold, red } from 'colorette';
+import { bold, red, dim } from 'colorette';
 import browserify from 'browserify';
 
 // postcss and plugins
@@ -14,25 +14,29 @@ import path from 'path';
 
 // local
 import {
-  debuglog,
-  logger,
   fErrName,
   createHash,
-  tmpdir,
-  compress
+  compress,
+  inRange
 } from './helpers.js';
+
+import {
+  debuglog,
+  logger,
+  tmpdir
+} from './init.js';
 
 import { vpath, getSrcBase, splitPathCwd } from './path.js';
 import { writeFile, newReadable, asyncRead } from './stream.js';
 import * as keep from './keep.js';
 
 import {
-  LOCALS_FIELD_BEGIN_TOKEN,
-  LOCALS_FIELD_END_TOKEN,
-  LOCALS_PATH_TOKEN,
-  LOCALS_INDEX_TOKEN,
-  LOCALS_LOOP_TOKEN,
-  MAX_RECURSIVE_ACESS
+  FIELD_BEGIN_TOKEN,
+  FIELD_END_TOKEN,
+  PATH_TOKEN,
+  INDEX_TOKEN,
+  LOOP_TOKEN,
+  PAGE_TOKEN
 } from './tokens.js';
 
 export function accessProperty(obj, key, start = 0) {
@@ -40,6 +44,7 @@ export function accessProperty(obj, key, start = 0) {
     throw Error('undefined, key must be of type string');
   }
 
+  const MAX_RECURSIVE_ACESS = 7;
   const list = key.split('.');
   let i = start;
   const j = list[i];
@@ -54,38 +59,65 @@ export function accessProperty(obj, key, start = 0) {
       return value;
     }
   } else {
-    throw Error(`Reached max recursive acess ${MAX_RECURSIVE_ACESS}`);
+    throw Error(`reached max recursive acess ${MAX_RECURSIVE_ACESS}`);
   }
 }
 
 export function parseDynamicName(fnm) {
   debuglog('parsing dynamic name');
-  const dynBeginIndex = fnm.indexOf(LOCALS_FIELD_BEGIN_TOKEN);
-  const dynEndIndex = fnm.indexOf(LOCALS_FIELD_END_TOKEN);
+  const dynBeginIndex = fnm.indexOf(FIELD_BEGIN_TOKEN);
+  const dynEndIndex = fnm.indexOf(FIELD_END_TOKEN);
   const isDynamicName = dynBeginIndex !== -1 && dynEndIndex !== -1;
+  const DEFAULT_PAGE_NUMBER = 1;
 
   debuglog('dynamic filename', fnm);
 
   if (isDynamicName) {
-    const hasLoopToken = fnm.startsWith(LOCALS_LOOP_TOKEN);
+    const hasLoopToken = fnm.startsWith(LOOP_TOKEN);
     const prefix = fnm.substring(0, dynBeginIndex);
     const suffix = fnm.substring(dynEndIndex + 1, fnm.length);
     const localKeys = String(fnm).substring(dynBeginIndex + 1, dynEndIndex);
 
+    // check the prefix for the page number first
+    // the prefix has to be numberlike to pass as the page number
+    // her page can be the dwfault valur or a Number (including isNaN of course)
+    let page = isNaN(prefix) ? DEFAULT_PAGE_NUMBER : parseInt(prefix, 10);
+    // if no page found in the prefix check the page token
+    if ((page === DEFAULT_PAGE_NUMBER || isNaN(page)) && localKeys.startsWith(PAGE_TOKEN)) {
+      // this string is just the page number
+      // or a string that starts with the page number
+      let maybe = localKeys.substring(1, dynEndIndex);
+      // split path if path token found
+      maybe = maybe.split(PATH_TOKEN)[0] ?? maybe;
+      const maybeNumber = Number(maybe);
+
+      // at this point the page is either NaN or the page number
+      if (isNaN(maybeNumber)) {
+        throw new Error(`page is not a number. page "${maybe}"`);
+      }
+
+      page = maybeNumber;
+    }
+
     // separate local keys per paths
-    const localKeysAsPath = localKeys.split(LOCALS_PATH_TOKEN);
+    const localKeysAsPath = localKeys.split(PATH_TOKEN);
 
     // find indexes from keys
     const keys = localKeysAsPath.map(localkey => {
-      const lk = localkey.split(LOCALS_INDEX_TOKEN);
-      const key = lk[0];
-      const index = lk[1];
+      const lk = localkey.split(INDEX_TOKEN);
+      const key = lk[0].startsWith(PAGE_TOKEN) || !lk[0]
+        ? null : lk[0];
+      const index = lk[1] ?? null;
 
       return {
         key,
         index
       };
     });
+
+    if (hasLoopToken && keys.every(lk => lk.key === null)) {
+      throw new Error('attempting to loop single page');
+    }
 
     debuglog('dynamic keys', keys);
 
@@ -96,10 +128,9 @@ export function parseDynamicName(fnm) {
 
     return {
       keys,
+      page,
       loop: hasLoopToken,
       name: fnm,
-      prefix: cleanPrefix,
-      suffix,
       place: str => {
         if (str.endsWith(path.sep) && suffix.startsWith('.')) {
           return cleanPrefix.concat(str, 'index.html');
@@ -111,7 +142,8 @@ export function parseDynamicName(fnm) {
   }
 
   return {
-    name: fnm
+    name: fnm,
+    page: DEFAULT_PAGE_NUMBER
   };
 }
 
@@ -124,8 +156,8 @@ export function spliceCodeSnippet(code, lnumber, column = 0, opts = {}) {
   }, opts);
 
   const cut = (a, b, max) => {
-    const lower = a < 0 ? 0 : a;
-    const upper = b > max ? max : b;
+    const lower = inRange(a);
+    const upper = inRange(b, max);
     return { lower, upper };
   };
 
@@ -149,10 +181,10 @@ export function spliceCodeSnippet(code, lnumber, column = 0, opts = {}) {
     if (ln === lnumber + opts.startIndex) {
       const c = cut(column - 1, column + 1, line.length);
       const ml = markLine(line, c.lower, c.upper, line.length);
-      return bold(`${ln}${ml}`).concat(EOL);
+      return bold(`${ln} ${ml}`).concat(EOL);
     }
 
-    return `${ln}${line}`.concat(EOL);
+    return dim(`${ln} ${line}`).concat(EOL);
   })
     .slice(lrange.lower, lrange.upper);
 
@@ -241,12 +273,18 @@ export async function processCss(config, file, out, opts = {
         startIndex: opts.startIndex
       });
 
-      const emsg = splitPathCwd(config.cwd, err.file || file)
-        .concat(':', err.line + opts.startIndex, ':', err.column);
+      const errId = err.message;
+      const exists = keep.get(errId);
 
-      logger.log(EOL);
-      logger.log('CssSyntaxError', emsg, `"${err.reason}"`, EOL);
-      logger.log(snippet);
+      if (!exists) {
+        const emsg = splitPathCwd(config.cwd, err.file || file)
+          .concat(':', err.line + opts.startIndex, ':', err.column);
+
+        logger.log(EOL);
+        logger.log('CssSyntaxError', emsg, `"${err.reason}"`, EOL);
+        logger.log(snippet);
+        keep.add(errId, { proc: true });
+      }
     }
 
     err.name = fErrName(err.name, 'ProcessCss', ['CssSyntaxError']);
@@ -261,19 +299,26 @@ function processAsset(ext, config, file, out) {
   };
 
   try {
-    return fns[ext](config, file, out);
-  } catch {
+    const fun = fns[ext];
+    if (!fun) throw Error('unknown extension');
+
+    return fun(config, file, out);
+  } catch (err) {
     logger.info(ext, 'is not yet supported as an asset');
+    throw err;
   }
 }
 
 export async function processWatchedAsset(config, asset, ext) {
   debuglog('parsing asset');
   const srcBase = getSrcBase(config);
+  const properCwd = config.multi
+    ? config.cwd
+    : config.cwd + path.sep + config.src;
 
   for (let i = 0; i < asset.length; i++) {
     const file = asset[0];
-    const fileBase = splitPathCwd(config.cwd, file);
+    const fileBase = splitPathCwd(properCwd, file);
     const exists = keep.get(fileBase);
 
     // only parse asset if it exists
@@ -297,6 +342,8 @@ export async function processWatchedAsset(config, asset, ext) {
       }
     }
   }
+
+  return asset;
 }
 
 export async function processLinkedAssets(config, assets) {
@@ -345,4 +392,17 @@ export async function processLinkedAssets(config, assets) {
   }
 
   return res;
+}
+
+export function parsedNameKeysToPath(keys, locals, i = 0) {
+  const _keys = keys || [];
+  return _keys.reduce((acc, item) => {
+    const index = Number(item.index || i);
+    const data = locals[index] || locals;
+
+    let prop = path.sep;
+    if (item.key) prop = accessProperty(data, item.key);
+
+    return vpath([acc, prop]).full;
+  }, '');
 }

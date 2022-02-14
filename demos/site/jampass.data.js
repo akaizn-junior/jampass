@@ -1,16 +1,16 @@
 import faker from 'faker';
 
 const fakeData = [];
-const fakeItemsCount = 10;
-const colors = ['pink', 'black', 'red', 'cyan', 'orange', 'purple'];
+const fakeItemsCount = 2;
+const colors = ['pink', 'black', 'red', '#9b870c', 'orange', 'purple'];
 
-faker.seed(fakeItemsCount);
+// faker.seed(fakeItemsCount);
 
 for (let i = 0; i < fakeItemsCount; i++) {
   const date = faker.date.recent(2);
 
   fakeData.push({
-    name: faker.name.firstName() + Date.now(),
+    name: faker.name.firstName(),
     description: faker.lorem.words(500),
     breed: faker.animal.cat(),
     insertedAt: `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`,
@@ -18,15 +18,6 @@ for (let i = 0; i < fakeItemsCount; i++) {
   });
 }
 
-const date = faker.date.recent(5);
-fakeData.push({
-  name: faker.name.firstName() + Date.now(),
-  description: 'Doggo surprise',
-  breed: faker.animal.dog(),
-  insertedAt: `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`,
-  photo: faker.image.dataUri(500, 500, colors[faker.datatype.number(colors.length)])
-});
-
 export default {
-  data: fakeData
+  raw: fakeData
 };

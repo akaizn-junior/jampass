@@ -7,7 +7,6 @@ import * as marky from 'marky';
 import { bold, strikethrough } from 'colorette';
 
 // node
-import path from 'path';
 import { Readable } from 'stream';
 
 // local
@@ -15,7 +14,7 @@ import {
   validateAndUpdateHtml
 } from './utils/parse.js';
 
-import { LOCALS_LOOP_TOKEN } from './utils/tokens.js';
+import { LOOP_TOKEN } from './utils/tokens.js';
 import { bundleSearchFeature, buildSearch } from './utils/search.js';
 import { asyncRead, htmlsNamesGenerator } from './utils/stream.js';
 
@@ -24,23 +23,34 @@ import {
   getDirPaths,
   getSrcBase
 } from './utils/path.js';
+
 import {
   parseDynamicName,
-  accessProperty,
+  parsedNameKeysToPath,
   processWatchedAsset
 } from './utils/process.js';
+
 import {
+  handleThrown,
   loadUserEnv,
   logger,
   debuglog,
+  toggleDebug,
+  tmpdir
+} from './utils/init.js';
+
+import {
   safeFun,
   fErrName,
   markyStop,
-  tmpdir,
-  handleThrown,
-  toggleDebug,
   reduceViewsByChecksum,
-  showTime
+  showTime,
+  partition,
+  arrayAt,
+  formatPageEntry,
+  inRange,
+  getLoopedPageEntryClosure,
+  isDef
 } from './utils/helpers.js';
 
 import * as keep from './utils/keep.js';
@@ -74,52 +84,85 @@ async function compileView(config, file, locals) {
   }
 }
 
-async function funnel(config, file, funneled, flags = { onlyNames: false }) {
+async function funnel(config, file, flags = { onlyNames: false }) {
   debuglog('funnel data to', file);
   const parsed = parseDynamicName(vpath(file).base);
-
-  const keysToPath = (locals, i) => parsed.keys?.reduce((acc, item) => {
-    const index = Number(item.index || i);
-    const data = locals[index] || locals;
-
-    let prop = path.sep;
-    if (item.key) prop = accessProperty(data, item.key);
-
-    return vpath([acc, prop]).full;
-  }, '');
+  const funneled = config.funneled;
 
   const withView = async(name, locals) => {
     if (flags.onlyNames) return;
     return compileView(config, name, locals);
   };
 
-  const funnelData = async(locals, i) => {
-    const prop = keysToPath(locals.data, i);
-    const keysPath = parsed.place(prop);
-    const dynamicView = vpath([config.cwd, config.src, parsed.name]).full;
+  const getLoopedPageEntry = getLoopedPageEntryClosure(config);
+
+  const funnelViewWparsedName = async(locals, itemIndex = null, list = []) => {
+    const index = itemIndex ? itemIndex : 0;
+    // evaluate dynamic and non dynamic names
+    let pathName = parsed.name;
+    if (parsed.place) {
+      const prop = parsedNameKeysToPath(parsed.keys, locals.raw, index);
+      pathName = parsed.place(prop);
+    }
+
+    const srcView = vpath([config.cwd, config.src, parsed.name]).full;
+    let pageEntry = '';
+
+    const _locals = {
+      raw: locals.raw,
+      locales: locals.locales,
+      meta: locals.meta
+    };
+
+    // dynamic names may contain page numbers as a prefix
+    // do a clean up here so the output name is corrent
+    if (pathName.startsWith(parsed.page)) {
+      pathName = pathName.split(parsed.page)[1];
+    }
+
+    if (!isDef(itemIndex)) {
+      pageEntry = formatPageEntry(parsed.page);
+
+      const pageNo = parsed.page - 1;
+      const pagesCount = locals.pages.length;
+
+      const curr = inRange(pageNo);
+      const prev = inRange(curr - 1, pagesCount, 1);
+      const next = inRange(curr + 2, pagesCount, 1);
+
+      _locals.pages = locals.pages;
+      _locals.page = locals.pages[curr];
+      _locals.prevPage = {
+        no: prev,
+        url: formatPageEntry(prev)
+      };
+
+      _locals.nextPage = {
+        no: next,
+        url: formatPageEntry(next)
+      };
+    }
+
+    if (isDef(itemIndex)) {
+      pageEntry = getLoopedPageEntry(index);
+      _locals.data = locals.raw[index];
+      _locals.prev = arrayAt(list, index - 1);
+      _locals.next = arrayAt(list, index + 1);
+    }
 
     return {
-      name: keysPath,
-      html: await withView(dynamicView, {
-        data: locals.data[i],
-        locales: locals.locales
-      })
+      name: vpath([pageEntry, pathName]).full,
+      html: await withView(srcView, _locals)
     };
   };
 
   const htmls = [];
   const names = [];
-  const isArray = Array.isArray(funneled.data);
-
-  if (!parsed.loop && parsed.keys) {
-    const res = await funnelData(funneled, 0);
-    htmls.push(res.html);
-    names.push(res.name);
-  }
+  const isArray = Array.isArray(funneled.raw);
 
   if (parsed.loop && isArray) {
-    const ps = funneled.data.map((_, i) =>
-      funnelData(funneled, i)
+    const ps = funneled.raw.map((_, i, arr) =>
+      funnelViewWparsedName(funneled, i, arr)
     );
 
     const res = await Promise.all(ps);
@@ -130,11 +173,10 @@ async function funnel(config, file, funneled, flags = { onlyNames: false }) {
     };
   }
 
-  if (!parsed.keys) {
-    names.push(parsed.name);
-    htmls.push(
-      await withView(file, funneled)
-    );
+  if (!parsed.keys || !parsed.loop && parsed.keys) {
+    const res = await funnelViewWparsedName(funneled);
+    htmls.push(res.html);
+    names.push(res.name);
   }
 
   return {
@@ -146,9 +188,12 @@ async function funnel(config, file, funneled, flags = { onlyNames: false }) {
 async function getLocales(config, files) {
   marky.mark('get locales');
 
+  const LOCALES_PATH_NAME = 'locales';
+  const LOCALES_SEP = '_';
+
   const dotjson = files['.json'] || [];
   const locales = dotjson.filter(file =>
-    file.includes('/locales/')
+    file.includes(`/${LOCALES_PATH_NAME}/`)
     && file.endsWith('.json')
   );
 
@@ -162,7 +207,7 @@ async function getLocales(config, files) {
     );
 
     const name = vpath(locale).name;
-    const [lang, region] = name.split('_');
+    const [lang, region] = name.split(LOCALES_SEP);
 
     return {
       contents,
@@ -178,19 +223,19 @@ async function getLocales(config, files) {
 
   const res = {
     meta: fromFiles,
-    ...contents
+    locales: contents
   };
 
   markyStop('get locales', end => {
     const lap = markyStop('build time');
     const time = showTime(end, lap);
-    logger.success('loaded', fromFiles.length, 'locales', time);
+    logger.success('loaded', fromFiles.length, LOCALES_PATH_NAME, time);
   });
 
   return res;
 }
 
-async function parseViews(config, views, funneled) {
+async function parseViews(config, views) {
   debuglog('parsing src views');
 
   const srcBase = getSrcBase(config);
@@ -213,7 +258,7 @@ async function parseViews(config, views, funneled) {
     const viewPath = vpath(view.path);
     const checksum = view.checksum;
 
-    const { htmls, names } = await funnel(config, viewPath.full, funneled);
+    const { htmls, names } = await funnel(config, viewPath.full);
     keep.upsert(viewPath.full, { checksum, isValidHtml: false });
 
     const asyncChunks = Readable.from(htmlsNamesGenerator(htmls, names));
@@ -247,8 +292,8 @@ async function parseViews(config, views, funneled) {
 
   // separate costly operations
   // by splitting views that generate multiple pages and single pages
-  const isMultiple = s => s.startsWith(LOCALS_LOOP_TOKEN);
-  const isSingle = s => !s.startsWith(LOCALS_LOOP_TOKEN);
+  const isMultiple = s => s.startsWith(LOOP_TOKEN);
+  const isSingle = s => !s.startsWith(LOOP_TOKEN);
 
   const single = _views.filter(v => isSingle(vpath(v.path).name));
   const multiple = _views.filter(v => isMultiple(vpath(v.path).name));
@@ -269,6 +314,10 @@ async function getFunneled(config, cacheBust = '') {
   const cb = cacheBust || '';
   const url = `${dataPath}?bust=${cb}`;
 
+  const { pagination } = config.build;
+  const every = pagination.every;
+  const paginate = every && typeof every === 'number';
+
   debuglog('funnel data path', dataPath);
   debuglog('funneled data cache bust', cacheBust);
   debuglog('funneled data url', url);
@@ -278,12 +327,30 @@ async function getFunneled(config, cacheBust = '') {
     const funneled = 'default' in imported ? imported.default : imported;
 
     if (funneled) {
-      const funKeys = Array.isArray(funneled.data)
-        ? Object.keys(funneled.data[0])
-        : Object.keys(funneled.data || {});
+      const funKeys = Array.isArray(funneled.raw)
+        ? Object.keys(funneled.raw[0])
+        : Object.keys(funneled.raw || {});
 
-      if (!funneled.data) funneled.data = [];
+      if (!funneled.raw) funneled.raw = [];
       debuglog('preview funneled data', funKeys);
+
+      // pages is a list of list partitioned in 'every' chunks
+      funneled.pages = paginate
+        ? partition(funneled.raw, every)
+        : [];
+
+      funneled.meta = {};
+
+      const pagesCount = inRange(funneled.pages.length);
+      funneled.meta.pages = Array.from(
+        new Array(pagesCount),
+        (_, i) => {
+          const entry = i + 1;
+          return {
+            no: entry,
+            url: formatPageEntry(entry)
+          };
+        });
 
       return funneled;
     }
@@ -320,8 +387,9 @@ async function unlinkFiles(config, toDel) {
   marky.mark('deleting files');
 
   const delp = vpath(toDel);
-  const funneled = await getFunneled(config);
-  const { names } = await funnel(config, delp.full, funneled, {
+  config.funneled = await getFunneled(config);
+
+  const { names } = await funnel(config, delp.full, {
     onlyNames: true
   });
 
@@ -375,13 +443,11 @@ function withConfig(config, done) {
   debuglog('output working directory', config.owd);
   debuglog('public output directory', config.output.path);
 
-  if (done.name === 'watch') {
-    const outputPath = vpath([config.owd, config.output.path]).full;
-    del(outputPath, { force: true })
-      .then(cleaned => {
-        debuglog('init! cleaned output', cleaned);
-      });
-  }
+  const outputPath = vpath([config.owd, config.output.path]).full;
+  del(outputPath, { force: true })
+    .then(cleaned => {
+      debuglog('init! cleaned output', cleaned);
+    });
 
   return done(config);
 }
@@ -394,10 +460,9 @@ async function gen(config, watching = null, ext) {
   marky.mark('build time');
 
   const funCacheBust = config.watchFunnel ? Date.now() : null;
-  let funneled;
 
-  if (!funCacheBust) {
-    funneled = await getFunneled(config, funCacheBust);
+  if (!config.funneled || funCacheBust) {
+    config.funneled = await getFunneled(config, funCacheBust);
   }
 
   const srcPath = vpath([config.cwd, config.src]);
@@ -406,18 +471,26 @@ async function gen(config, watching = null, ext) {
   const files = watching || read;
   const views = config.watchFunnel ? read['.html'] : files['.html'] || [];
 
-  if (ext !== '.html' && !config.watchFunnel) {
-    const asset = watching?.[ext] || [];
-    processWatchedAsset(config, asset, ext);
+  if (watching && ext !== '.html' && !config.watchFunnel) {
+    const asset = watching[ext] || [];
+    return await processWatchedAsset(config, asset, ext);
   }
 
-  !funneled.locales && (funneled.locales = await getLocales(config, read));
+  if (!config.funneled.locales) {
+    const { locales, meta } = await getLocales(config, read);
+    config.funneled.locales = locales;
+    config.funneled.meta.locales = meta;
+  }
 
-  buildSearch(config, funneled);
+  buildSearch(config);
   bundleSearchFeature(config, 'src/search/index.js', 'search.min.js');
 
   try {
-    const parsed = await parseViews(config, views, funneled);
+    const parsed = await parseViews(config, views);
+
+    // logger.log(config.funneled.filename);
+    // logger.log(Object.keys(config.funneled));
+
     return parsed;
   } catch (e) {
     throw e;
@@ -503,7 +576,7 @@ async function serve(config) {
       baseDir: serverRoot,
       directory: config.devServer.directory
     },
-    middleware: bSync.getMiddlewareList({
+    middleware: bSync.middlewareList({
       host, port, entry, serverRoot
     }),
     /**
@@ -512,7 +585,7 @@ async function serve(config) {
     callbacks: {
       ready(err, _bs) {
         if (err) throw err;
-        _bs.addMiddleware('*', bSync.handleRestMiddleware(fallbackPagePath));
+        _bs.addMiddleware('*', bSync.restMiddleware(fallbackPagePath));
       }
     }
   });

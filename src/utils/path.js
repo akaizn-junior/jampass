@@ -146,10 +146,8 @@ export function splitPathCwd(cwd, s) {
 
 export function getSrcBase(config, withCwd = true) {
   // allow multiple folders in the output directory
-  const isMulti = config.multi;
-  if (isMulti) {
+  if (config.multi) {
     return vpath([withCwd ? config.cwd : '', config.src]).base;
   }
-
   return '';
 }

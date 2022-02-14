@@ -7,7 +7,8 @@ import { EOL } from 'os';
 
 // local
 import { vpath, splitPathCwd, pathDistance } from './path.js';
-import { logger, tmpdir, debuglog, minifyHtml } from './helpers.js';
+import { logger, tmpdir, debuglog } from './init.js';
+import { minifyHtml } from './helpers.js';
 import { writeFile, newReadable} from './stream.js';
 import { spliceCodeSnippet, processCss, processLinkedAssets } from './process.js';
 import * as keep from './keep.js';
@@ -58,22 +59,22 @@ export async function validateHtml(config, html, opts) {
     });
 
     const msg = err => {
-      const emsg = splitPathCwd(config.cwd, opts.view)
-        .concat(':', err.line, ':', err.column);
+      const errId = err.message;
+      const exists = keep.get(errId);
 
-      logger.log(EOL);
-      logger.log('HtmlValidatorError', emsg, `"${err.ruleId}"`, err.message, EOL);
+      if (!exists) {
+        const emsg = splitPathCwd(config.cwd, opts.view)
+          .concat(':', err.line, ':', err.column);
+
+        logger.log(EOL);
+        logger.log('HtmlValidatorError', emsg, `"${err.ruleId}"`, err.message, EOL);
+        logger.log(spliceCodeSnippet(html, err.line, err.column));
+        keep.add(errId, { proc: true });
+      }
     };
 
-    res.errors.forEach(err => {
-      msg(err);
-      logger.log(spliceCodeSnippet(html, err.line, err.column));
-    });
-
-    res.warnings.forEach(warn => {
-      msg(warn);
-      logger.log(spliceCodeSnippet(html, warn.line, warn.column));
-    });
+    res.errors.forEach(msg);
+    res.warnings.forEach(msg);
 
     if (!res.isValid) throw Error('HtmlValidatorError');
     return res.isValid;
@@ -200,14 +201,20 @@ export async function updateStyleTagCss(config, code, file = '') {
 
   for (const elem of styleTags) {
     const innerCss = $(elem).html();
+
     // this element start index in the code
-    const eIndex = code.indexOf(innerCss);
-    const startIndex = code.substring(0, eIndex)
+    const elemIndex = code.indexOf(innerCss);
+    const startIndex = code.substring(0, elemIndex)
       .split(EOL).length;
+
+    // minus the top style tag, openning tag
+    // because when spliting by EOL, the first EOL is from
+    // the openning style tag
+    const styleTagCount = 1;
 
     const res = await processCss(config, file, '', {
       justCode: innerCss,
-      startIndex: startIndex - 1
+      startIndex: startIndex - styleTagCount
     });
     $(elem).html(res.css);
   }

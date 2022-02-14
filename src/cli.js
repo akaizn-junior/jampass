@@ -2,7 +2,7 @@
 
 // vendors
 import { Command } from 'commander';
-import { logger } from './utils/helpers.js';
+import { logger } from './utils/init.js';
 
 // node
 import fs from 'fs';

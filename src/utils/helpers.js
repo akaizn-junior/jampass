@@ -1,119 +1,17 @@
-import debug from 'debug';
-import consola from 'consola';
-import dotenv from 'dotenv';
-import del from 'del';
 import { minify } from 'minify';
 import * as marky from 'marky';
 import { bold } from 'colorette';
 
 // node
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import crypto from 'crypto';
 
 // local
-import defaultconfig from '../default.config.js';
-import { vpath } from './path.js';
-import { writeFile, asyncRead, newReadable } from './stream.js';
+
+import { asyncRead } from './stream.js';
 import * as keep from './keep.js';
 
-export const tmpdir = (() => {
-  const dir = path.join(os.tmpdir(), defaultconfig.name);
-
-  try {
-    fs.statSync(dir);
-  } catch (err) {
-    // create if dir does not exist
-    fs.mkdirSync(dir);
-  }
-
-  return dir;
-})();
-
-// consola instance
-
-class HomeDirReporter extends consola.BasicReporter {
-  constructor(options) {
-    super(options);
-    this.historyFile = defaultconfig.historyFilePath;
-    this.lastFile = defaultconfig.lastCmdFilePath;
-  }
-
-  log(logObj, { stdout } = {}) {
-    let line = this.formatLogObj(logObj, {
-      width: stdout.columns || 0
-    });
-
-    line = ''.concat(Date.now(), ';', line, '\n');
-    writeFile(newReadable(line), this.historyFile, null, 'a+');
-    return;
-  }
-}
-
-export const logger = consola.create({
-  level: 4,
-  throttle: 3,
-  async: true,
-  reporters: [
-    new consola.FancyReporter()
-  ]
-});
-
-export const history = consola.create({
-  async: true,
-  reporters: [
-    new HomeDirReporter()
-  ]
-});
-
-// bind debug log to consola info
-debug.log = logger.log.bind(logger);
-export const debuglog = debug(defaultconfig.name);
-
-export function toggleDebug(toggle) {
-  if (toggle) debug.enable(defaultconfig.name);
-  else debug.disable();
-}
-
-export const safeFun = cb => cb !== void 0 && typeof cb === 'function' ? cb : () => {};
-
-export const loadUserEnv = () => dotenv.config({
-  path: path.join(process.cwd(), '.env')
-});
-
-export function handleThrown(config) {
-  return err => {
-    const end = () => {
-      // eslint-disable-next-line no-process-exit
-      process.exit(1);
-    };
-
-    debuglog('error object keys', Object.keys(err));
-
-    // special cases
-    const special = [
-      'CssSyntaxError',
-      'HtmlValidatorError'
-    ];
-
-    const errname = err.name || err.code || '';
-
-    if (!special.includes(errname)) {
-      logger.error(errname, err);
-    }
-
-    if (!config.watch) {
-      // clean output folder
-      const outputPath = vpath([config.cwd, config.output.path]).full;
-      del(outputPath)
-        .then(cleaned => {
-          debuglog('error! cleaned output', cleaned);
-        });
-      end();
-    }
-  };
-}
+export const isDef = val => val !== null && val !== void 0;
+export const safeFun = cb => isDef(cb) && typeof cb === 'function' ? cb : () => {};
 
 /**
  * format error name
@@ -213,4 +111,72 @@ export function showTime(end, lap, show = true) {
   return show
     ? `(${bold(`${end}s`)} \u00b7 ${lap}s)`
     : '';
+}
+
+/**
+ * partitions a list by 'chunk' amounts of data
+ * @param {[]} arr the list to partition
+ * @param {number} chunk the amount in each partition
+ * @returns
+ */
+export function partition(arr, chunk) {
+  if (arr && Array.isArray(arr) && chunk && chunk >= 1) {
+    const res = [];
+    const parts = Math.ceil(arr.length / chunk);
+
+    for (let i = 0; i < parts; i++) {
+      // arr.slice is safe even if upper index overflows
+      // but of course be fucking safe
+      const upper = chunk + chunk * i;
+      const safeUpper = upper > arr.length ? arr.length : upper;
+      res.push(arr.slice(i * chunk, safeUpper));
+    }
+
+    return res;
+  }
+
+  return arr;
+}
+
+export function arrayAt(list, index, up = Infinity, low = 0) {
+  if (index < low) return list[low];
+  if (index > up && up < list.length) return list[up];
+  if (index >= list.length) return list[list.length - 1];
+  return list[index];
+}
+
+export function inRange(no, up = Infinity, low = 0) {
+  const _no = Number(no); // no must be a number
+  if (_no < low) return low;
+  if (_no > up) return up;
+  return _no;
+}
+
+export const formatPageEntry = no => {
+  if (no === 1) return '/';
+  if (no > 1) return `/${no}`;
+};
+
+export function getLoopedPageEntryClosure(config) {
+  const { pagination } = config.build;
+
+  const every = pagination.every;
+  const paginate = every && typeof every === 'number';
+
+  let pageNo = 1;
+  let entry = '';
+
+  /**
+   * generates a page number string based on an index given by
+   * checking it against the chunks the make the pagination
+   * @param {number} i an item index in a overall dataset
+   */
+  return i => {
+    if (paginate && i > 0 && i % every === 0) {
+      const no = ++pageNo;
+      entry = formatPageEntry(no);
+    }
+
+    return entry;
+  };
 }

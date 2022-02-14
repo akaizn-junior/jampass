@@ -71,7 +71,7 @@ function writePageContent(opts) {
   };
 }
 
-export function handleRestMiddleware(pagePath) {
+export function restMiddleware(pagePath) {
   return async(_, res) => {
     res.writeHead(302, {
       location: pagePath
@@ -81,7 +81,7 @@ export function handleRestMiddleware(pagePath) {
   };
 }
 
-export function getMiddlewareList(opts) {
+export function middlewareList(opts) {
   return [
     redirectToEntryWithSlash(opts),
     redirectIfEndsWith(opts),
