@@ -50,7 +50,8 @@ import {
   formatPageEntry,
   inRange,
   getLoopedPageEntryClosure,
-  isDef
+  isDef,
+  isObj
 } from './utils/helpers.js';
 
 import * as keep from './utils/keep.js';
@@ -123,10 +124,11 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     if (!isDef(itemIndex)) {
       pageEntry = formatPageEntry(parsed.page);
 
-      const pageNo = parsed.page - 1;
+      // page index is zero based
+      const pageIndex = parsed.page - 1;
       const pagesCount = locals.pages.length;
 
-      const curr = inRange(pageNo);
+      const curr = inRange(pageIndex);
       const prev = inRange(curr - 1, pagesCount, 1);
       const next = inRange(curr + 2, pagesCount, 1);
 
@@ -314,10 +316,6 @@ async function getFunneled(config, cacheBust = '') {
   const cb = cacheBust || '';
   const url = `${dataPath}?bust=${cb}`;
 
-  const { pagination } = config.build;
-  const every = pagination.every;
-  const paginate = every && typeof every === 'number';
-
   debuglog('funnel data path', dataPath);
   debuglog('funneled data cache bust', cacheBust);
   debuglog('funneled data url', url);
@@ -334,12 +332,17 @@ async function getFunneled(config, cacheBust = '') {
       if (!funneled.raw) funneled.raw = [];
       debuglog('preview funneled data', funKeys);
 
-      // pages is a list of list partitioned in 'every' chunks
-      funneled.pages = paginate
-        ? partition(funneled.raw, every)
-        : [];
-
       funneled.meta = {};
+
+      if (isObj(funneled.pagination)) {
+        const every = funneled.pagination.every;
+        const paginate = every && typeof every === 'number';
+
+        // pages is a list of list partitioned in 'every' chunks
+        funneled.pages = paginate
+          ? partition(funneled.raw, every)
+          : [];
+      }
 
       const pagesCount = inRange(funneled.pages.length);
       funneled.meta.pages = Array.from(

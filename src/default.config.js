@@ -22,9 +22,6 @@ export default {
     build: {
       debug: false,
       watchFunnel: false,
-      pagination: {
-        every: 1
-      },
       search: {
         indexKeyMaxSize: 60,
         lib: true

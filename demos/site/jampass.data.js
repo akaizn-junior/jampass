@@ -19,5 +19,8 @@ for (let i = 0; i < fakeItemsCount; i++) {
 }
 
 export default {
-  raw: fakeData
+  raw: fakeData,
+  pagination: {
+    every: 1
+  }
 };

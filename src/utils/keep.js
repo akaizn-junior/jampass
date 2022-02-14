@@ -1,5 +1,6 @@
+import { isObj } from './helpers.js';
+
 const keep = {};
-const isObj = o => o && typeof o === 'object' && o.constructor === Object;
 
 export function add(name, value = {}) {
   if (!keep[name]) keep[name] = isObj(value) ? value : {};

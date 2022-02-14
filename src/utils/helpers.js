@@ -11,6 +11,8 @@ import { asyncRead } from './stream.js';
 import * as keep from './keep.js';
 
 export const isDef = val => val !== null && val !== void 0;
+
+export const isObj = o => isDef(o) && typeof o === 'object' && o.constructor === Object;
 export const safeFun = cb => isDef(cb) && typeof cb === 'function' ? cb : () => {};
 
 /**
@@ -158,7 +160,7 @@ export const formatPageEntry = no => {
 };
 
 export function getLoopedPageEntryClosure(config) {
-  const { pagination } = config.build;
+  const { pagination } = config.funneled;
 
   const every = pagination.every;
   const paginate = every && typeof every === 'number';
