@@ -21,3 +21,5 @@
 - [x] add object pagination
 
 - [] add filters through 'custom' keys or filters and custom keys
+
+- [] improve view engine error handling

@@ -36,7 +36,7 @@ import {
   parseDynamicName,
   parsedNameKeysToPath,
   processWatchedAsset,
-  paginationForRawArray
+  paginationForRawDataArray
 } from './utils/process.js';
 
 import {
@@ -104,6 +104,8 @@ async function funnel(config, file, flags = { onlyNames: false }) {
   };
 
   const getLoopedPageEntry = getLoopedPageEntryClosure(config);
+  const getLoopedPageEntryPrev = getLoopedPageEntryClosure(config);
+  const getLoopedPageEntryNext = getLoopedPageEntryClosure(config);
 
   const funnelViewWparsedName = async(locals, itemIndex = null, opts = {}) => {
     const _opts = Object.assign({
@@ -139,41 +141,43 @@ async function funnel(config, file, flags = { onlyNames: false }) {
       pageEntry = formatPageEntry(_pageNo);
 
       // page index is zero based
-      const pageIndex = _pageNo - 1;
+      const currPageIndex = inRange(_pageNo - 1);
       const pageCount = locals.pages.length;
 
-      const curr = inRange(pageIndex);
-      const prev = inRange(curr - 1, pageCount, 1);
-      const next = inRange(curr + 2, pageCount, 1);
+      // the minimun range value for the previous page
+      // is 1 if the current page index is 0
+      // is the current index otherwise because
+      // since the current index is zero based
+      // numerically is the same as the previous page
+      const prevPage = inRange(currPageIndex - 1, pageCount, currPageIndex || 1);
+      const nextPage = inRange(currPageIndex + 2, pageCount, 1);
 
       _locals.pages = locals.pages;
-      _locals.page = locals.pages[curr];
+      _locals.page = locals.pages[currPageIndex];
       _locals.prevPage = {
-        no: prev,
-        url: formatPageEntry(prev)
+        no: prevPage,
+        url: formatPageEntry(prevPage)
       };
 
       _locals.nextPage = {
-        no: next,
-        url: formatPageEntry(next)
+        no: nextPage,
+        url: formatPageEntry(nextPage)
       };
     }
 
     if (isDef(itemIndex)) {
       pageEntry = getLoopedPageEntry(index);
-      const prevEntry = getLoopedPageEntryClosure(config);
-      const nextEntry = getLoopedPageEntryClosure(config);
 
       _locals.data = locals.raw[index];
 
       _locals.prev = {
         data: arrayValueAt(_opts.list, index - 1),
-        entry: prevEntry(inRange(index - 1, _opts.list.length))
+        entry: getLoopedPageEntryPrev(inRange(index - 1, _opts.list.length, 1))
       };
 
       _locals.next = {
         data: arrayValueAt(_opts.list, index + 1),
-        entry: nextEntry(inRange(index + 1, _opts.list.length))
+        entry: getLoopedPageEntryNext(inRange(index + 1, _opts.list.length - 1))
       };
     }
 
@@ -373,7 +377,7 @@ async function getFunneled(config, cacheBust = '') {
         previewKeys = Object.keys(funneled.raw[0]);
         const {
           metaPages, pages, paginate
-        } = paginationForRawArray(funneled.pagination, funneled.raw);
+        } = paginationForRawDataArray(funneled.pagination, funneled.raw);
 
         funneled.pages = pages;
         funneled.meta.pages = metaPages;
@@ -386,7 +390,6 @@ async function getFunneled(config, cacheBust = '') {
       }
 
       debuglog('preview funneled data', previewKeys);
-
       return funneled;
     }
 

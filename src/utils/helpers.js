@@ -152,6 +152,7 @@ export function arrayValueAt(list, index, low = 0) {
 export const formatPageEntry = no => {
   if (no === DEFAULT_PAGE_NUMBER) return '/';
   if (no > DEFAULT_PAGE_NUMBER) return `/${no}`;
+  return '';
 };
 
 export function getLoopedPageEntryClosure(config) {

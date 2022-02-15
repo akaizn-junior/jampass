@@ -411,7 +411,7 @@ export function parsedNameKeysToPath(keys, locals, i = 0) {
   }, '');
 }
 
-export function paginationForRawArray(funPagination, rawData) {
+export function paginationForRawDataArray(funPagination, rawData) {
   let pages = [];
   let metaPages = [];
   let paginate = false;
