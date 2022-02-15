@@ -10,7 +10,8 @@ function redirectToEntryWithSlash(opts) {
     // for multi public output ignore entry directory
     if (opts.entry.endsWith(uri)) {
       res.writeHead(302, {
-        location: `${uri}/`
+        location: `${uri}/`,
+        'Content-Type': 'text/html'
       });
       res.end();
       return;
@@ -27,7 +28,8 @@ function redirectIfEndsWith(opts) {
 
     if (uri.endsWith(INDEX_PAGE)) {
       res.writeHead(302, {
-        location: uri.replace(/index.html$/, '')
+        location: uri.replace(/index.html$/, ''),
+        'Content-Type': 'text/html'
       });
       res.end();
       return;
@@ -35,7 +37,8 @@ function redirectIfEndsWith(opts) {
 
     if (uri.endsWith('.html')) {
       res.writeHead(302, {
-        location: uri.replace(/.html$/, '')
+        location: uri.replace(/.html$/, ''),
+        'Content-Type': 'text/html'
       });
       res.end();
       return;
@@ -63,7 +66,9 @@ function writePageContent(opts) {
         res.write(chunk);
       });
 
-      res.writeHead(200);
+      res.writeHead(200, {
+        'Content-Type': 'text/html'
+      });
       res.end();
       return;
     }
@@ -75,7 +80,8 @@ function writePageContent(opts) {
 export function restMiddleware(pagePath) {
   return async(_, res) => {
     res.writeHead(302, {
-      location: pagePath
+      location: pagePath,
+      'Content-Type': 'text/html'
     });
 
     res.end('404');

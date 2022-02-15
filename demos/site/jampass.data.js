@@ -1,7 +1,7 @@
 import faker from 'faker';
 
 const fakeData = [];
-const fakeItemsCount = 18;
+const fakeItemsCount = 21;
 const colors = ['pink', 'black', 'red', '#9b870c', 'orange', 'purple'];
 
 // faker.seed(fakeItemsCount);

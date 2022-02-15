@@ -152,7 +152,6 @@ export function arrayValueAt(list, index, low = 0) {
 export const formatPageEntry = no => {
   if (no === DEFAULT_PAGE_NUMBER) return '/';
   if (no > DEFAULT_PAGE_NUMBER) return `/${no}`;
-  return '';
 };
 
 export function getLoopedPageEntryClosure(config) {
@@ -160,7 +159,7 @@ export function getLoopedPageEntryClosure(config) {
 
   const every = pagination.every;
   let pageNo = DEFAULT_PAGE_NUMBER;
-  let entry = '';
+  let entry = '/';
 
   /**
    * generates a page number string based on an index given by

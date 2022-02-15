@@ -65,6 +65,7 @@ import {
 import * as keep from './utils/keep.js';
 import * as bSync from './utils/bs.middleware.js';
 import defaultConfig from './default.config.js';
+import path from 'path';
 
 // quick setup
 
@@ -112,6 +113,8 @@ async function funnel(config, file, flags = { onlyNames: false }) {
       list: [], pageNo: null
     }, opts);
 
+    // for looped dynamic names an index is given
+    // but it may be totally skipped for other cases
     const index = itemIndex ? itemIndex : 0;
     // evaluate dynamic and non dynamic names
     let pathName = parsed.name;
@@ -172,12 +175,19 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 
       _locals.prev = {
         data: arrayValueAt(_opts.list, index - 1),
-        entry: getLoopedPageEntryPrev(inRange(index - 1, _opts.list.length, 1))
+        url: vpath([
+          getLoopedPageEntryPrev(inRange(index - 1, _opts.list.length, 1)),
+          parsed.place(parsedNameKeysToPath(parsed.keys, locals.raw, inRange(index - 1)))
+        ]).full
       };
 
       _locals.next = {
         data: arrayValueAt(_opts.list, index + 1),
-        entry: getLoopedPageEntryNext(inRange(index + 1, _opts.list.length - 1))
+        url: vpath([
+          getLoopedPageEntryNext(inRange(index + 1, _opts.list.length - 1)),
+          parsed.place(parsedNameKeysToPath(parsed.keys, locals.raw,
+            inRange(index + 1, _opts.list.length - 1)))
+        ]).full
       };
     }
 
