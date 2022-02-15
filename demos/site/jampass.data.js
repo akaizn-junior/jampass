@@ -1,7 +1,7 @@
 import faker from 'faker';
 
 const fakeData = [];
-const fakeItemsCount = 2;
+const fakeItemsCount = 9;
 const colors = ['pink', 'black', 'red', '#9b870c', 'orange', 'purple'];
 
 // faker.seed(fakeItemsCount);
@@ -21,6 +21,6 @@ for (let i = 0; i < fakeItemsCount; i++) {
 export default {
   raw: fakeData,
   pagination: {
-    every: 1
+    every: 3
   }
 };

@@ -161,9 +161,20 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 
     if (isDef(itemIndex)) {
       pageEntry = getLoopedPageEntry(index);
+      const prevEntry = getLoopedPageEntryClosure(config);
+      const nextEntry = getLoopedPageEntryClosure(config);
+
       _locals.data = locals.raw[index];
-      _locals.prev = arrayValueAt(_opts.list, index - 1);
-      _locals.next = arrayValueAt(_opts.list, index + 1);
+
+      _locals.prev = {
+        data: arrayValueAt(_opts.list, index - 1),
+        entry: prevEntry(inRange(index - 1, _opts.list.length))
+      };
+
+      _locals.next = {
+        data: arrayValueAt(_opts.list, index + 1),
+        entry: nextEntry(inRange(index + 1, _opts.list.length))
+      };
     }
 
     return {

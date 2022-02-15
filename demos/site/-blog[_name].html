@@ -21,10 +21,44 @@
         padding: 10px 5px;
         font-size: 18px;
       }
+
+      .pointers {
+        position: fixed;
+        width: 100%;
+        top: 30%;
+      }
+
+      .pointers a {
+        position: absolute;
+        font-size: 2em;
+        text-decoration: none;
+        color: #2b2b2b;
+      }
+
+      .pointers a:hover,
+      .pointers a:focus {
+        font-weight: bold;
+      }
+
+      .pointers .prev {
+        left: 5%;
+      }
+
+      .pointers .next {
+        right: 5%;
+      }
     </style>
   </head>
 
   <body>
+    <div class="pointers">
+      <a class="prev" href="{{ prev.entry }}/blog/{{ prev.data.name }}">
+        <span>&lt;&lt;</span>
+      </a>
+      <a class="next" href="{{ next.entry }}/blog/{{ next.data.name }}">
+        <span>&gt;&gt;</span>
+      </a>
+    </div>
     <div class="wrapper">
       <div class="cover">
         <img src="{{ data.photo }}" alt="{{ data.name }}" title="{{ data.name }}" width="500">

@@ -18,4 +18,6 @@
 
 - [] improve cheerio replace node formating
 
-- [] add object pagination
+- [x] add object pagination
+
+- [] add filters through 'custom' keys or filters and custom keys
