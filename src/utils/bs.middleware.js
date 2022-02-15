@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { asyncRead } from './stream.js';
+import { INDEX_PAGE } from './constants.js';
 
 function redirectToEntryWithSlash(opts) {
   return (req, res, next) => {
@@ -24,7 +25,7 @@ function redirectIfEndsWith(opts) {
     const url = new URL(`${opts.host}:${opts.port}${req.url}`);
     const uri = url.pathname;
 
-    if (uri.endsWith('index.html')) {
+    if (uri.endsWith(INDEX_PAGE)) {
       res.writeHead(302, {
         location: uri.replace(/index.html$/, '')
       });

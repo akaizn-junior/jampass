@@ -9,6 +9,7 @@ import crypto from 'crypto';
 
 import { asyncRead } from './stream.js';
 import * as keep from './keep.js';
+import { DEFAULT_PAGE_NUMBER } from './constants.js';
 
 export const isDef = val => val !== null && val !== void 0;
 
@@ -22,10 +23,7 @@ export const safeFun = cb => isDef(cb) && typeof cb === 'function' ? cb : () => 
  * @param {string[]} exclude Exclude specific errors
  */
 export function fErrName(name, prefix, exclude = []) {
-  if (exclude.includes(name)) {
-    return name;
-  }
-
+  if (exclude.includes(name)) return name;
   return prefix.concat(name);
 }
 
@@ -140,13 +138,6 @@ export function partition(arr, chunk) {
   return arr;
 }
 
-export function arrayAt(list, index, up = Infinity, low = 0) {
-  if (index < low) return list[low];
-  if (index > up && up < list.length) return list[up];
-  if (index >= list.length) return list[list.length - 1];
-  return list[index];
-}
-
 export function inRange(no, up = Infinity, low = 0) {
   const _no = Number(no); // no must be a number
   if (_no < low) return low;
@@ -154,18 +145,20 @@ export function inRange(no, up = Infinity, low = 0) {
   return _no;
 }
 
+export function arrayValueAt(list, index, low = 0) {
+  return list[inRange(index, list.length - 1, low)];
+}
+
 export const formatPageEntry = no => {
-  if (no === 1) return '/';
-  if (no > 1) return `/${no}`;
+  if (no === DEFAULT_PAGE_NUMBER) return '/';
+  if (no > DEFAULT_PAGE_NUMBER) return `/${no}`;
 };
 
 export function getLoopedPageEntryClosure(config) {
   const { pagination } = config.funneled;
 
   const every = pagination.every;
-  const paginate = every && typeof every === 'number';
-
-  let pageNo = 1;
+  let pageNo = DEFAULT_PAGE_NUMBER;
   let entry = '';
 
   /**
@@ -174,7 +167,7 @@ export function getLoopedPageEntryClosure(config) {
    * @param {number} i an item index in a overall dataset
    */
   return i => {
-    if (paginate && i > 0 && i % every === 0) {
+    if (config.paginate && i > 0 && i % every === 0) {
       const no = ++pageNo;
       entry = formatPageEntry(no);
     }

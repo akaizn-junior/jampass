@@ -14,4 +14,8 @@
 
 - [] maybe include bytes formatter like 1000 bytes = 1kb
 
-- [] fix css from html snippet line numbers
+- [x] fix css from html snippet line numbers (not needed)
+
+- [] improve cheerio replace node formating
+
+- [] add object pagination

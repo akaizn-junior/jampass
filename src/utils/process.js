@@ -17,7 +17,10 @@ import {
   fErrName,
   createHash,
   compress,
-  inRange
+  inRange,
+  partition,
+  isObj,
+  formatPageEntry
 } from './helpers.js';
 
 import {
@@ -36,15 +39,17 @@ import {
   PATH_TOKEN,
   INDEX_TOKEN,
   LOOP_TOKEN,
-  PAGE_TOKEN
-} from './tokens.js';
+  PAGE_TOKEN,
+  INDEX_PAGE,
+  MAX_RECURSIVE_ACESS,
+  DEFAULT_PAGE_NUMBER
+} from './constants.js';
 
 export function accessProperty(obj, key, start = 0) {
   if (!key && typeof key !== 'string') {
     throw Error('undefined, key must be of type string');
   }
 
-  const MAX_RECURSIVE_ACESS = 7;
   const list = key.split('.');
   let i = start;
   const j = list[i];
@@ -68,7 +73,6 @@ export function parseDynamicName(fnm) {
   const dynBeginIndex = fnm.indexOf(FIELD_BEGIN_TOKEN);
   const dynEndIndex = fnm.indexOf(FIELD_END_TOKEN);
   const isDynamicName = dynBeginIndex !== -1 && dynEndIndex !== -1;
-  const DEFAULT_PAGE_NUMBER = 1;
 
   debuglog('dynamic filename', fnm);
 
@@ -133,7 +137,7 @@ export function parseDynamicName(fnm) {
       name: fnm,
       place: str => {
         if (str.endsWith(path.sep) && suffix.startsWith('.')) {
-          return cleanPrefix.concat(str, 'index.html');
+          return cleanPrefix.concat(str, INDEX_PAGE);
         }
 
         return cleanPrefix.concat(str, suffix);
@@ -405,4 +409,37 @@ export function parsedNameKeysToPath(keys, locals, i = 0) {
 
     return vpath([acc, prop]).full;
   }, '');
+}
+
+export function paginationForRawArray(funPagination, rawData) {
+  let pages = [];
+  let metaPages = [];
+  let paginate = false;
+
+  if (isObj(funPagination)) {
+    const every = funPagination.every;
+    paginate = every && typeof every === 'number' && every <= rawData.length;
+
+    // pages is a list of list partitioned in 'every' chunks
+    pages = paginate
+      ? partition(rawData, every)
+      : [];
+  }
+
+  const pageCount = inRange(pages.length);
+  metaPages = Array.from(
+    new Array(pageCount),
+    (_, i) => {
+      const entry = i + 1;
+      return {
+        no: entry,
+        url: formatPageEntry(entry)
+      };
+    });
+
+  return {
+    metaPages,
+    paginate,
+    pages
+  };
 }

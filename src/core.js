@@ -10,11 +10,19 @@ import { bold, strikethrough } from 'colorette';
 import { Readable } from 'stream';
 
 // local
+
 import {
   validateAndUpdateHtml
 } from './utils/parse.js';
 
-import { LOOP_TOKEN } from './utils/tokens.js';
+import {
+  LOOP_TOKEN,
+  INDEX_PAGE,
+  LOCALES_PATH_NAME,
+  LOCALES_SEP,
+  DEFAULT_PAGE_NUMBER
+} from './utils/constants.js';
+
 import { bundleSearchFeature, buildSearch } from './utils/search.js';
 import { asyncRead, htmlsNamesGenerator } from './utils/stream.js';
 
@@ -27,7 +35,8 @@ import {
 import {
   parseDynamicName,
   parsedNameKeysToPath,
-  processWatchedAsset
+  processWatchedAsset,
+  paginationForRawArray
 } from './utils/process.js';
 
 import {
@@ -45,8 +54,7 @@ import {
   markyStop,
   reduceViewsByChecksum,
   showTime,
-  partition,
-  arrayAt,
+  arrayValueAt,
   formatPageEntry,
   inRange,
   getLoopedPageEntryClosure,
@@ -97,7 +105,11 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 
   const getLoopedPageEntry = getLoopedPageEntryClosure(config);
 
-  const funnelViewWparsedName = async(locals, itemIndex = null, list = []) => {
+  const funnelViewWparsedName = async(locals, itemIndex = null, opts = {}) => {
+    const _opts = Object.assign({
+      list: [], pageNo: null
+    }, opts);
+
     const index = itemIndex ? itemIndex : 0;
     // evaluate dynamic and non dynamic names
     let pathName = parsed.name;
@@ -115,22 +127,24 @@ async function funnel(config, file, flags = { onlyNames: false }) {
       meta: locals.meta
     };
 
+    const _pageNo = _opts.pageNo || parsed.page;
+
     // dynamic names may contain page numbers as a prefix
     // do a clean up here so the output name is corrent
-    if (pathName.startsWith(parsed.page)) {
-      pathName = pathName.split(parsed.page)[1];
+    if (pathName.startsWith(_pageNo)) {
+      pathName = pathName.split(_pageNo)[1];
     }
 
     if (!isDef(itemIndex)) {
-      pageEntry = formatPageEntry(parsed.page);
+      pageEntry = formatPageEntry(_pageNo);
 
       // page index is zero based
-      const pageIndex = parsed.page - 1;
-      const pagesCount = locals.pages.length;
+      const pageIndex = _pageNo - 1;
+      const pageCount = locals.pages.length;
 
       const curr = inRange(pageIndex);
-      const prev = inRange(curr - 1, pagesCount, 1);
-      const next = inRange(curr + 2, pagesCount, 1);
+      const prev = inRange(curr - 1, pageCount, 1);
+      const next = inRange(curr + 2, pageCount, 1);
 
       _locals.pages = locals.pages;
       _locals.page = locals.pages[curr];
@@ -148,8 +162,8 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     if (isDef(itemIndex)) {
       pageEntry = getLoopedPageEntry(index);
       _locals.data = locals.raw[index];
-      _locals.prev = arrayAt(list, index - 1);
-      _locals.next = arrayAt(list, index + 1);
+      _locals.prev = arrayValueAt(_opts.list, index - 1);
+      _locals.next = arrayValueAt(_opts.list, index + 1);
     }
 
     return {
@@ -164,7 +178,9 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 
   if (parsed.loop && isArray) {
     const ps = funneled.raw.map((_, i, arr) =>
-      funnelViewWparsedName(funneled, i, arr)
+      funnelViewWparsedName(funneled, i, {
+        list: arr
+      })
     );
 
     const res = await Promise.all(ps);
@@ -177,6 +193,22 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 
   if (!parsed.keys || !parsed.loop && parsed.keys) {
     const res = await funnelViewWparsedName(funneled);
+    const isHomePageIndex = parsed.page === DEFAULT_PAGE_NUMBER
+      && parsed.name === INDEX_PAGE;
+
+    if (isHomePageIndex) {
+      // auto generate an index for each page
+      const len = funneled.pages.length - DEFAULT_PAGE_NUMBER;
+      for (let i = 0; i < len; i++) {
+        const r = await funnelViewWparsedName(funneled, null, {
+          pageNo: parsed.page + i + 1
+        });
+
+        htmls.push(r.html);
+        names.push(r.name);
+      }
+    }
+
     htmls.push(res.html);
     names.push(res.name);
   }
@@ -189,9 +221,6 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 
 async function getLocales(config, files) {
   marky.mark('get locales');
-
-  const LOCALES_PATH_NAME = 'locales';
-  const LOCALES_SEP = '_';
 
   const dotjson = files['.json'] || [];
   const locales = dotjson.filter(file =>
@@ -323,37 +352,29 @@ async function getFunneled(config, cacheBust = '') {
   try {
     const imported = await import(url);
     const funneled = 'default' in imported ? imported.default : imported;
+    let previewKeys = [];
 
     if (funneled) {
-      const funKeys = Array.isArray(funneled.raw)
-        ? Object.keys(funneled.raw[0])
-        : Object.keys(funneled.raw || {});
-
       if (!funneled.raw) funneled.raw = [];
-      debuglog('preview funneled data', funKeys);
-
       funneled.meta = {};
 
-      if (isObj(funneled.pagination)) {
-        const every = funneled.pagination.every;
-        const paginate = every && typeof every === 'number';
+      if (Array.isArray(funneled.raw)) {
+        previewKeys = Object.keys(funneled.raw[0]);
+        const {
+          metaPages, pages, paginate
+        } = paginationForRawArray(funneled.pagination, funneled.raw);
 
-        // pages is a list of list partitioned in 'every' chunks
-        funneled.pages = paginate
-          ? partition(funneled.raw, every)
-          : [];
+        funneled.pages = pages;
+        funneled.meta.pages = metaPages;
+        // expedite
+        config.paginate = paginate;
       }
 
-      const pagesCount = inRange(funneled.pages.length);
-      funneled.meta.pages = Array.from(
-        new Array(pagesCount),
-        (_, i) => {
-          const entry = i + 1;
-          return {
-            no: entry,
-            url: formatPageEntry(entry)
-          };
-        });
+      if (isObj(funneled.raw)) {
+        previewKeys = Object.keys(funneled.raw || {});
+      }
+
+      debuglog('preview funneled data', previewKeys);
 
       return funneled;
     }
