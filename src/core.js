@@ -196,10 +196,7 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     };
   };
 
-  const htmls = [];
-  const names = [];
   const isArray = Array.isArray(funneled.raw);
-
   if (parsed.loop && isArray) {
     const ps = funneled.raw.map((_, i, arr) =>
       funnelViewWparsedName(funneled, i, {
@@ -221,12 +218,9 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 
   if (!isHomePageIndex && (!parsed.keys || !parsed.loop && parsed.keys)) {
     const res = await funnelViewWparsedName(funneled);
-    htmls.push(res.html);
-    names.push(res.name);
-
     return {
-      htmls,
-      names
+      htmls: [res.html],
+      names: [res.name]
     };
   }
 
@@ -236,7 +230,7 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     const len = funneled.pages.length;
     const ps = Array.from(new Array(len),
       (_, i) => funnelViewWparsedName(funneled, null, {
-        pageNo: parsed.page + i + 1
+        pageNo: parsed.page + i
       }));
 
     const res = await Promise.all(ps);
@@ -245,8 +239,8 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     });
 
     return {
-      htmls: htmls.concat(res.map(r => r.html)),
-      names: names.concat(res.map(r => r.name))
+      htmls: res.map(r => r.html),
+      names: res.map(r => r.name)
     };
   }
 }
