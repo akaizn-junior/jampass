@@ -65,7 +65,6 @@ import {
 import * as keep from './utils/keep.js';
 import * as bSync from './utils/bs.middleware.js';
 import defaultConfig from './default.config.js';
-import path from 'path';
 
 // quick setup
 
@@ -170,21 +169,21 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 
     if (isDef(itemIndex)) {
       pageEntry = getLoopedPageEntry(index);
+      const prevEntry = getLoopedPageEntryPrev(inRange(index - 1, _opts.list.length, 1));
+      const nextEntry = getLoopedPageEntryNext(inRange(index + 1, _opts.list.length - 1));
 
       _locals.data = locals.raw[index];
 
       _locals.prev = {
         data: arrayValueAt(_opts.list, index - 1),
-        url: vpath([
-          getLoopedPageEntryPrev(inRange(index - 1, _opts.list.length, 1)),
+        url: vpath([prevEntry,
           parsed.place(parsedNameKeysToPath(parsed.keys, locals.raw, inRange(index - 1)))
         ]).full
       };
 
       _locals.next = {
         data: arrayValueAt(_opts.list, index + 1),
-        url: vpath([
-          getLoopedPageEntryNext(inRange(index + 1, _opts.list.length - 1)),
+        url: vpath([nextEntry,
           parsed.place(parsedNameKeysToPath(parsed.keys, locals.raw,
             inRange(index + 1, _opts.list.length - 1)))
         ]).full
@@ -216,32 +215,40 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     };
   }
 
-  if (!parsed.keys || !parsed.loop && parsed.keys) {
+  // auto generate an index for each page
+  const isHomePageIndex = parsed.page === DEFAULT_PAGE_NUMBER
+    && parsed.name === INDEX_PAGE;
+
+  if (!isHomePageIndex && (!parsed.keys || !parsed.loop && parsed.keys)) {
     const res = await funnelViewWparsedName(funneled);
-    const isHomePageIndex = parsed.page === DEFAULT_PAGE_NUMBER
-      && parsed.name === INDEX_PAGE;
-
-    if (isHomePageIndex) {
-      // auto generate an index for each page
-      const len = funneled.pages.length - DEFAULT_PAGE_NUMBER;
-      for (let i = 0; i < len; i++) {
-        const r = await funnelViewWparsedName(funneled, null, {
-          pageNo: parsed.page + i + 1
-        });
-
-        htmls.push(r.html);
-        names.push(r.name);
-      }
-    }
-
     htmls.push(res.html);
     names.push(res.name);
+
+    return {
+      htmls,
+      names
+    };
   }
 
-  return {
-    htmls,
-    names
-  };
+  if (isHomePageIndex && !parsed.keys) {
+    marky.mark('pagination indexes');
+
+    const len = funneled.pages.length;
+    const ps = Array.from(new Array(len),
+      (_, i) => funnelViewWparsedName(funneled, null, {
+        pageNo: parsed.page + i + 1
+      }));
+
+    const res = await Promise.all(ps);
+    markyStop('pagination indexes', end => {
+      debuglog('generated', len, 'pages', `${end}s`);
+    });
+
+    return {
+      htmls: htmls.concat(res.map(r => r.html)),
+      names: names.concat(res.map(r => r.name))
+    };
+  }
 }
 
 async function getLocales(config, files) {
@@ -317,9 +324,8 @@ async function parseViews(config, views) {
     const { htmls, names } = await funnel(config, viewPath.full);
     keep.upsert(viewPath.full, { checksum, isValidHtml: false });
 
-    const asyncChunks = Readable.from(htmlsNamesGenerator(htmls, names));
-
-    for await (const chunk of asyncChunks) {
+    const rs = Readable.from(htmlsNamesGenerator(htmls, names));
+    for await (const chunk of rs) {
       marky.mark('build views');
 
       const _ps = chunk.htmls.map(async(html, j) => validateAndUpdateHtml(config, {
@@ -348,11 +354,13 @@ async function parseViews(config, views) {
 
   // separate costly operations
   // by splitting views that generate multiple pages and single pages
-  const isMultiple = s => s.startsWith(LOOP_TOKEN);
-  const isSingle = s => !s.startsWith(LOOP_TOKEN);
+  const isMultiple = s => !INDEX_PAGE.startsWith(s) && s.startsWith(LOOP_TOKEN);
+  const isSingle = s => !INDEX_PAGE.startsWith(s) && !s.startsWith(LOOP_TOKEN);
+  const isIndex = s => INDEX_PAGE.startsWith(s);
 
   const single = _views.filter(v => isSingle(vpath(v.path).name));
   const multiple = _views.filter(v => isMultiple(vpath(v.path).name));
+  const index = _views.filter(v => isIndex(vpath(v.path).name));
 
   debuglog('single page view', single.length);
   debuglog('multiple pages view', multiple.length);
@@ -360,6 +368,7 @@ async function parseViews(config, views) {
   // independly resolve all pages
   Promise.all(loop(single));
   Promise.all(loop(multiple));
+  Promise.all(loop(index));
 
   return _views;
 }
