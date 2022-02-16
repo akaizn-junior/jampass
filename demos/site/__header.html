@@ -1,0 +1,49 @@
+<style>
+  @font-face {
+    font-family: Langar;
+    src: url(/fonts/Langar-Regular.ttf);
+  }
+
+  header {
+    width: 100%;
+    text-align: center;
+    background-color: #ebebeb;
+    padding: 5px;
+    position: relative;
+  }
+
+  .logo {
+    text-decoration: none;
+    color: inherit;
+    font-family: 'Langar', cursive;
+  }
+
+  #search-box {
+    text-align: center;
+    padding-top: 10px;
+  }
+
+  #search {
+    border: 1px solid #969696;
+    border-radius: 4px;
+    padding: 5px;
+    font-size: 1.2em;
+  }
+</style>
+<header>
+  <h1>
+    <a class="logo" href="/">Jampass</a>
+  </h1>
+  <div class="locales">
+    {{#each meta.locales}}
+      <a href="{{ locale }}">
+        {{ lang }}-<i class="country">{{ region }}</i>
+      </a>
+    {{/each}}
+  </div>
+</header>
+<div id="search-box">
+  <input type="search" id="search" placeholder="Search" aria-label="Search" autocomplete="true" autocorrect="off"
+    spellcheck="false">
+  <div id="search-results"></div>
+</div>

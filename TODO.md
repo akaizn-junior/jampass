@@ -23,3 +23,5 @@
 - [] add filters through 'custom' keys or filters and custom keys
 
 - [] improve view engine error handling
+
+- [] partials should only rewatch if theyre used

@@ -9,25 +9,16 @@
     <link rel="stylesheet" href="css/site.css">
     <link rel="stylesheet" href="css/index.css">
     <script defer src="js/site.js"></script>
+    <script defer src="search.min.js"></script>
+    <script defer src='js/render.search.js'></script>
+
+    {{> icons }}
+
   </head>
 
   <body>
-    <header>
-      <h1>Jampass</h1>
-      <div class="locales">
-        {{#each meta.locales}}
-          <a href="{{ locale }}">
-            {{ lang }}-<i class="country">{{ region }}</i>
-          </a>
-        {{/each}}
-      </div>
-    </header>
+    {{> header }}
     <main>
-      <div id="search-box">
-        <input type="search" id="search" placeholder="Search" aria-label="Search" autocomplete="true" autocorrect="off"
-          spellcheck="false">
-        <div id="search-results"></div>
-      </div>
       <ul class="data-list">
         {{#each page}}
           <li>
@@ -41,24 +32,8 @@
         {{/each}}
       </ul>
     </main>
-    <footer>
-      <div class="pages">
-        <a class="page-move button" href="{{ prevPage.url }}"><span>&lt;&lt;</span></a>
-        {{#each meta.pages}}
-          <a class="button" href="{{ url }}">{{ no }}</a>
-        {{/each}}
-        <a class="page-move button" href="{{ nextPage.url }}">
-          <span>&gt;&gt;</span>
-        </a>
-      </div>
-      <div class="bottom">
-        <p>
-          Dev Demo. &copy; 2022 Jampass
-        </p>
-      </div>
-    </footer>
-    <script src="search.min.js"></script>
-    <script src='js/render.search.js'></script>
+    {{> pagination }}
+    {{> footer }}
   </body>
 
 </html>

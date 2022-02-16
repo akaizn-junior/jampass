@@ -9,7 +9,8 @@ import crypto from 'crypto';
 
 import { asyncRead } from './stream.js';
 import * as keep from './keep.js';
-import { DEFAULT_PAGE_NUMBER } from './constants.js';
+import { DEFAULT_PAGE_NUMBER, PARTIALS_PATH_NAME, PARTIALS_TOKEN } from './constants.js';
+import { vpath } from './path.js';
 
 export const isDef = val => val !== null && val !== void 0;
 
@@ -85,22 +86,42 @@ export async function minifyHtml(config, file) {
   }
 }
 
-export function reduceViewsByChecksum(rewatch = null) {
+export function reduceViewsByChecksum(config, rewatch = null) {
   return async(acc, view) => {
+    const _rewatch = safeFun(rewatch);
+
     try {
       const exists = keep.get(view);
       const checksum = await asyncRead(view, c => createHash(c, 64));
+      const newContent = checksum !== exists?.checksum;
 
-      // only allow views with new content
-      if (checksum !== exists?.checksum) {
+      const viewName = vpath(view).name;
+      const withPartialsToken = viewName.startsWith(PARTIALS_TOKEN);
+      const isPartial = withPartialsToken || view.includes(`/${PARTIALS_PATH_NAME}/`);
+
+      if (isPartial) {
+        // register partials to funneled data
+        let partial = viewName;
+        if (withPartialsToken) partial = viewName.split(PARTIALS_TOKEN)[1];
+        const def = config.funneled.partials[partial];
+
+        if (!def) config.funneled.partials[partial] = view;
+        if (exists && newContent) _rewatch(true);
+
+        keep.upsert(view, { checksum, isValidHtml: false });
+        return acc;
+      }
+
+      if (newContent && !isPartial || config.bypass) {
+        // only allow views with new content
         (await acc).push({ path: view, checksum });
       }
 
       return acc;
     } catch (err) {
       if (err.code === 'ENOENT') {
-        safeFun(rewatch)();
-        return [];
+        _rewatch();
+        return acc;
       }
       throw err;
     }

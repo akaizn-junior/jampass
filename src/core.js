@@ -128,7 +128,8 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     const _locals = {
       raw: locals.raw,
       locales: locals.locales,
-      meta: locals.meta
+      meta: locals.meta,
+      partials: locals.partials
     };
 
     const _pageNo = _opts.pageNo || parsed.page;
@@ -299,9 +300,13 @@ async function parseViews(config, views) {
   const outputPath = vpath([config.owd, config.output.path]);
 
   const _views = await Promise.all(
-    await views.reduce(reduceViewsByChecksum(() => watch(config)), [])
+    await views.reduce(reduceViewsByChecksum(config, bypass => {
+      config.bypass = bypass;
+      watch(config);
+    }), [])
   );
 
+  debuglog('registered partials', config.funneled.partials);
   debuglog('views count', _views.length);
 
   if (!config.watch) {
@@ -346,11 +351,13 @@ async function parseViews(config, views) {
     return checksum;
   });
 
+  // separate some special views
+  const isIndex = s => INDEX_PAGE.startsWith(s);
+
   // separate costly operations
   // by splitting views that generate multiple pages and single pages
-  const isMultiple = s => !INDEX_PAGE.startsWith(s) && s.startsWith(LOOP_TOKEN);
-  const isSingle = s => !INDEX_PAGE.startsWith(s) && !s.startsWith(LOOP_TOKEN);
-  const isIndex = s => INDEX_PAGE.startsWith(s);
+  const isMultiple = s => !isIndex(s) && s.startsWith(LOOP_TOKEN);
+  const isSingle = s => !isIndex(s) && !s.startsWith(LOOP_TOKEN);
 
   const single = _views.filter(v => isSingle(vpath(v.path).name));
   const multiple = _views.filter(v => isMultiple(vpath(v.path).name));
@@ -385,6 +392,7 @@ async function getFunneled(config, cacheBust = '') {
     if (funneled) {
       if (!funneled.raw) funneled.raw = [];
       funneled.meta = {};
+      funneled.partials = {};
 
       if (Array.isArray(funneled.raw)) {
         previewKeys = Object.keys(funneled.raw[0]);

@@ -4,7 +4,7 @@ const fakeData = [];
 const fakeItemsCount = 200;
 const colors = ['pink', 'black', 'red', '#9b870c', 'orange', 'purple'];
 
-// faker.seed(fakeItemsCount);
+faker.seed(fakeItemsCount);
 
 for (let i = 0; i < fakeItemsCount; i++) {
   const date = faker.date.recent(2);

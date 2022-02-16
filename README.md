@@ -57,6 +57,10 @@ Jampass comes out of the box with support for [handlebars](https://www.npmjs.com
 
 With additional support for any template engine [consolidate.js](https://www.npmjs.com/package/consolidate) supports.
 
+## Shout out
+
+- [favicon.io](https://favicon.io/favicon-generator/)
+
 ## Author
 
 (c) 2021 Simao Nziaka
