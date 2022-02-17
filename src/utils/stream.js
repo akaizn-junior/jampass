@@ -9,6 +9,7 @@ import { safeFun } from './helpers.js';
 
 /**
  * write data to file
+ * @see https://nodejs.org/api/fs.html#file-system-flags
  * @param {string|object} from source file, Readable or ReadStream
  * @param {string} to destination file
  * @param {function} onend runs at the end of the stream

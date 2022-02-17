@@ -7,6 +7,7 @@ import { markyStop, showTime } from './helpers.js';
 import { getSrcBase, vpath } from './path.js';
 import { writeFile, newReadable } from './stream.js';
 import * as keep from './keep.js';
+import { blue } from 'colorette';
 
 export async function buildSearch(config) {
   const { indexes, indexKeyMaxSize } = config.build.search;
@@ -37,7 +38,7 @@ export async function buildSearch(config) {
           };
         }
       } catch (err) {
-        logger.info('key "%s" is undefined.', index, 'Skipped index');
+        logger.info(blue('skipped'), `key "${index}" is undefined.`);
       }
 
       return JSON.stringify(_acc);

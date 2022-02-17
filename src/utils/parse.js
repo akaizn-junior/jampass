@@ -1,6 +1,7 @@
 import htmlValidator from 'html-validator';
 import cheerio from 'cheerio';
 import del from 'del';
+import { blue } from 'colorette';
 
 // node
 import { EOL } from 'os';
@@ -96,9 +97,9 @@ export function parseHtmlLinked(config, code) {
     }
   };
 
-  const notFoundLog = asset => {
+  const notFoundLog = (asset, isStatic = false) => {
     const exists = keep.get(`${asset}-404`);
-    !exists && logger.log('"%s" not found locally. skipped', asset);
+    !exists && !isStatic && logger.log(blue('skipped'), `"${asset}" not found locally`);
   };
 
   $('link[rel]').each((_, el) => {
@@ -118,7 +119,9 @@ export function parseHtmlLinked(config, code) {
     } catch (err) {
       if (err.code === 'ENOENT') {
         err.name = 'HtmlLinkedCssWarn';
-        notFoundLog(el.attribs.href);
+
+        const isStatic = el.attribs['data-static'] === 'true';
+        notFoundLog(el.attribs.href, isStatic);
         keep.add(`${el.attribs.href}-404`, { skipped: true });
       }
     }
@@ -141,7 +144,9 @@ export function parseHtmlLinked(config, code) {
     } catch (err) {
       if (err.code === 'ENOENT') {
         err.name = 'HtmlLinkedScriptWarn';
-        notFoundLog(el.attribs.src);
+
+        const isStatic = el.attribs['data-static'] === 'true';
+        notFoundLog(el.attribs.src, isStatic);
         keep.add(`${el.attribs.src}-404`, { skipped: true });
       } else {
         throw err;
@@ -238,19 +243,22 @@ export async function validateAndUpdateHtml(config, data) {
 
   try {
     const exists = keep.get(html.from);
+    let linked = {};
+    let assets = {};
+
     if (!exists.isValidHtml) {
       validateHtml(config, html.code.toString(), {
         view: data.viewPath
       });
-      exists.isValidHtml = true;
+
+      // parse html and get linked assets
+      linked = parseHtmlLinked(config, html.code);
+      // an object of schema { [ext]: [] } / ex: { '.css': [] }
+      assets = await processLinkedAssets(config, linked);
+      keep.upsert(html.from, { isValidHtml: true });
     }
 
-    // parse html and get linked assets
-    const linked = parseHtmlLinked(config, html.code);
-    // an object of schema { [ext]: [] } / ex: { '.css': [] }
-    const assets = await processLinkedAssets(config, linked);
     const reAssets = rearrangeAssetPaths(html, assets);
-
     writeAssets(reAssets);
 
     keep.appendHtmlTo(html.from, html.out, html);

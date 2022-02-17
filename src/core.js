@@ -20,11 +20,12 @@ import {
   INDEX_PAGE,
   LOCALES_PATH_NAME,
   LOCALES_SEP,
-  DEFAULT_PAGE_NUMBER
+  DEFAULT_PAGE_NUMBER,
+  STATIC_PATH_NAME
 } from './utils/constants.js';
 
 import { bundleSearchFeature, buildSearch } from './utils/search.js';
-import { asyncRead, htmlsNamesGenerator } from './utils/stream.js';
+import { asyncRead, htmlsNamesGenerator, writeFile } from './utils/stream.js';
 
 import {
   vpath,
@@ -62,8 +63,8 @@ import {
   isObj
 } from './utils/helpers.js';
 
-import * as keep from './utils/keep.js';
 import * as bSync from './utils/bs.middleware.js';
+import * as keep from './utils/keep.js';
 import defaultConfig from './default.config.js';
 
 // quick setup
@@ -300,10 +301,7 @@ async function parseViews(config, views) {
   const outputPath = vpath([config.owd, config.output.path]);
 
   const _views = await Promise.all(
-    await views.reduce(reduceViewsByChecksum(config, bypass => {
-      config.bypass = bypass;
-      watch(config);
-    }), [])
+    await views.reduce(reduceViewsByChecksum(config, () => watch(config)), [])
   );
 
   debuglog('registered partials', config.funneled.partials);
@@ -321,7 +319,6 @@ async function parseViews(config, views) {
     const checksum = view.checksum;
 
     const { htmls, names } = await funnel(config, viewPath.full);
-    keep.upsert(viewPath.full, { checksum, isValidHtml: false });
 
     const rs = Readable.from(htmlsNamesGenerator(htmls, names));
     for await (const chunk of rs) {
@@ -372,6 +369,40 @@ async function parseViews(config, views) {
   Promise.all(loop(index));
 
   return _views;
+}
+
+async function handleStaticAssets(config, files) {
+  marky.mark('static assets');
+  const _files = files.static || [];
+  const out = vpath([
+    config.owd,
+    config.output.path,
+    getSrcBase(config, false)
+  ]);
+
+  try {
+    const ps = _files.map(async file => {
+      const _static = file;
+      const exists = keep.get(_static);
+
+      if (!exists) {
+        const dest = out.join(_static.split(STATIC_PATH_NAME)[1]).full;
+        // fails if path exists
+        await writeFile(_static, dest, null, { flags: 'wx' });
+        keep.add(_static, { proc: true });
+      }
+    });
+
+    Promise.all(ps);
+
+    markyStop('static assets', end => {
+      const lap = markyStop('build time');
+      const time = showTime(end, lap);
+      logger.success('copied static assets -', _files.length, time);
+    });
+  } catch (err) {
+    throw err;
+  }
 }
 
 async function getFunneled(config, cacheBust = '') {
@@ -428,6 +459,12 @@ async function readSource(src) {
 
   const classified = files.reduce((acc, file) => {
     const ext = vpath(file).ext;
+    const isStatic = file.includes(`/${STATIC_PATH_NAME}/`);
+
+    if (isStatic) {
+      acc.static.push(file);
+      return acc;
+    }
 
     if (!acc[ext]) {
       acc[ext] = [file];
@@ -436,7 +473,7 @@ async function readSource(src) {
     }
 
     return acc;
-  }, {});
+  }, { static: [] });
 
   debuglog('files classified by extension', classified);
   return classified;
@@ -546,9 +583,7 @@ async function gen(config, watching = null, ext) {
 
   try {
     const parsed = await parseViews(config, views);
-
-    // logger.log(config.funneled.filename);
-    // logger.log(Object.keys(config.funneled));
+    await handleStaticAssets(config, files);
 
     return parsed;
   } catch (e) {
@@ -570,7 +605,8 @@ async function watch(config, cb = () => {}) {
     `${watchPath.full}/**/*.html`,
     `${watchPath.full}/**/*.css`,
     `${watchPath.full}/**/*.js`,
-    `${watchPath.full}/**/*.mjs`
+    `${watchPath.full}/**/*.mjs`,
+    `${watchPath.full}/static/*.*`
   ], {
     cwd: config.cwd,
     ignored: []
@@ -591,6 +627,9 @@ async function watch(config, cb = () => {}) {
     const watching = { [ext]: [fp] };
     const isFunnel = p.endsWith(defaultConfig.funnelName);
     config.watchFunnel = isFunnel && config.build.watchFunnel;
+
+    const isStatic = p.includes(`/${STATIC_PATH_NAME}/`);
+    if (isStatic) watching.static = [p];
 
     gen(config, watching, ext)
       .then(res => {

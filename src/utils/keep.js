@@ -7,7 +7,8 @@ export function add(name, value = {}) {
 }
 
 export function upsert(name, value = {}) {
-  keep[name] = isObj(value) ? value : {};
+  keep[name] = isObj(value)
+    ? Object.assign(keep[name] || {}, value) : {};
 }
 
 export function peek(at = 0) {

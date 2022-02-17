@@ -11,6 +11,7 @@ export const PARTIALS_TOKEN = '__';
 export const INDEX_PAGE = 'index.html';
 export const LOCALES_PATH_NAME = 'locales';
 export const PARTIALS_PATH_NAME = 'partials';
+export const STATIC_PATH_NAME = 'static';
 export const LOCALES_SEP = '_';
 export const MAX_RECURSIVE_ACESS = 7;
 export const DEFAULT_PAGE_NUMBER = 1;

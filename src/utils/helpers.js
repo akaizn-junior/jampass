@@ -103,20 +103,20 @@ export function reduceViewsByChecksum(config, rewatch = null) {
         // register partials to funneled data
         let partial = viewName;
         if (withPartialsToken) partial = viewName.split(PARTIALS_TOKEN)[1];
+
         const def = config.funneled.partials[partial];
-
         if (!def) config.funneled.partials[partial] = view;
-        if (exists && newContent) _rewatch(true);
 
-        keep.upsert(view, { checksum, isValidHtml: false });
+        keep.add(view, { checksum, isValidHtml: false });
         return acc;
       }
 
-      if (newContent && !isPartial || config.bypass) {
+      if (newContent && !isPartial) {
         // only allow views with new content
         (await acc).push({ path: view, checksum });
       }
 
+      keep.add(view, { checksum, isValidHtml: false });
       return acc;
     } catch (err) {
       if (err.code === 'ENOENT') {
