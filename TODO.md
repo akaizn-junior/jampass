@@ -12,7 +12,7 @@
 
 - [x] add pagination
 
-- [] maybe include bytes formatter like 1000 bytes = 1kb
+- [x] maybe include bytes formatter like 1000 bytes = 1kb
 
 - [x] fix css from html snippet line numbers (not needed)
 
@@ -24,4 +24,6 @@
 
 - [x] improve view engine error handling
 
-- [] partials should only rewatch if theyre used
+- [] partials edits should only trigger a build if they are used
+
+- [] provide current page for pagination

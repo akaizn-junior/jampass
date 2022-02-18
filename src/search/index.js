@@ -1,44 +1,30 @@
 /* globals fetch */
 
 const TrieSearch = require('trie-search');
-const root = new TrieSearch();
-
-async function init() {
-  const res = await fetch('/indexes.json');
-  const data = await res.json();
-  root.addFromObject(data);
-}
-
-init();
-
-function _paint(result) {
-  return `<p>${result.value[result.index]}</p>`;
-}
 
 /**
- * render search
- * @param {HTMLElement} inputEl the search input
- * @param {HTMLElement} resEl element to attach results to
- * @param {function|null} paint a callback for search results
+ * inits a TrieSearch with indexes data
+ * @param {string} file indexes file name
  */
-function render(inputEl, resEl, paint = null, trie = root) {
-  const p = paint && typeof paint === 'function'
-    ? paint : _paint;
+async function init(file = '/indexes.json') {
+  const res = await fetch(file || '/indexes.json');
+  const data = await res.json();
+  const trie = new TrieSearch();
+  trie.addFromObject(data);
+  return trie;
+}
 
-  inputEl.addEventListener('keyup', e => {
-    e.preventDefault();
-    const term = e.target.value;
-    const results = trie.search(term);
-
-    resEl.innerHTML = results.map(result => {
-      const res = result.value;
-      return p(res);
-    }).join('');
-  }, false);
+async function query(term, cb = () => {}) {
+  const _cb = cb && typeof cb === 'function'
+    ? cb : () => {};
+  const trie = await init();
+  const results = trie.search(term);
+  _cb(results);
+  return results;
 }
 
 module.exports = {
-  trie: root,
-  render,
+  init,
+  query,
   TrieSearch
 };
