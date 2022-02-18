@@ -24,11 +24,13 @@
   }
 </style>
 <div class="pages">
-  <a class="page-move button" href="{{ prevPage.url }}"><span>&lt;&lt;</span></a>
-  {{#each meta.pages}}
-    <a class="button" href="{{ url }}">{{ no }}</a>
-  {{/each}}
-  <a class="page-move button" href="{{ nextPage.url }}">
-    <span>&gt;&gt;</span>
-  </a>
+  {{#if meta.pages}}
+    <a class="page-move button" href="{{ prevPage.url }}"><span>&lt;&lt;</span></a>
+    {{#each meta.pages}}
+      <a class="button" href="{{ url }}">{{ no }}</a>
+    {{/each}}
+    <a class="page-move button" href="{{ nextPage.url }}">
+      <span>&gt;&gt;</span>
+    </a>
+  {{/if}}
 </div>

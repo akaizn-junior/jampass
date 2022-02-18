@@ -81,17 +81,19 @@ debuglog(userEnv);
 async function compileView(config, file, locals) {
   const filePath = vpath(file);
   const name = config.views.engine.name ?? 'handlebars';
-  const engineConfig = safeFun(config.views.engine.config);
+  const eConfig = safeFun(config.views.engine.config);
 
   try {
+    // the consolidated template engine
     const engine = cons[name];
-    // expose the template engine being internally used
-    const templateEngine = await import(name);
-    engineConfig(templateEngine);
+    // expose the actual template engine being internally used
+    let actualEngine = await import(name);
+    actualEngine = actualEngine.default || actualEngine;
+    // expose
+    eConfig(actualEngine);
 
     return await engine(filePath.full, locals);
   } catch (err) {
-    err.name = 'CompileViewError';
     // some engine error literals
     const isParsingError = err.message.startsWith('Parse');
     const lineNumberPrefix = 'line ';
@@ -106,6 +108,7 @@ async function compileView(config, file, locals) {
       delete err.stack; // not needed here
     }
 
+    err.name = 'CompileViewError';
     throw err;
   }
 }
@@ -451,7 +454,7 @@ async function getFunneled(config, cacheBust = '') {
           metaPages, pages, paginate
         } = paginationForRawDataArray(funneled.pagination, funneled.raw);
 
-        funneled.pages = pages;
+        funneled.pages = paginate ? pages : [funneled.raw];
         funneled.meta.pages = metaPages;
         // expedite
         config.paginate = paginate;

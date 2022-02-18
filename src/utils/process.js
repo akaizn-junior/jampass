@@ -407,8 +407,7 @@ export function parsedNameKeysToPath(keys, locals, i = 0) {
 /**
  * build pagination for raw data as an array
  * @param {object} funPagination funneled pagination config
- * @param {aray} rawData funneled data as an array
- * @returns
+ * @param {array} rawData funneled data as an array
  */
 export function paginationForRawDataArray(funPagination, rawData) {
   let pages = [];
