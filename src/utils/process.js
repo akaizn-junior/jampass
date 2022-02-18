@@ -333,7 +333,7 @@ export async function processWatchedAsset(config, asset, ext) {
         };
 
         writeFile(newReadable(res.code), res.out);
-        logger.info('processed asset', `"${fileBase}"`);
+        logger.success('processed asset', `"${fileBase}"`);
       } else {
         logger.error('failed processing asset');
       }
