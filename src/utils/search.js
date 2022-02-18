@@ -1,4 +1,5 @@
 import * as marky from 'marky';
+import { blue } from 'colorette';
 
 // local
 import { accessProperty, processJs } from './process.js';
@@ -7,9 +8,8 @@ import { markyStop, showTime } from './helpers.js';
 import { getSrcBase, vpath } from './path.js';
 import { writeFile, newReadable } from './stream.js';
 import * as keep from './keep.js';
-import { blue } from 'colorette';
 
-export async function buildSearch(config) {
+export async function buildIndexes(config) {
   const { indexes, indexKeyMaxSize } = config.build.search;
 
   if (!indexes || !indexes.length) return;
@@ -78,7 +78,10 @@ export async function buildSearch(config) {
   }
 }
 
-export async function bundleSearchFeature(config, file, name) {
+export async function bundleSearchFeature(config) {
+  const file = 'src/search/index.js';
+  const name = 'search.min.js';
+
   const exists = keep.get(name);
   const { indexes, lib } = config.build.search;
 

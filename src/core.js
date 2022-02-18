@@ -25,7 +25,7 @@ import {
   STATIC_PATH_NAME
 } from './utils/constants.js';
 
-import { bundleSearchFeature, buildSearch } from './utils/search.js';
+import { bundleSearchFeature, buildIndexes } from './utils/search.js';
 import { asyncRead, htmlsNamesGenerator, writeFile } from './utils/stream.js';
 
 import {
@@ -389,7 +389,11 @@ async function parseViews(config, views) {
 
 async function handleStaticAssets(config, files) {
   marky.mark('static assets');
+
   const _files = files.static || [];
+
+  if (!_files.length) return;
+
   const out = vpath([
     config.owd,
     config.output.path,
@@ -594,13 +598,12 @@ async function gen(config, watching = null, ext) {
     config.funneled.meta.locales = meta;
   }
 
-  buildSearch(config);
-  bundleSearchFeature(config, 'src/search/index.js', 'search.min.js');
+  buildIndexes(config);
+  bundleSearchFeature(config);
 
   try {
     const parsed = await parseViews(config, views);
     await handleStaticAssets(config, files);
-
     return parsed;
   } catch (e) {
     throw e;
