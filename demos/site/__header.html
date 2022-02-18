@@ -1,3 +1,5 @@
+<script data-static="true" defer src="search.min.js"></script>
+<script data-static="true" defer src='js/render.search.js'></script>
 <style>
   @font-face {
     font-family: Langar;
@@ -19,6 +21,7 @@
   }
 
   #search-box {
+    position: relative;
     text-align: center;
     padding-top: 10px;
   }
@@ -28,6 +31,14 @@
     border-radius: 4px;
     padding: 5px;
     font-size: 1.2em;
+  }
+
+  #search-results {
+    position: absolute;
+    background-color: #ffffff;
+    border: 1px solid #f2f2f2;
+    text-align: left;
+    z-index: 2;
   }
 </style>
 <header>
