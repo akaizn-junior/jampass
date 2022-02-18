@@ -21,11 +21,6 @@ export default {
       search: {
         indexKeyMaxSize: 60,
         lib: true
-        // indexes: [
-        //   'name',
-        //   'breed',
-        //   'description'
-        // ]
       }
     },
     views: {

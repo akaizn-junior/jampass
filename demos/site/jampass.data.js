@@ -22,5 +22,10 @@ export default {
   raw: fakeData,
   pagination: {
     every: 20
-  }
+  },
+  indexes: [
+    'name',
+    'breed',
+    'description'
+  ]
 };

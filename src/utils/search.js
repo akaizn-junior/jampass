@@ -10,13 +10,14 @@ import { writeFile, newReadable } from './stream.js';
 import * as keep from './keep.js';
 
 export async function buildIndexes(config) {
-  const { indexes, indexKeyMaxSize } = config.build.search;
+  const { indexes } = config.funneled;
+  const { indexKeyMaxSize } = config.build.search;
 
   if (!indexes || !indexes.length) return;
 
   const _indexKeyMaxSize = indexKeyMaxSize || 100;
-  const data = config.funneled.data;
-  const isArray = Array.isArray(data);
+  const rawData = config.funneled.raw;
+  const isArray = Array.isArray(rawData);
   let file = '';
 
   // indexes may be too BIG
@@ -29,16 +30,16 @@ export async function buildIndexes(config) {
 
       try {
         const value = accessProperty(locals, index);
-        const isIndex = value.length <= _indexKeyMaxSize;
+        const isValidIndex = value.length <= _indexKeyMaxSize;
 
-        if (isIndex) {
+        if (isValidIndex) {
           _acc[value] = {
             index,
             value: locals
           };
         }
       } catch (err) {
-        logger.info(blue('skipped'), `key "${index}" is undefined.`);
+        logger.info(blue('skipped'), `"${index}" is undefined. cannot set index`);
       }
 
       return JSON.stringify(_acc);
@@ -51,14 +52,14 @@ export async function buildIndexes(config) {
     marky.mark('build search');
 
     if (isArray) {
-      file = data.reduce((acc, locals) => {
+      file = rawData.reduce((acc, locals) => {
         const _acc = JSON.parse(acc);
         const ind = JSON.parse(getIndexes(locals));
         const res = Object.assign(_acc, ind);
         return JSON.stringify(res);
       }, '{}');
     } else {
-      file = getIndexes(data);
+      file = getIndexes(rawData);
     }
 
     const srcBase = getSrcBase(config, false);
@@ -83,7 +84,8 @@ export async function bundleSearchFeature(config) {
   const name = 'search.min.js';
 
   const exists = keep.get(name);
-  const { indexes, lib } = config.build.search;
+  const { indexes } = config.funneled;
+  const { lib } = config.build.search;
 
   if (!indexes || !indexes.length) return;
 
