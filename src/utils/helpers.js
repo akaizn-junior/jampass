@@ -206,3 +206,29 @@ export async function genSnippet(opts, file = '') {
 
   return _opts.title.concat(EOL, EOL, snippet);
 }
+
+/**
+ * format a value in bytes
+ * @param {number|string} bytes value in bytes
+ * @param {number} base the units number base
+ */
+export function formatBytes(bytes, base = 10) {
+  const _bytes = Number(bytes);
+  const units = ['B', 'kB', 'MB', 'GB', 'TB'];
+  const bases = { 2: 1024, 10: 1000 };
+  const _1kb = bases[base] || bases[10];
+
+  if (isNaN(_bytes)) return null;
+
+  // item indexes of the units array wil be useed as exponents
+  // find the index based on the bytes given divided by 1kb
+  const index = Math.floor(Math.log(_bytes) / Math.log(_1kb));
+
+  if (_bytes === 0) return '0B';
+  if (index === 0) return _bytes + units[0];
+
+  const exponent = Math.pow(_1kb, index);
+  // format fractional number with fixed point notation
+  const fixed = (_bytes / exponent).toFixed(1);
+  return fixed + units[index];
+}

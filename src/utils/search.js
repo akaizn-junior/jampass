@@ -4,7 +4,7 @@ import { blue } from 'colorette';
 // local
 import { accessProperty, processJs } from './process.js';
 import { logger } from './init.js';
-import { markyStop, showTime } from './helpers.js';
+import { formatBytes, markyStop, showTime } from './helpers.js';
 import { getSrcBase, vpath } from './path.js';
 import { writeFile, newReadable } from './stream.js';
 import * as keep from './keep.js';
@@ -71,7 +71,7 @@ export async function buildIndexes(config) {
         const time = showTime(end, lap);
 
         logger.success('generated indexes "%s" -', fnm,
-          file.length, 'bytes', time);
+          formatBytes(file.length), time);
       });
     });
 
@@ -106,7 +106,7 @@ export async function bundleSearchFeature(config) {
         const time = showTime(end, lap);
 
         logger.success('bundled search "search.min.js" -',
-          code.length, 'bytes', time);
+          formatBytes(code.length), time);
       });
     });
 
