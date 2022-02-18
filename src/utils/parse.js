@@ -9,9 +9,9 @@ import { EOL } from 'os';
 // local
 import { vpath, splitPathCwd, pathDistance } from './path.js';
 import { logger, tmpdir, debuglog } from './init.js';
-import { minifyHtml } from './helpers.js';
+import { genSnippet, minifyHtml } from './helpers.js';
 import { writeFile, newReadable} from './stream.js';
-import { spliceCodeSnippet, processCss, processLinkedAssets } from './process.js';
+import { processCss, processLinkedAssets } from './process.js';
 import * as keep from './keep.js';
 
 const wrapCheerioElem = m => '\n'.concat(m, '\n');
@@ -59,28 +59,26 @@ export async function validateHtml(config, html, opts) {
       validator: 'WHATWG'
     });
 
-    const msg = err => {
-      const errId = err.message;
-      const exists = keep.get(errId);
+    const handleErr = async err => {
+      const emsg = splitPathCwd(config.cwd, opts.view)
+        .concat(':', err.line, ':', err.column);
 
-      if (!exists) {
-        const emsg = splitPathCwd(config.cwd, opts.view)
-          .concat(':', err.line, ':', err.column);
+      err.name = 'HtmlValidatorError';
+      err.snippet = await genSnippet({
+        code: html,
+        line: err.line,
+        column: err.column,
+        title: `HtmlValidatorError ${emsg} "${err.ruleId}" ${err.message}`
+      });
 
-        logger.log(EOL);
-        logger.log('HtmlValidatorError', emsg, `"${err.ruleId}"`, err.message, EOL);
-        logger.log(spliceCodeSnippet(html, err.line, err.column));
-        keep.add(errId, { proc: true });
-      }
+      throw err;
     };
 
-    res.errors.forEach(msg);
-    res.warnings.forEach(msg);
+    res.errors.forEach(handleErr);
+    res.warnings.forEach(handleErr);
 
-    if (!res.isValid) throw Error('HtmlValidatorError');
     return res.isValid;
   } catch (err) {
-    err.name = 'HtmlValidatorError';
     throw err;
   }
 }
@@ -250,13 +248,13 @@ export async function validateAndUpdateHtml(config, data) {
       validateHtml(config, html.code.toString(), {
         view: data.viewPath
       });
-
-      // parse html and get linked assets
-      linked = parseHtmlLinked(config, html.code);
-      // an object of schema { [ext]: [] } / ex: { '.css': [] }
-      assets = await processLinkedAssets(config, linked);
       keep.upsert(html.from, { isValidHtml: true });
     }
+
+    // parse html and get linked assets
+    linked = parseHtmlLinked(config, html.code);
+    // an object of schema { [ext]: [] } / ex: { '.css': [] }
+    assets = await processLinkedAssets(config, linked);
 
     const reAssets = rearrangeAssetPaths(html, assets);
     writeAssets(reAssets);

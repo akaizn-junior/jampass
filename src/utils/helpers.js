@@ -4,6 +4,7 @@ import { bold } from 'colorette';
 
 // node
 import crypto from 'crypto';
+import { EOL } from 'os';
 
 // local
 
@@ -11,22 +12,12 @@ import { asyncRead } from './stream.js';
 import * as keep from './keep.js';
 import { DEFAULT_PAGE_NUMBER, PARTIALS_PATH_NAME, PARTIALS_TOKEN } from './constants.js';
 import { vpath } from './path.js';
+import { spliceCodeSnippet } from './process.js';
 
 export const isDef = val => val !== null && val !== void 0;
 
 export const isObj = o => isDef(o) && typeof o === 'object' && o.constructor === Object;
 export const safeFun = cb => isDef(cb) && typeof cb === 'function' ? cb : () => {};
-
-/**
- * format error name
- * @param {string} name Error name
- * @param {string} prefix Prefix the error name
- * @param {string[]} exclude Exclude specific errors
- */
-export function fErrName(name, prefix, exclude = []) {
-  if (exclude.includes(name)) return name;
-  return prefix.concat(name);
-}
 
 export function markyStop(name, log = null) {
   const timer = marky.stop(name);
@@ -81,7 +72,7 @@ export async function minifyHtml(config, file) {
 
     return res;
   } catch (err) {
-    err.name = fErrName(err.name, 'MinifyHtml');
+    err.name = 'MinifyHtmlError';
     throw err;
   }
 }
@@ -178,7 +169,7 @@ export const formatPageEntry = no => {
 export function getLoopedPageEntryClosure(config) {
   const { pagination } = config.funneled;
 
-  const every = pagination.every;
+  const every = pagination?.every;
   let pageNo = DEFAULT_PAGE_NUMBER;
   let entry = '/';
 
@@ -195,4 +186,23 @@ export function getLoopedPageEntryClosure(config) {
 
     return entry;
   };
+}
+
+export async function genSnippet(opts, file = '') {
+  const _opts = Object.assign({
+    code: null,
+    line: 0,
+    column: 0,
+    range: 5,
+    startIndex: 0,
+    title: ''
+  }, opts);
+
+  const code = _opts.code || await asyncRead(file);
+  const snippet = spliceCodeSnippet(code, _opts.line, _opts.column, {
+    range: _opts.range,
+    startIndex: _opts.startIndex
+  });
+
+  return _opts.title.concat(EOL, EOL, snippet);
 }

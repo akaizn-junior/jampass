@@ -14,13 +14,13 @@ import path from 'path';
 
 // local
 import {
-  fErrName,
   createHash,
   compress,
   inRange,
   partition,
   isObj,
-  formatPageEntry
+  formatPageEntry,
+  genSnippet
 } from './helpers.js';
 
 import {
@@ -184,7 +184,7 @@ export function spliceCodeSnippet(code, lnumber, column = 0, opts = {}) {
 
     if (ln === lnumber + opts.startIndex) {
       const c = cut(column - 1, column + 1, line.length);
-      const ml = markLine(line, c.lower, c.upper, line.length);
+      const ml = markLine(line, c.lower, c.upper + 1, line.length);
       return bold(`${ln} ${ml}`).concat(EOL);
     }
 
@@ -273,25 +273,18 @@ export async function processCss(config, file, out, opts = {
     };
   } catch (err) {
     if (err.name === 'CssSyntaxError') {
-      const snippet = spliceCodeSnippet(err.source, err.line, 0, {
-        startIndex: opts.startIndex
+      const emsg = splitPathCwd(config.cwd, err.file || file)
+        .concat(':', err.line + opts.startIndex, ':', err.column);
+
+      err.snippet = await genSnippet({
+        code: err.source,
+        line: err.line,
+        column: err.column,
+        startIndex: opts.startIndex,
+        title: `CssSyntaxError ${emsg} "${err.reason}"`
       });
-
-      const errId = err.message;
-      const exists = keep.get(errId);
-
-      if (!exists) {
-        const emsg = splitPathCwd(config.cwd, err.file || file)
-          .concat(':', err.line + opts.startIndex, ':', err.column);
-
-        logger.log(EOL);
-        logger.log('CssSyntaxError', emsg, `"${err.reason}"`, EOL);
-        logger.log(snippet);
-        keep.add(errId, { proc: true });
-      }
     }
 
-    err.name = fErrName(err.name, 'ProcessCss', ['CssSyntaxError']);
     throw err;
   }
 }
@@ -411,6 +404,12 @@ export function parsedNameKeysToPath(keys, locals, i = 0) {
   }, '');
 }
 
+/**
+ * build pagination for raw data as an array
+ * @param {object} funPagination funneled pagination config
+ * @param {aray} rawData funneled data as an array
+ * @returns
+ */
 export function paginationForRawDataArray(funPagination, rawData) {
   let pages = [];
   let metaPages = [];
@@ -428,7 +427,7 @@ export function paginationForRawDataArray(funPagination, rawData) {
 
   const pageCount = inRange(pages.length);
   metaPages = Array.from(
-    new Array(pageCount),
+    { length: pageCount },
     (_, i) => {
       const entry = i + 1;
       return {

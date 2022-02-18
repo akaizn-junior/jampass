@@ -4,7 +4,7 @@
 
 - [x] reajust line numbers in html css error, currently the lines are based on the css read and not the whole html file
 
-- [] improve code snippet styling
+- [x] improve code snippet styling (phase 1)
 
 - [] include better js handling
 
@@ -16,9 +16,9 @@
 
 - [x] fix css from html snippet line numbers (not needed)
 
-- [] improve cheerio replace node formating
+- [] improve cheerio formating for replacing a node in the code
 
-- [x] add object pagination
+- [x] add object to object pagination
 
 - [] add filters through 'custom' keys or filters and custom keys
 

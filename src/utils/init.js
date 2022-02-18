@@ -74,7 +74,6 @@ export function toggleDebug(toggle) {
   else debug.disable();
 }
 
-
 export function handleThrown(config) {
   return err => {
     const end = () => {
@@ -84,15 +83,13 @@ export function handleThrown(config) {
 
     debuglog('error object keys', Object.keys(err));
 
-    // special cases
-    const special = [
-      'CssSyntaxError',
-      'HtmlValidatorError'
-    ];
-
     const errname = err.name || err.code || '';
+    const snippet = err.snippet;
+    delete err.snippet;
 
-    if (!special.includes(errname)) {
+    if (snippet) {
+      logger.error(snippet);
+    } else {
       logger.error(errname, err);
     }
 

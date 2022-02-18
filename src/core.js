@@ -4,10 +4,11 @@ import chokidar from 'chokidar';
 import del from 'del';
 import { ESLint } from 'eslint';
 import * as marky from 'marky';
-import { bold, strikethrough } from 'colorette';
+import { bold, strikethrough, blue } from 'colorette';
 
 // node
 import { Readable } from 'stream';
+import { EOL } from 'os';
 
 // local
 
@@ -30,7 +31,8 @@ import { asyncRead, htmlsNamesGenerator, writeFile } from './utils/stream.js';
 import {
   vpath,
   getDirPaths,
-  getSrcBase
+  getSrcBase,
+  splitPathCwd
 } from './utils/path.js';
 
 import {
@@ -51,7 +53,6 @@ import {
 
 import {
   safeFun,
-  fErrName,
   markyStop,
   reduceViewsByChecksum,
   showTime,
@@ -60,7 +61,8 @@ import {
   inRange,
   getLoopedPageEntryClosure,
   isDef,
-  isObj
+  isObj,
+  genSnippet
 } from './utils/helpers.js';
 
 import * as bSync from './utils/bs.middleware.js';
@@ -89,7 +91,18 @@ async function compileView(config, file, locals) {
 
     return await engine(filePath.full, locals);
   } catch (err) {
-    err.name = fErrName(err.name, 'CompileView');
+    err.name = 'CompileViewError';
+    // some engine error literals
+    const isParsingError = err.message.startsWith('Parse');
+    const lineNumberPrefix = 'line ';
+
+    if (isParsingError) {
+      const maybe = err.message.split(lineNumberPrefix)[1];
+      const line = parseInt(maybe, 10);
+      err.snippet = await genSnippet({ line }, file);
+      delete err.stack; // not needed here
+    }
+
     throw err;
   }
 }
@@ -214,11 +227,11 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     };
   }
 
-  // auto generate an index for each page
-  const isHomePageIndex = parsed.page === DEFAULT_PAGE_NUMBER
-    && parsed.name === INDEX_PAGE;
+  // auto generate an index for each page for pagination
+  const isPaginationHomePage = parsed.page === DEFAULT_PAGE_NUMBER
+    && parsed.name === INDEX_PAGE && config.paginate;
 
-  if (!isHomePageIndex && (!parsed.keys || !parsed.loop && parsed.keys)) {
+  if (!isPaginationHomePage && (!parsed.keys || !parsed.loop && parsed.keys)) {
     const res = await funnelViewWparsedName(funneled);
     return {
       htmls: [res.html],
@@ -226,11 +239,11 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     };
   }
 
-  if (isHomePageIndex && !parsed.keys) {
+  if (isPaginationHomePage && !parsed.keys) {
     marky.mark('pagination indexes');
 
     const len = funneled.pages.length;
-    const ps = Array.from(new Array(len),
+    const ps = Array.from({ length: len },
       (_, i) => funnelViewWparsedName(funneled, null, {
         pageNo: parsed.page + i
       }));
@@ -608,12 +621,12 @@ async function watch(config, cb = () => {}) {
     `${watchPath.full}/**/*.mjs`,
     `${watchPath.full}/static/*.*`
   ], {
-    cwd: config.cwd,
     ignored: []
   });
 
   watcher.on('ready', () => {
-    logger.info('watching', watchPath.full);
+    logger.info(blue('watching'),
+      splitPathCwd(config.cwd, watchPath.full), EOL);
     gen(config);
     _cb();
   });
@@ -621,10 +634,8 @@ async function watch(config, cb = () => {}) {
   const run = p => {
     debuglog('altered', p);
     const ext = vpath(p).ext;
-    // the path here excludes the cwd defined above
-    // add it back for the full path
-    const fp = vpath([config.cwd, p]).full;
-    const watching = { [ext]: [fp] };
+    const watching = { [ext]: [p] };
+
     const isFunnel = p.endsWith(defaultConfig.funnelName);
     config.watchFunnel = isFunnel && config.build.watchFunnel;
 
@@ -670,9 +681,15 @@ async function serve(config) {
     port,
     open: config.devServer.open,
     notify: false,
+    online: false,
+    injectChanges: false,
+    timestamps: false,
     server: {
       baseDir: serverRoot,
-      directory: config.devServer.directory
+      directory: config.devServer.directory,
+      serveStaticOptions: {
+        redirect: true
+      }
     },
     middleware: bSync.middlewareList({
       host, port, entry, serverRoot

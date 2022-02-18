@@ -27,9 +27,8 @@
     "@babel/core": "^7.14.8",
     "@babel/eslint-parser": "^7.14.7",
     "autoprefixer": "^10.4.2",
-    "browser-sync": "^2.27.4",
+    "browser-sync": "^2.27.7",
     "browserify": "^17.0.0",
-    "cacache": "^15.2.0",
     "cheerio": "^1.0.0-rc.10",
     "chokidar": "^3.5.2",
     "colorette": "^2.0.16",
@@ -40,8 +39,8 @@
     "debug": "^4.3.3",
     "del": "^6.0.0",
     "dotenv": "^10.0.0",
+    "esbuild": "^0.14.22",
     "eslint": "^7.29.0",
-    "find-cache-dir": "^3.3.1",
     "handlebars": "^4.7.7",
     "html-validator": "^6.0.0",
     "marky": "^1.2.2",
@@ -49,9 +48,7 @@
     "postcss": "^8.3.5",
     "postcss-hash": "^3.0.0",
     "postcss-preset-env": "^7.2.3",
-    "tmp": "^0.2.1",
-    "webpack": "^5.44.0",
-    "yargs": "^17.0.1"
+    "tmp": "^0.2.1"
   },
   "devDependencies": {
     "faker": "^5.5.3",
