@@ -99,7 +99,10 @@ async function compileView(config, file, locals) {
     if (isParsingError) {
       const maybe = err.message.split(lineNumberPrefix)[1];
       const line = parseInt(maybe, 10);
-      err.snippet = await genSnippet({ line }, file);
+      err.snippet = await genSnippet({
+        line,
+        title: `CompileViewError ${err.message}`
+      }, file);
       delete err.stack; // not needed here
     }
 
