@@ -22,7 +22,9 @@ import {
   LOCALES_PATH_NAME,
   LOCALES_SEP,
   DEFAULT_PAGE_NUMBER,
-  STATIC_PATH_NAME
+  STATIC_PATH_NAME,
+  PARTIALS_PATH_NAME,
+  PARTIALS_TOKEN
 } from './utils/constants.js';
 
 import { bundleSearchFeature, buildIndexes } from './utils/search.js';
@@ -313,11 +315,17 @@ async function getLocales(config, files) {
   return res;
 }
 
-async function parseViews(config, views) {
+async function parseViews(config, files, read) {
   debuglog('parsing src views');
 
+  let views = config.watchFunnel ? read['.html'] : files['.html'] || [];
   const srcBase = getSrcBase(config);
   const outputPath = vpath([config.owd, config.output.path]);
+
+  if (files.partials?.length) {
+    views = read['.html'];
+    config.bypass = true;
+  }
 
   const _views = await Promise.all(
     await views.reduce(reduceViewsByChecksum(config, () => watch(config)), [])
@@ -505,6 +513,7 @@ async function readSource(src) {
 async function unlinkFiles(config, toDel) {
   marky.mark('deleting files');
 
+  // path to delete
   const delp = vpath(toDel);
   config.funneled = await getFunneled(config);
 
@@ -588,7 +597,6 @@ async function gen(config, watching = null, ext) {
   const read = await readSource(srcPath.full);
   // files read from source or currently being watched
   const files = watching || read;
-  const views = config.watchFunnel ? read['.html'] : files['.html'] || [];
 
   if (watching && ext !== '.html' && !config.watchFunnel) {
     const asset = watching[ext] || [];
@@ -605,7 +613,7 @@ async function gen(config, watching = null, ext) {
   bundleSearchFeature(config);
 
   try {
-    const parsed = await parseViews(config, views);
+    const parsed = await parseViews(config, files, read);
     await handleStaticAssets(config, files);
     return parsed;
   } catch (e) {
@@ -647,6 +655,10 @@ async function watch(config, cb = () => {}) {
 
     const isFunnel = p.endsWith(defaultConfig.funnelName);
     config.watchFunnel = isFunnel && config.build.watchFunnel;
+
+    const isPartial = p.includes(`/${PARTIALS_PATH_NAME}/`)
+      || vpath(p).name.startsWith(PARTIALS_TOKEN);
+    if (isPartial) watching.partials = [p];
 
     const isStatic = p.includes(`/${STATIC_PATH_NAME}/`);
     if (isStatic) watching.static = [p];

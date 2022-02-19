@@ -29,14 +29,14 @@
       .pointers {
         position: fixed;
         width: 100%;
-        top: 30%;
+        top: 40%;
       }
 
       .pointers a {
         position: absolute;
-        font-size: 2em;
+        font-size: 3em;
         text-decoration: none;
-        color: #2b2b2b;
+        color: #4b4b4b;
       }
 
       .pointers a:hover,
@@ -46,6 +46,7 @@
 
       .pointers .prev {
         left: 5%;
+        transform: rotate(180deg);
       }
 
       .pointers .next {
@@ -58,10 +59,10 @@
     {{> header }}
     <div class="pointers">
       <a class="prev" href="{{ prev.url }}">
-        <span>&lt;&lt;</span>
+        <span>&#10155;</span>
       </a>
       <a class="next" href="{{ next.url }}">
-        <span>&gt;&gt;</span>
+        <span>&#10155;</span>
       </a>
     </div>
     <div class="wrapper">
@@ -73,6 +74,7 @@
         {{ data.description }}
       </article>
     </div>
+    {{> pagination }}
     {{> footer }}
   </body>
 
