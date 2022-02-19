@@ -102,7 +102,10 @@ export function reduceViewsByChecksum(config, rewatch = null) {
         return acc;
       }
 
-      if (newContent && !isPartial || config.bypass) {
+      const add = newContent && !isPartial;
+      const force = isPartial && config.bypass;
+
+      if (add || force) {
         // only allow views with new content
         (await acc).push({ path: view, checksum });
       }
