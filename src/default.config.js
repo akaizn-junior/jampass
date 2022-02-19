@@ -20,7 +20,8 @@ export default {
       watchFunnel: false,
       search: {
         indexKeyMaxSize: 60,
-        lib: true
+        lib: true,
+        resultUrl: 'blog[_name].html'
       }
     },
     views: {

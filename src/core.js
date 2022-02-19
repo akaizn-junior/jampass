@@ -59,7 +59,7 @@ import {
   arrayValueAt,
   formatPageEntry,
   inRange,
-  getLoopedPageEntryClosure,
+  getDataItemPageClosure,
   isDef,
   isObj,
   genSnippet
@@ -123,9 +123,9 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     return compileView(config, name, locals);
   };
 
-  const getLoopedPageEntry = getLoopedPageEntryClosure(config);
-  const getLoopedPageEntryPrev = getLoopedPageEntryClosure(config);
-  const getLoopedPageEntryNext = getLoopedPageEntryClosure(config);
+  const getItemPage = getDataItemPageClosure(config);
+  const getPrevItemPage = getDataItemPageClosure(config);
+  const getNextItemPage = getDataItemPageClosure(config);
 
   const funnelViewWparsedName = async(locals, itemIndex = null, opts = {}) => {
     const _opts = Object.assign({
@@ -189,9 +189,9 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     }
 
     if (isDef(itemIndex)) {
-      pageEntry = getLoopedPageEntry(index);
-      const prevEntry = getLoopedPageEntryPrev(inRange(index - 1, _opts.list.length, 1));
-      const nextEntry = getLoopedPageEntryNext(inRange(index + 1, _opts.list.length - 1));
+      pageEntry = getItemPage(index);
+      const prevEntry = getPrevItemPage(inRange(index - 1, _opts.list.length, 1));
+      const nextEntry = getNextItemPage(inRange(index + 1, _opts.list.length - 1));
 
       _locals.data = locals.raw[index];
 
@@ -691,8 +691,6 @@ async function serve(config) {
     open: config.devServer.open,
     notify: false,
     online: false,
-    injectChanges: false,
-    timestamps: false,
     server: {
       baseDir: serverRoot,
       directory: config.devServer.directory,

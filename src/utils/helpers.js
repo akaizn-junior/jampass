@@ -166,7 +166,7 @@ export const formatPageEntry = no => {
   if (no > DEFAULT_PAGE_NUMBER) return `/${no}`;
 };
 
-export function getLoopedPageEntryClosure(config) {
+export function getDataItemPageClosure(config) {
   const { pagination } = config.funneled;
 
   const every = pagination?.every;

@@ -48,6 +48,8 @@
     z-index: 2;
     font-size: 1.16em;
     display: none;
+    overflow: hidden auto;
+    max-height: 500px;
   }
 
   #search-results .search-item {
@@ -58,20 +60,21 @@
     background-color: #ededed;
   }
 
- .search-item a {
+  .search-item a {
     text-decoration: none;
     color: #202020;
     padding: 2px;
+    display: block;
   }
 
- .search-item a:hover,
- .search-item a:focus {
+  .search-item a:hover,
+  .search-item a:focus {
     color: #143bff;
   }
 
   .search-item p {
     color: #888888;
-    font-size: .88em;
+    font-size: .8em;
     padding: 3px;
     font-style: italic;
   }

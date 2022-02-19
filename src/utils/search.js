@@ -2,18 +2,21 @@ import * as marky from 'marky';
 import { blue } from 'colorette';
 
 // local
-import { accessProperty, processJs } from './process.js';
+import { accessProperty, parsedNameKeysToPath, parseDynamicName, processJs } from './process.js';
 import { logger } from './init.js';
-import { formatBytes, markyStop, showTime } from './helpers.js';
+import { formatBytes, markyStop, showTime, getDataItemPageClosure } from './helpers.js';
 import { getSrcBase, vpath } from './path.js';
 import { writeFile, newReadable } from './stream.js';
 import * as keep from './keep.js';
 
 export async function buildIndexes(config) {
   const { indexes } = config.funneled;
-  const { indexKeyMaxSize } = config.build.search;
+  const { indexKeyMaxSize, resultUrl } = config.build.search;
 
   if (!indexes || !indexes.length) return;
+
+  const parsed = parseDynamicName(resultUrl);
+  const getItemPage = getDataItemPageClosure(config);
 
   const _indexKeyMaxSize = indexKeyMaxSize || 100;
   const rawData = config.funneled.raw;
@@ -24,8 +27,11 @@ export async function buildIndexes(config) {
   // lets just use string and the super fast JSON.parse
   // of course with 'reduce'
   // JSON parse and JSON.stringify work with chunks
-  const getIndexes = locals => indexes
-    .reduce((acc, index) => {
+
+  const getIndexes = (locals, rawDataItemIndex = 0) => {
+    const pageEntry = getItemPage(rawDataItemIndex);
+
+    return indexes.reduce((acc, index) => {
       const _acc = JSON.parse(acc);
 
       try {
@@ -37,6 +43,13 @@ export async function buildIndexes(config) {
             index,
             value: locals
           };
+
+          if (parsed.place) {
+            const prop = parsedNameKeysToPath(parsed.keys, locals);
+            const pathName = parsed.place(prop);
+            const page = vpath([pageEntry, pathName]).full;
+            page && (_acc[value].url = page);
+          }
         }
       } catch (err) {
         logger.info(blue('skipped'), `"${index}" is undefined. cannot set index`);
@@ -44,6 +57,7 @@ export async function buildIndexes(config) {
 
       return JSON.stringify(_acc);
     }, '{}');
+  };
 
   const fnm = 'indexes.json';
   const exists = keep.get(fnm);
@@ -52,9 +66,9 @@ export async function buildIndexes(config) {
     marky.mark('build search');
 
     if (isArray) {
-      file = rawData.reduce((acc, locals) => {
+      file = rawData.reduce((acc, locals, i) => {
         const _acc = JSON.parse(acc);
-        const ind = JSON.parse(getIndexes(locals));
+        const ind = JSON.parse(getIndexes(locals, i));
         const res = Object.assign(_acc, ind);
         return JSON.stringify(res);
       }, '{}');

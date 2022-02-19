@@ -15,13 +15,13 @@ function paint(results) {
     if (item.index !== 'name') {
       return `<div class="search-item">
         <p>${item.index}: ${text}</p>
-        <a href="${name}">${name}</a>
+        <a href="${item.url}">${name}</a>
       </div>`;
     }
 
     return `<div class="search-item">
         <p>${item.index}</p>
-        <a href="${name}">${name}</a>
+        <a href="${item.url}">${name}</a>
       </div>`;
   }).join('');
 }

@@ -27,3 +27,5 @@
 - [] partials edits should only trigger a build if they are used
 
 - [] provide current page for pagination
+
+- [] improve search logic
