@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { asyncRead } from './stream.js';
+import { vpath } from './path.js';
 import { INDEX_PAGE } from './constants.js';
 
 function redirectToEntryWithSlash(opts) {
@@ -52,6 +53,17 @@ function writePageContent(opts) {
   return async(req, res, next) => {
     const url = new URL(`${opts.host}:${opts.port}${req.url}`);
     const uri = url.pathname;
+
+    // ignore other extensions
+    const ext = vpath(uri).ext;
+    if (!['', '.html'].includes(ext)) {
+      return next();
+    }
+
+    // ignore directories
+    if (uri.endsWith('/')) {
+      return next();
+    }
 
     const possible = [
       `${opts.serverRoot + uri}.html`,

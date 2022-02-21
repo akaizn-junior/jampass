@@ -60,6 +60,7 @@ With additional support for any template engine [consolidate.js](https://www.npm
 ## Shout out
 
 - [favicon.io](https://favicon.io/favicon-generator/)
+- [Unicode Character Table](https://unicode-table.com/)
 
 ## Author
 

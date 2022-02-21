@@ -28,4 +28,4 @@
 
 - [] provide current page for pagination
 
-- [] improve search logic
+- [] improve search logic / consider using lunr.js / https://lunrjs.com/guides/core_concepts.html

@@ -58,10 +58,10 @@
   <body>
     {{> header }}
     <div class="pointers">
-      <a class="prev" href="{{ prev.url }}">
+      <a class="prev" title="{{ prev.data.name }}" href="{{ prev.url }}">
         <span>&#10155;</span>
       </a>
-      <a class="next" href="{{ next.url }}">
+      <a class="next" title="{{ next.data.name }}" href="{{ next.url }}">
         <span>&#10155;</span>
       </a>
     </div>
@@ -74,7 +74,6 @@
         {{ data.description }}
       </article>
     </div>
-    {{> pagination }}
     {{> footer }}
   </body>
 
