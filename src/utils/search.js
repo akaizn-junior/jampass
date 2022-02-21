@@ -19,7 +19,7 @@ export async function buildIndexes(config) {
   const getItemPage = getDataItemPageClosure(config);
 
   const _indexKeyMaxSize = indexKeyMaxSize || 100;
-  const rawData = config.funneled.raw;
+  const rawData = config.funneled?.raw;
   const isArray = Array.isArray(rawData);
   let file = '';
 

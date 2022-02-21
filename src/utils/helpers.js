@@ -95,7 +95,7 @@ export function reduceViewsByChecksum(config, rewatch = null) {
         let partial = viewName;
         if (withPartialsToken) partial = viewName.split(PARTIALS_TOKEN)[1];
 
-        const def = config.funneled.partials[partial];
+        const def = config.funneled?.partials[partial];
         if (!def) config.funneled.partials[partial] = view;
 
         keep.add(view, { checksum, isValidHtml: false });

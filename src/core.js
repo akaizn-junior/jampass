@@ -219,7 +219,7 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     };
   };
 
-  const isArray = Array.isArray(funneled.raw);
+  const isArray = Array.isArray(funneled?.raw);
   if (parsed.loop && isArray) {
     const ps = funneled.raw.map((_, i, arr) =>
       funnelViewWparsedName(funneled, i, {
@@ -277,6 +277,8 @@ async function getLocales(config, files) {
     && file.endsWith('.json')
   );
 
+  if (!locales.length) return {};
+
   // const fromConfig = config.locales.map
 
   const localesProm = locales.map(async locale => {
@@ -328,7 +330,7 @@ async function parseViews(config, files, read) {
     await views.reduce(reduceViewsByChecksum(config, () => watch(config)), [])
   );
 
-  debuglog('registered partials', config.funneled.partials);
+  debuglog('registered partials', config.funneled?.partials);
   debuglog('views count', _views.length);
 
   if (!config.watch) {
@@ -434,16 +436,16 @@ async function handleStaticAssets(config, files) {
 }
 
 async function getFunneled(config, cacheBust = '') {
-  // if no config.funnel
-  const dataPath = vpath([config.cwd, config.src, defaultConfig.funnelName], true).full;
-  const cb = cacheBust || '';
-  const url = `${dataPath}?bust=${cb}`;
-
-  debuglog('funnel data path', dataPath);
-  debuglog('funneled data cache bust', cacheBust);
-  debuglog('funneled data url', url);
-
   try {
+    // if no config.funnel
+    const dataPath = vpath([config.cwd, config.src, defaultConfig.funnelName], true).full;
+    const cb = cacheBust || '';
+    const url = `${dataPath}?bust=${cb}`;
+
+    debuglog('funnel data path', dataPath);
+    debuglog('funneled data cache bust', cacheBust);
+    debuglog('funneled data url', url);
+
     const imported = await import(url);
     const funneled = 'default' in imported ? imported.default : imported;
     let previewKeys = [];
@@ -476,7 +478,7 @@ async function getFunneled(config, cacheBust = '') {
     throw new Error(`invalid funneled data ${bold(funneled)}`);
   } catch (err) {
     err.name = 'DataFunnelError';
-    err.message = dataPath.concat('\n\n', err.message);
+    if (err.code === 'ENOENT') return { meta: {}, pages: [] };
     throw err;
   }
 }
@@ -600,10 +602,11 @@ async function gen(config, watching = null, ext) {
     return await processWatchedAsset(config, asset, ext);
   }
 
+  const locales = await getLocales(config, read);
+
   if (!config.funneled.locales) {
-    const { locales, meta } = await getLocales(config, read);
-    config.funneled.locales = locales;
-    config.funneled.meta.locales = meta;
+    config.funneled.locales = locales.locales || {};
+    config.funneled.meta.locales = locales.meta || [];
   }
 
   buildIndexes(config);

@@ -2,7 +2,6 @@
 
 // vendors
 import { Command } from 'commander';
-import { logger } from './utils/init.js';
 
 // node
 import fs from 'fs';
@@ -20,9 +19,9 @@ const cli = new Command();
 cli.name(defaultConfig.name);
 cli.description('A static web builder');
 cli.version(defaultConfig.version, '-v, --version', 'output the version number');
+
 cli.showSuggestionAfterError(true);
 cli.showHelpAfterError(true);
-cli.exitOverride(); // throw on parsing error
 
 // ++++++++++++++++++++++++
 // Helpers
@@ -93,9 +92,7 @@ const withConfig = (args, done) => {
 // ++++++++++++++++++++++++
 
 cli.option('-c, --config <path>', 'user config path');
-cli.option('-s, --src <path>', 'reads the folder to build',
-  defaultConfig.userOpts.src
-);
+cli.option('-s, --src <path>', 'source folder');
 
 cli.option('-C, --cwd <path>', 'define a custom cwd', defaultConfig.userOpts.cwd);
 cli.option('-D, --debug', 'toggle debug logs', defaultConfig.userOpts.build.debug);
@@ -155,9 +152,4 @@ cli
 // Parse CLI
 // ++++++++++++++++++++++++
 
-try {
-  cli.parse(process.argv);
-} catch (err) {
-  logger.error(err);
-  logger.log('Tchau.');
-}
+cli.parse();
