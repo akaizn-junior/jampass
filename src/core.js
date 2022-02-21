@@ -318,14 +318,11 @@ async function getLocales(config, files) {
 async function parseViews(config, files, read) {
   debuglog('parsing src views');
 
-  let views = config.watchFunnel ? read['.html'] : files['.html'] || [];
+  const views = config.watchFunnel || config.bypass
+    ? read['.html'] : files['.html'] || [];
+
   const srcBase = getSrcBase(config);
   const outputPath = vpath([config.owd, config.output.path]);
-
-  if (files.partials?.length) {
-    views = read['.html'];
-    config.bypass = true;
-  }
 
   const _views = await Promise.all(
     await views.reduce(reduceViewsByChecksum(config, () => watch(config)), [])
@@ -658,7 +655,8 @@ async function watch(config, cb = () => {}) {
 
     const isPartial = p.includes(`/${PARTIALS_PATH_NAME}/`)
       || vpath(p).name.startsWith(PARTIALS_TOKEN);
-    if (isPartial) watching.partials = [p];
+
+    config.bypass = isPartial;
 
     const isStatic = p.includes(`/${STATIC_PATH_NAME}/`);
     if (isStatic) watching.static = [p];

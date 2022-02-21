@@ -56,7 +56,7 @@ function writePageContent(opts) {
 
     // ignore other extensions
     const ext = vpath(uri).ext;
-    if (!['', '.html'].includes(ext)) {
+    if (!['', '.htm', '.html'].includes(ext)) {
       return next();
     }
 
