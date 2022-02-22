@@ -50,7 +50,8 @@ import {
   logger,
   debuglog,
   toggleDebug,
-  tmpdir
+  tmpdir,
+  isValidSource
 } from './utils/init.js';
 
 import {
@@ -117,6 +118,7 @@ async function compileView(config, file, locals) {
 
 async function funnel(config, file, flags = { onlyNames: false }) {
   debuglog('funnel data to', file);
+
   const parsed = parseDynamicName(vpath(file).base);
   const funneled = config.funneled;
 
@@ -330,7 +332,7 @@ async function parseViews(config, files, read) {
     await views.reduce(reduceViewsByChecksum(config, () => watch(config)), [])
   );
 
-  debuglog('registered partials', config.funneled?.partials);
+  debuglog('registered partials', config.funneled.partials);
   debuglog('views count', _views.length);
 
   if (!config.watch) {
@@ -478,7 +480,13 @@ async function getFunneled(config, cacheBust = '') {
     throw new Error(`invalid funneled data ${bold(funneled)}`);
   } catch (err) {
     err.name = 'DataFunnelError';
-    if (err.code === 'ENOENT') return { meta: {}, pages: [] };
+    if (err.code === 'ENOENT') {
+      return {
+        meta: {},
+        pages: [],
+        partials: {}
+      };
+    }
     throw err;
   }
 }
@@ -545,9 +553,12 @@ async function unlinkFiles(config, toDel) {
 // RUN WITH CONFIG
 // +++++++++++++++++++++++++++++++
 
-function withConfig(config, done) {
+function withConfig(config, done, cliHelp) {
   process.on('uncaughtException', handleThrown(config));
   process.on('unhandledRejection', handleThrown(config));
+
+  // verify if user directory is a valid source
+  isValidSource(config, cliHelp);
 
   toggleDebug(config.build.debug);
   debuglog('user config %O', config);
@@ -567,8 +578,8 @@ function withConfig(config, done) {
 
   debuglog('user environment "%s"', config.env);
   debuglog('watch mode', config.watch);
-  debuglog('output working directory', config.owd);
-  debuglog('public output directory', config.output.path);
+  debuglog('output working directory "%s"', config.owd);
+  debuglog('public output directory "%s"', config.output.path);
 
   const outputPath = vpath([config.owd, config.output.path]).full;
   del(outputPath, { force: true })
@@ -753,7 +764,7 @@ async function lint(config) {
 }
 
 export default {
-  gen: c => withConfig(c, gen),
+  gen: (c, cliHelp) => withConfig(c, gen, cliHelp),
   watch: c => withConfig(c, watch),
   serve: c => withConfig(c, serve),
   lint: c => withConfig(c, lint)

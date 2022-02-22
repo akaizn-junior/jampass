@@ -12,6 +12,12 @@ import path from 'path';
 import defaultconfig from '../default.config.js';
 import { writeFile, newReadable } from './stream.js';
 import { vpath } from './path.js';
+import { safeFun } from './helpers.js';
+
+export const exit = (code = 1) => {
+  // eslint-disable-next-line no-process-exit
+  process.exit(code);
+};
 
 export const loadUserEnv = () => dotenv.config({
   path: path.join(process.cwd(), '.env')
@@ -76,11 +82,6 @@ export function toggleDebug(toggle) {
 
 export function handleThrown(config) {
   return err => {
-    const end = () => {
-      // eslint-disable-next-line no-process-exit
-      process.exit(1);
-    };
-
     debuglog('error object keys', Object.keys(err));
 
     const errname = err.name || err.code || '';
@@ -100,7 +101,21 @@ export function handleThrown(config) {
         .then(cleaned => {
           debuglog('error! cleaned output', cleaned);
         });
-      end();
+      exit();
     }
   };
+}
+
+export function isValidSource(config, cliHelp) {
+  try {
+    // no source provided, ok only if cwd has an 'index.html'
+    if (!config.src) {
+    // does cwd have an 'index.html' file
+      vpath([config.cwd, 'index.html'], true);
+    }
+    return true;
+  } catch (err) {
+    logger.warn('Missing source. Set a source folder or add an "index.html" to the cwd');
+    safeFun(cliHelp)();
+  }
 }

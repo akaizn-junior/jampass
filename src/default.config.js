@@ -12,16 +12,15 @@ export default {
   funnelName: 'jampass.data.js',
   userOpts: {
     cwd: process.cwd(),
-    src: './demos/site',
-    funnel: '',
+    src: '',
     locales: [],
     build: {
       debug: false,
       watchFunnel: false,
       search: {
         indexKeyMaxSize: 60,
-        lib: true,
-        resultUrl: 'blog[_name].html'
+        lib: false,
+        resultUrl: ''
       }
     },
     views: {
@@ -42,7 +41,7 @@ export default {
       directory: false,
       open: false,
       pages: {
-        404: '/404.html'
+        404: '/'
       }
     }
   }

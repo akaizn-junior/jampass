@@ -20,7 +20,8 @@ import {
   partition,
   isObj,
   formatPageEntry,
-  genSnippet
+  genSnippet,
+  isDef
 } from './helpers.js';
 
 import {
@@ -69,6 +70,8 @@ export function accessProperty(obj, key, start = 0) {
 }
 
 export function parseDynamicName(fnm) {
+  if (!fnm) return;
+
   debuglog('parsing dynamic name');
   const dynBeginIndex = fnm.indexOf(FIELD_BEGIN_TOKEN);
   const dynEndIndex = fnm.indexOf(FIELD_END_TOKEN);

@@ -44,7 +44,7 @@ export async function buildIndexes(config) {
             value: locals
           };
 
-          if (parsed.place) {
+          if (parsed && parsed.place) {
             const prop = parsedNameKeysToPath(parsed.keys, locals);
             const pathName = parsed.place(prop);
             const page = vpath([pageEntry, pathName]).full;

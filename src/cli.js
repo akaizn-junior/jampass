@@ -113,7 +113,7 @@ cli.option('--views <path>', 'source views path',
 cli
   .command('gen', { isDefault: true })
   .description('build source')
-  .action((_, d) => withConfig(d, core.gen));
+  .action((_, d) => withConfig(d, c => core.gen(c, cli.help.bind(cli))));
 
 cli
   .command('serve')
