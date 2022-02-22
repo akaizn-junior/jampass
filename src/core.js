@@ -2,6 +2,7 @@ import cons from 'consolidate';
 import browserSync from 'browser-sync';
 import chokidar from 'chokidar';
 import del from 'del';
+import tmp from 'tmp';
 import { ESLint } from 'eslint';
 import * as marky from 'marky';
 import { bold, strikethrough, blue } from 'colorette';
@@ -50,7 +51,6 @@ import {
   logger,
   debuglog,
   toggleDebug,
-  tmpdir,
   isValidSource
 } from './utils/init.js';
 
@@ -568,9 +568,9 @@ function withConfig(config, done, cliHelp) {
   // output working directory
   config.owd = config.cwd;
   if (config.watch) {
-    const nm = 'tmpout';
-    config.owd = tmpdir;
-    config.output.path = nm;
+    const tempo = tmp.dirSync({ dir: defaultConfig.name });
+    config.owd = tempo.name;
+    config.output.path = '';
   }
 
   config.env = process.env.NODE_ENV;

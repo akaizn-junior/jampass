@@ -8,7 +8,7 @@ import { EOL } from 'os';
 
 // local
 import { vpath, splitPathCwd, pathDistance } from './path.js';
-import { logger, tmpdir, debuglog } from './init.js';
+import { logger, debuglog } from './init.js';
 import { genSnippet, minifyHtml } from './helpers.js';
 import { writeFile, newReadable} from './stream.js';
 import { processCss, processLinkedAssets } from './process.js';
@@ -229,7 +229,7 @@ export async function validateAndUpdateHtml(config, data) {
   const compiled = data.html;
   const outname = data.name;
 
-  const tmpfile = vpath([tmpdir, data.srcBase, outname]).full;
+  const tmpfile = vpath([config.owd, outname]).full;
   const htmlOutFile = data.outputPath.join(data.srcBase, outname).full;
 
   const html = {

@@ -29,3 +29,5 @@
 - [] provide current page for pagination
 
 - [] improve search logic / consider using lunr.js / https://lunrjs.com/guides/core_concepts.html
+
+- [] fix serve error when using bad source folder

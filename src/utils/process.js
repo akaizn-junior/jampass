@@ -1,5 +1,6 @@
 import { bold, red, dim } from 'colorette';
 import browserify from 'browserify';
+import tmp from 'tmp';
 
 // postcss and plugins
 import postcss from 'postcss';
@@ -20,14 +21,12 @@ import {
   partition,
   isObj,
   formatPageEntry,
-  genSnippet,
-  isDef
+  genSnippet
 } from './helpers.js';
 
 import {
   debuglog,
-  logger,
-  tmpdir
+  logger
 } from './init.js';
 
 import { vpath, getSrcBase, splitPathCwd } from './path.js';
@@ -45,6 +44,7 @@ import {
   MAX_RECURSIVE_ACESS,
   DEFAULT_PAGE_NUMBER
 } from './constants.js';
+import defaultConfig from '../default.config.js';
 
 export function accessProperty(obj, key, start = 0) {
   if (!key && typeof key !== 'string') {
@@ -205,16 +205,14 @@ export async function processJs(config, file, out, opts = {}) {
     hash: true
   }, opts);
 
+  const outpath = vpath(out);
+  let to = outpath.full;
+
   const b = browserify({
     standalone: _opts.libName
   });
 
-  const outpath = vpath(out);
-  let to = outpath.full;
-
-  const name = vpath(file).base;
-  const srcBase = getSrcBase(config);
-  const tmpfile = vpath([tmpdir, srcBase, name]).full;
+  const tmpfile = tmp.fileSync({ dir: defaultConfig.name }).name;
 
   const bundle = f => new Promise((res, rej) => {
     b.add(f);
@@ -254,8 +252,7 @@ export async function processCss(config, file, out, opts = {
   !config.isDev && plugins.push(
     postCssHash({
       manifest: vpath([
-        tmpdir,
-        vpath(config.src).base,
+        config.owd,
         'manifest.json'
       ]).full
     })
