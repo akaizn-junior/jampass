@@ -149,14 +149,15 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     const srcView = vpath([config.cwd, config.src, parsed.name]).full;
     let pageEntry = '';
 
+    const _pageNo = _opts.pageNo || parsed.page;
+
     const _locals = {
       raw: locals.raw,
       locales: locals.locales,
       meta: locals.meta,
-      partials: locals.partials
+      partials: locals.partials,
+      pageNumber: _pageNo
     };
-
-    const _pageNo = _opts.pageNo || parsed.page;
 
     // dynamic names may contain page numbers as a prefix
     // do a clean up here so the output name is corrent
@@ -652,9 +653,10 @@ async function watch(config, cb = () => {}) {
     ignored: []
   });
 
-  watcher.on('ready', () => {
+  watcher.once('ready', () => {
     logger.info(blue('watching'),
       splitPathCwd(config.cwd, watchPath.full), EOL);
+
     gen(config);
     _cb();
   });
