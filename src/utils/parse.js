@@ -233,7 +233,7 @@ export async function validateAndUpdateHtml(config, data) {
 
   const tmpfile = tmp.fileSync({
     dir: vpath([defaultConfig.name, 'html']).full
-  }).name;
+  }).name.concat('.html');
 
   const html = {
     from: data.viewPath,

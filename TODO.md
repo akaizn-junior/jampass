@@ -39,3 +39,5 @@
 - [] watch static assets
 
 - [] play with htmlvalidate json, and see how to properly implement it
+
+- [] read env as cli option
