@@ -31,3 +31,5 @@
 - [] improve search logic / consider using lunr.js / https://lunrjs.com/guides/core_concepts.html
 
 - [] fix serve error when using bad source folder
+
+- [] improve watch funnel for regenerating pages on funnel changes

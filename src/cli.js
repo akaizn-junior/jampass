@@ -106,6 +106,11 @@ cli.option('--views <path>', 'source views path',
   defaultConfig.userOpts.views.path
 );
 
+cli.option('--watch-funnel',
+  're-generate pages on funnel changes',
+  defaultConfig.userOpts.build.watchFunnel
+);
+
 // ++++++++++++++++++++++++
 // Commands
 // ++++++++++++++++++++++++
@@ -135,10 +140,6 @@ cli
 cli
   .command('watch')
   .description('watch source edits')
-  .option('--watch-funnel',
-    'allow funnel changes to re-generate pages',
-    defaultConfig.userOpts.build.watchFunnel
-  )
   .action((_, d) => withConfig(d, core.watch));
 
 cli
