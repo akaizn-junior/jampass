@@ -42,7 +42,7 @@
     "esbuild": "^0.14.22",
     "eslint": "^7.29.0",
     "handlebars": "^4.7.7",
-    "html-validator": "^6.0.0",
+    "html-validate": "^6.4.0",
     "marky": "^1.2.2",
     "minify": "^8.0.3",
     "postcss": "^8.3.5",

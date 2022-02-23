@@ -1,6 +1,7 @@
-import htmlValidator from 'html-validator';
+import { HtmlValidate } from 'html-validate';
 import cheerio from 'cheerio';
 import del from 'del';
+import tmp from 'tmp';
 import { blue } from 'colorette';
 
 // node
@@ -10,9 +11,10 @@ import { EOL } from 'os';
 import { vpath, splitPathCwd, pathDistance } from './path.js';
 import { logger, debuglog } from './init.js';
 import { genSnippet, minifyHtml } from './helpers.js';
-import { writeFile, newReadable} from './stream.js';
+import { writeFile, newReadable } from './stream.js';
 import { processCss, processLinkedAssets } from './process.js';
 import * as keep from './keep.js';
+import defaultConfig from '../default.config.js';
 
 const wrapCheerioElem = m => '\n'.concat(m, '\n');
 
@@ -53,31 +55,30 @@ export async function validateHtml(config, html, opts) {
   }
 
   try {
-    const res = await htmlValidator({
-      data: html,
-      format: 'text',
-      validator: 'WHATWG'
+    const validate = new HtmlValidate({
+      root: false,
+      extends: ['html-validate:recommended']
     });
 
-    const handleErr = async err => {
-      const emsg = splitPathCwd(config.cwd, opts.view)
-        .concat(':', err.line, ':', err.column);
+    const res = validate.validateString(html);
 
-      err.name = 'HtmlValidatorError';
-      err.snippet = await genSnippet({
+    const handleMsg = async msg => {
+      const emsg = splitPathCwd(config.cwd, opts.view)
+        .concat(':', msg.line, ':', msg.column);
+
+      msg.name = 'HtmlValidatorError';
+      msg.snippet = await genSnippet({
         code: html,
-        line: err.line,
-        column: err.column,
-        title: `HtmlValidatorError ${emsg} "${err.ruleId}" ${err.message}`
+        line: msg.line,
+        column: msg.column,
+        title: `HtmlValidatorError ${emsg} "${msg.ruleId}" ${msg.message}`
       });
 
-      throw err;
+      throw msg;
     };
 
-    res.errors.forEach(handleErr);
-    res.warnings.forEach(handleErr);
-
-    return res.isValid;
+    res.results[0]?.messages.forEach(handleMsg);
+    return res.valid;
   } catch (err) {
     throw err;
   }
@@ -228,9 +229,11 @@ export async function updateStyleTagCss(config, code, file = '') {
 export async function validateAndUpdateHtml(config, data) {
   const compiled = data.html;
   const outname = data.name;
-
-  const tmpfile = vpath([config.owd, outname]).full;
   const htmlOutFile = data.outputPath.join(data.srcBase, outname).full;
+
+  const tmpfile = tmp.fileSync({
+    dir: vpath([defaultConfig.name, 'html']).full
+  }).name;
 
   const html = {
     from: data.viewPath,

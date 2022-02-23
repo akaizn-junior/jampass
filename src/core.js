@@ -554,7 +554,7 @@ async function unlinkFiles(config, toDel) {
 // RUN WITH CONFIG
 // +++++++++++++++++++++++++++++++
 
-function withConfig(config, done, cliHelp) {
+async function withConfig(config, done, cliHelp) {
   process.on('uncaughtException', handleThrown(config));
   process.on('unhandledRejection', handleThrown(config));
 
@@ -583,10 +583,8 @@ function withConfig(config, done, cliHelp) {
   debuglog('public output directory "%s"', config.output.path);
 
   const outputPath = vpath([config.owd, config.output.path]).full;
-  del(outputPath, { force: true })
-    .then(cleaned => {
-      debuglog('init! cleaned output', cleaned);
-    });
+  const cleaned = await del(outputPath, { force: true });
+  debuglog('init! cleaned output', cleaned);
 
   return done(config);
 }

@@ -25,13 +25,22 @@ export const loadUserEnv = () => dotenv.config({
 
 export const tmpdir = (() => {
   const dir = path.join(os.tmpdir(), defaultconfig.name);
+  // others temp dirs
+  const thtml = path.join(os.tmpdir(), defaultconfig.name, 'html');
+  const tassets = path.join(os.tmpdir(), defaultconfig.name, 'assets');
 
-  try {
-    fs.statSync(dir);
-  } catch (err) {
-    // create if dir does not exist
-    fs.mkdirSync(dir);
+  function attempt(d) {
+    try {
+      fs.statSync(d);
+    } catch (err) {
+      // create if dir does not exist
+      fs.mkdirSync(d);
+    }
   }
+
+  attempt(dir);
+  attempt(thtml);
+  attempt(tassets);
 
   return dir;
 })();
@@ -81,7 +90,7 @@ export function toggleDebug(toggle) {
 }
 
 export function handleThrown(config) {
-  return err => {
+  return async err => {
     debuglog('error object keys', Object.keys(err));
 
     const errname = err.name || err.code || '';
@@ -97,10 +106,8 @@ export function handleThrown(config) {
     if (!config.watch) {
       // clean output folder
       const outputPath = vpath([config.cwd, config.output.path]).full;
-      del(outputPath)
-        .then(cleaned => {
-          debuglog('error! cleaned output', cleaned);
-        });
+      const cleaned = await del(outputPath, { force: true });
+      debuglog('error! cleaned output', cleaned);
       exit();
     }
   };

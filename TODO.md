@@ -33,3 +33,9 @@
 - [] fix serve error when using bad source folder
 
 - [] improve watch funnel for regenerating pages on funnel changes
+
+- [] improve watch mode in production env
+
+- [] watch static assets
+
+- [] play with htmlvalidate json, and see how to properly implement it

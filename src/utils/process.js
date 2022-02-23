@@ -212,7 +212,9 @@ export async function processJs(config, file, out, opts = {}) {
     standalone: _opts.libName
   });
 
-  const tmpfile = tmp.fileSync({ dir: defaultConfig.name }).name;
+  const tmpfile = tmp.fileSync({
+    dir: vpath([defaultConfig.name, 'assets']).full
+  }).name;
 
   const bundle = f => new Promise((res, rej) => {
     b.add(f);
