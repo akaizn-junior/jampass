@@ -214,7 +214,7 @@ export async function processJs(config, file, out, opts = {}) {
 
   const tmpfile = tmp.fileSync({
     dir: vpath([defaultConfig.name, 'assets']).full
-  }).name;
+  }).name.concat('.js');
 
   const bundle = f => new Promise((res, rej) => {
     b.add(f);
