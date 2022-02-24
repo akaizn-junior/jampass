@@ -221,23 +221,25 @@ export async function processJs(config, file, out, opts = {}) {
     b.bundle((err, data) => err ? rej(err) : res(data));
   });
 
-  let minCode = await bundle(file);
-  writeFile(newReadable(minCode), tmpfile);
-
-  if (!config.isDev && _opts.hash) {
-    minCode = await compress(config, tmpfile, 'js', {
-      compress: true,
-      mangle: true
-    });
-    const hash = createHash(minCode, 10);
-    to = outpath.noext.concat('.', hash, outpath.ext);
-  }
+  const min = {
+    code: await bundle(file)
+  };
 
   b.reset();
 
+  if (!config.isDev && _opts.hash) {
+    await writeFile(newReadable(min.code), tmpfile);
+    min.code = await compress(config, tmpfile, 'js', {
+      compress: true,
+      mangle: true
+    });
+    const hash = createHash(min.code, 10);
+    to = outpath.noext.concat('.', hash, outpath.ext);
+  }
+
   return {
     to,
-    code: minCode
+    code: min.code
   };
 }
 
@@ -253,10 +255,9 @@ export async function processCss(config, file, out, opts = {
 
   !config.isDev && plugins.push(
     postCssHash({
-      manifest: vpath([
-        config.owd,
-        'manifest.json'
-      ]).full
+      manifest: tmp.fileSync({
+        dir: vpath([defaultConfig.name, 'assets']).full
+      }).name
     })
   );
 

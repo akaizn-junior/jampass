@@ -12,7 +12,7 @@
     "serve": "node src/cli serve -s demos/site",
     "watch": "node src/cli watch -s demos/site",
     ":lint": "node src/cli lint -s demos/site",
-    "start": "node src/cli -s demos/site",
+    "start": "node src/cli -s demos/site --env production",
     "debug": "node --inspect src/cli watch -s demos/site -D"
   },
   "keywords": [

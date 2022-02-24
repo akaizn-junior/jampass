@@ -51,6 +51,8 @@ function loadUserConfig(args) {
 
   // use command line opt if used
   // cli opts have priority over config file opts
+  userOpts.env = _opts.env;
+
   userOpts.cwd = _opts.cwd || userOpts.cwd;
   userOpts.src = _opts.src || userOpts.src;
   userOpts.funnel = _opts.funnel || userOpts.funnel;
@@ -91,6 +93,7 @@ const withConfig = (args, done) => {
 // Global Options
 // ++++++++++++++++++++++++
 
+cli.option('--env <env>', 'work environment');
 cli.option('-c, --config <path>', 'user config path');
 cli.option('-s, --src <path>', 'source folder');
 

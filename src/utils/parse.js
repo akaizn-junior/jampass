@@ -231,15 +231,10 @@ export async function validateAndUpdateHtml(config, data) {
   const outname = data.name;
   const htmlOutFile = data.outputPath.join(data.srcBase, outname).full;
 
-  const tmpfile = tmp.fileSync({
-    dir: vpath([defaultConfig.name, 'html']).full
-  }).name.concat('.html');
-
   const html = {
     from: data.viewPath,
     out: htmlOutFile,
-    code: compiled,
-    tmpfile
+    code: compiled
   };
 
   try {
@@ -287,14 +282,20 @@ async function updateAndWriteHtml(config, parsed) {
     const uStyleTags = await updateStyleTagCss(config, uLinkedJs, html.from);
     const uScriptTags = await updateScriptTagJs(uStyleTags);
 
-    let minHtml = uScriptTags;
+    const rs = newReadable(uScriptTags);
 
-    if (!config.isDev) {
-      await writeFile(newReadable(minHtml), html.tmpfile);
-      minHtml = await minifyHtml(config, html.tmpfile);
+    if (config.isDev) {
+      await writeFile(rs, html.out);
+    } else {
+      const tmpfile = tmp.fileSync({
+        dir: vpath([defaultConfig.name, 'html']).full
+      }).name.concat('.html');
+
+      await writeFile(rs, tmpfile, async() => {
+        const min = await minifyHtml(config, tmpfile);
+        await writeFile(newReadable(min), html.out);
+      });
     }
-
-    await writeFile(newReadable(minHtml), html.out);
   } catch (err) {
     throw err;
   }

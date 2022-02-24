@@ -574,7 +574,7 @@ async function withConfig(config, done, cliHelp) {
     config.output.path = '';
   }
 
-  config.env = process.env.NODE_ENV;
+  config.env = config.env || process.env.NODE_ENV;
   config.isDev = config.env !== 'production';
 
   debuglog('user environment "%s"', config.env);
