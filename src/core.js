@@ -714,7 +714,7 @@ async function serve(config) {
     port,
     open: config.devServer.open,
     notify: false,
-    online: false,
+    online: true,
     server: {
       baseDir: serverRoot,
       directory: config.devServer.directory,
