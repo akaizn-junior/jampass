@@ -5,11 +5,11 @@ import { Command } from 'commander';
 
 // node
 import fs from 'fs';
-import path from 'path';
 
 // local
 import core from './core.js';
 import defaultConfig from './default.config.js';
+import { vpath } from './utils/path.js';
 
 // ++++++++++++++++++++++++
 // Setup CLI
@@ -27,21 +27,26 @@ cli.showHelpAfterError(true);
 // Helpers
 // ++++++++++++++++++++++++
 
-function loadUserConfig(args) {
+async function loadUserConfig(args) {
   const { opts, cmdOpts, cmd } = args;
   const _opts = Object.assign({}, cmdOpts, opts);
 
   let userOpts = defaultConfig.userOpts;
+  const userCwd = _opts.cwd || defaultConfig.userOpts.cwd;
   const userSource = _opts.src || defaultConfig.userOpts.src;
-  const configFile = _opts.config || defaultConfig.rcFileName;
+
+  const configFileName = _opts.config || defaultConfig.rcFileName;
+  const configFile = vpath([userCwd, userSource, configFileName]).full;
 
   try {
-    const userConfig = path.join(process.cwd(), userSource, configFile);
+    const userConfig = configFile;
     const stats = fs.statSync(userConfig);
 
     if (stats.isFile()) {
-      userOpts = require(userConfig);
-      userOpts = Object.assign(userOpts, defaultConfig.userOpts);
+      const _config = await import(userConfig);
+      userOpts = _config.default || _config;
+      // concat user options with defaults
+      userOpts = Object.assign(defaultConfig.userOpts, userOpts);
     }
   } catch (err) {
     if (err.code !== 'ENOENT') {
@@ -77,8 +82,8 @@ function loadUserConfig(args) {
   return all;
 }
 
-const withConfig = (args, done) => {
-  const conf = loadUserConfig({
+const withConfig = async(args, done) => {
+  const conf = await loadUserConfig({
     // global options
     opts: cli.opts(),
     // current command options

@@ -42,7 +42,7 @@ import {
   parseDynamicName,
   parsedNameKeysToPath,
   processWatchedAsset,
-  paginationForRawDataArray
+  paginationForPagesArray
 } from './utils/process.js';
 
 import {
@@ -142,7 +142,7 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     // evaluate dynamic and non dynamic names
     let pathName = parsed.name;
     if (parsed.place) {
-      const prop = parsedNameKeysToPath(parsed.keys, locals.raw, index);
+      const prop = parsedNameKeysToPath(parsed.keys, locals.flatPages, index);
       pathName = parsed.place(prop);
     }
 
@@ -198,19 +198,19 @@ async function funnel(config, file, flags = { onlyNames: false }) {
       const prevEntry = getPrevItemPage(inRange(index - 1, _opts.list.length, 1));
       const nextEntry = getNextItemPage(inRange(index + 1, _opts.list.length - 1));
 
-      _locals.data = locals.raw[index];
+      _locals.data = locals.flatPages[index];
 
       _locals.prev = {
         data: arrayValueAt(_opts.list, index - 1),
         url: vpath([prevEntry,
-          parsed.place(parsedNameKeysToPath(parsed.keys, locals.raw, inRange(index - 1)))
+          parsed.place(parsedNameKeysToPath(parsed.keys, locals.flatPages, inRange(index - 1)))
         ]).full
       };
 
       _locals.next = {
         data: arrayValueAt(_opts.list, index + 1),
         url: vpath([nextEntry,
-          parsed.place(parsedNameKeysToPath(parsed.keys, locals.raw,
+          parsed.place(parsedNameKeysToPath(parsed.keys, locals.flatPages,
             inRange(index + 1, _opts.list.length - 1)))
         ]).full
       };
@@ -222,9 +222,9 @@ async function funnel(config, file, flags = { onlyNames: false }) {
     };
   };
 
-  const isArray = Array.isArray(funneled?.raw);
+  const isArray = Array.isArray(funneled.flatPages);
   if (parsed.loop && isArray) {
-    const ps = funneled.raw.map((_, i, arr) =>
+    const ps = funneled.flatPages.map((_, i, arr) =>
       funnelViewWparsedName(funneled, i, {
         list: arr
       })
@@ -438,7 +438,7 @@ async function handleStaticAssets(config, files) {
   }
 }
 
-async function getFunneled(config, cacheBust = '') {
+async function getData(config, cacheBust = '') {
   try {
     // if no config.funnel
     const dataPath = vpath([config.cwd, config.src, defaultConfig.funnelName], true).full;
@@ -461,10 +461,11 @@ async function getFunneled(config, cacheBust = '') {
       if (Array.isArray(funneled.raw)) {
         previewKeys = Object.keys(funneled.raw[0]);
         const {
-          metaPages, pages, paginate
-        } = paginationForRawDataArray(funneled.pagination, funneled.raw);
+          metaPages, pages, flatPages, paginate
+        } = paginationForPagesArray(funneled.pagination, funneled.raw);
 
-        funneled.pages = paginate ? pages : [funneled.raw];
+        funneled.pages = pages;
+        funneled.flatPages = flatPages;
         funneled.meta.pages = metaPages;
         // expedite
         config.paginate = paginate;
@@ -472,6 +473,19 @@ async function getFunneled(config, cacheBust = '') {
 
       if (isObj(funneled.raw)) {
         previewKeys = Object.keys(funneled.raw || {});
+        const _fpages = funneled.pagination?.pages;
+
+        if (Array.isArray(_fpages)) {
+          const {
+            metaPages, pages, flatPages, paginate
+          } = paginationForPagesArray(funneled.pagination);
+
+          funneled.pages = pages;
+          funneled.flatPages = flatPages;
+          funneled.meta.pages = metaPages;
+          // expedite
+          config.paginate = paginate;
+        }
       }
 
       debuglog('preview funneled data', previewKeys);
@@ -523,7 +537,7 @@ async function unlinkFiles(config, toDel) {
 
   // path to delete
   const delp = vpath(toDel);
-  config.funneled = await getFunneled(config);
+  config.funneled = await getData(config);
 
   const { names } = await funnel(config, delp.full, {
     onlyNames: true
@@ -599,7 +613,7 @@ async function gen(config, watching = null, ext) {
   const funCacheBust = config.watchFunnel ? Date.now() : null;
 
   if (!config.funneled || funCacheBust) {
-    config.funneled = await getFunneled(config, funCacheBust);
+    config.funneled = await getData(config, funCacheBust);
   }
 
   const srcPath = vpath([config.cwd, config.src]);
@@ -747,7 +761,8 @@ async function lint(config) {
   const eslint = new ESLint({
     fix: config.lint.fix,
     cwd: config.cwd,
-    overrideConfigFile: config.lint.esrc
+    overrideConfigFile: config.lint.esrc,
+    useEslintrc: true
   });
 
   try {
