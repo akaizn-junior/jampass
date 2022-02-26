@@ -54,15 +54,19 @@ export async function validateHtml(config, html, opts) {
     throw Error(`validateHtml() takes a html string. "${html}" given`);
   }
 
-  const userConfig = vpath([config.cwd, config.src, '.htmlvalidate.json']).full;
+  const _extends = ['html-validate:recommended'];
+
+  try {
+    const userConfig = vpath([config.cwd, config.src, '.htmlvalidate.json'], true).full;
+    _extends.push(userConfig);
+  } catch {
+    // pass
+  }
 
   try {
     const validate = new HtmlValidate({
       root: false,
-      extends: [
-        'html-validate:recommended',
-        `${userConfig}`
-      ]
+      extends: _extends
     });
 
     const res = validate.validateString(html);
