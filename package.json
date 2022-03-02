@@ -10,6 +10,7 @@
   "scripts": {
     "lint": "eslint src",
     "serve": "node src/cli serve -s demos/site",
+    "beginner": "node src/cli serve -s demos/beginner",
     "watch": "node src/cli watch -s demos/site",
     ":lint": "node src/cli lint -s demos/site",
     "start": "node src/cli -s demos/site --env production",
