@@ -9,12 +9,15 @@
   },
   "scripts": {
     "lint": "eslint src",
-    "serve": "node src/cli serve -s demos/site",
+    "serve": "node src/cli serve -s demos/dev",
+    "watch": "node src/cli watch -s demos/dev",
+    ":lint": "node src/cli lint -s demos/dev",
+    "start": "node src/cli -s demos/dev --env production",
+    "debug": "node --inspect src/cli watch -s demos/dev -D",
+
     "beginner": "node src/cli serve -s demos/beginner",
-    "watch": "node src/cli watch -s demos/site",
-    ":lint": "node src/cli lint -s demos/site",
-    "start": "node src/cli -s demos/site --env production",
-    "debug": "node --inspect src/cli watch -s demos/site -D"
+    "tidy": "node src/cli serve -s demos/tidy",
+    "with-config": "node src/cli serve -s demos/with-config"
   },
   "keywords": [
     "SSG",

@@ -1,0 +1,36 @@
+<style>
+  .pages {
+    text-align: center;
+    padding: 7px 0;
+  }
+
+  .pages a {
+    padding: 5px 7px;
+    background-color: #e0e0e0;
+    border: 1px solid #bababa;
+    border-radius: 3px;
+    text-decoration: none;
+  }
+
+  .pages a:hover,
+  .pages a:focus {
+    font-weight: bold;
+    background-color: #d1d1d1;
+    box-shadow: -1px 1px 2px #adadad;
+  }
+
+  .page-move span {
+    font-size: 12px;
+  }
+</style>
+<div class="pages">
+  {{#if meta.pages}}
+    <a class="page-move button" href="{{ prevPage.url }}"><span>&lt;&lt;</span></a>
+    {{#each meta.pages}}
+      <a class="button" href="{{ url }}">{{ no }}</a>
+    {{/each}}
+    <a class="page-move button" href="{{ nextPage.url }}">
+      <span>&gt;&gt;</span>
+    </a>
+  {{/if}}
+</div>
