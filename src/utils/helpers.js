@@ -1,4 +1,4 @@
-import { minify } from 'minify';
+import { minify } from 'html-minifier-terser';
 import * as marky from 'marky';
 import { bold } from 'colorette';
 
@@ -36,38 +36,21 @@ export function createHash(content, len = null) {
     .update(content)
     .digest('hex');
 
-  len && (hash = hash.substring(0, len));
+  len && (hash = hash.substring(hash.length - len, hash.length));
   return hash;
 }
 
-/**
- * minify code
- * @param {object} config config
- * @param {string} file file to read
- * @param {object} opts options for minification
- * @see [minify](https://www.npmjs.com/package/minify)
- */
-export function compress(config, file, lang, opts) {
-  const _opts = Object.assign({
-    [lang]: opts
-  }, {
-    [lang]: {}
-  });
-
+export async function minifyHtml(config, html) {
   try {
-    return minify(file, _opts);
-  } catch (err) {
-    throw err;
-  }
-}
-
-export async function minifyHtml(config, file) {
-  try {
-    const res = await compress(config, file, 'html', {
-      minifyCSS: false,
-      minifyJS: false,
+    const res = await minify(html, {
+      html5: true,
+      minifyCSS: true,
+      minifyJS: true,
       noNewlinesBeforeTagClose: true,
-      removeAttributeQuotes: true
+      removeAttributeQuotes: true,
+      removeComments: true,
+      removeRedundantAttributes: true,
+      collapseWhitespace: true
     });
 
     return res;

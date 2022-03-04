@@ -151,3 +151,19 @@ export function getSrcBase(config, withCwd = true) {
   }
   return '';
 }
+
+/**
+ *
+ * @param {string} dirname directory name
+ */
+export function createDirSync(dirname) {
+  try {
+    // does it exist
+    fs.statSync(dirname);
+  } catch (err) {
+    // create
+    fs.mkdirSync(dirname);
+  }
+
+  return dirname;
+}

@@ -1,7 +1,6 @@
 import { HtmlValidate } from 'html-validate';
 import cheerio from 'cheerio';
 import del from 'del';
-import tmp from 'tmp';
 import { blue } from 'colorette';
 
 // node
@@ -14,7 +13,6 @@ import { genSnippet, minifyHtml } from './helpers.js';
 import { writeFile, newReadable } from './stream.js';
 import { processCss, processLinkedAssets } from './process.js';
 import * as keep from './keep.js';
-import defaultConfig from '../default.config.js';
 
 const wrapCheerioElem = m => '\n'.concat(m, '\n');
 
@@ -240,15 +238,10 @@ export async function validateAndUpdateHtml(config, data) {
   const outname = data.name;
   const htmlOutFile = data.outputPath.join(data.srcBase, outname).full;
 
-  const tmpfile = tmp.fileSync({
-    dir: vpath([defaultConfig.name, 'html']).full
-  }).name.concat('.html');
-
   const html = {
     from: data.viewPath,
     out: htmlOutFile,
-    code: compiled,
-    tmpfile
+    code: compiled
   };
 
   try {
@@ -296,15 +289,11 @@ async function updateAndWriteHtml(config, parsed) {
     const uStyleTags = await updateStyleTagCss(config, uLinkedJs, html.from);
     const uScriptTags = await updateScriptTagJs(uStyleTags);
 
-    const rs = newReadable(uScriptTags);
-
     if (config.isDev) {
-      await writeFile(rs, html.out);
+      await writeFile(newReadable(uScriptTags), html.out);
     } else {
-      await writeFile(rs, html.tmpfile, async() => {
-        const min = await minifyHtml(config, html.tmpfile);
-        await writeFile(newReadable(min), html.out);
-      });
+      const min = await minifyHtml(config, uScriptTags);
+      await writeFile(newReadable(min), html.out);
     }
   } catch (err) {
     throw err;

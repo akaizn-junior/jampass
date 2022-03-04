@@ -17,10 +17,15 @@ import { safeFun } from './helpers.js';
  */
 export async function writeFile(from, to, onend = null, opts = {}) {
   const _opts = Object.assign({
-    flags: 'w+', dry: false
+    flags: 'w+',
+    dry: false,
+    verifyPath: true
   }, opts);
 
-  const source = typeof from === 'string' ? vpath(from, true).full : from;
+  const source = typeof from === 'string'
+  // assume is a path
+    ? vpath(from, _opts.verifyPath).full : from;
+  // destination path
   const dest = vpath(to);
 
   async function asyncWrite(rs, ws) {

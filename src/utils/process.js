@@ -1,6 +1,5 @@
 import { bold, red, dim } from 'colorette';
 import esbuild from 'esbuild';
-import tmp from 'tmp';
 
 // postcss and plugins
 import postcss from 'postcss';
@@ -45,7 +44,7 @@ import {
   MAX_RECURSIVE_ACESS,
   DEFAULT_PAGE_NUMBER
 } from './constants.js';
-import defaultConfig from '../default.config.js';
+import { tmpFile } from './tmp.js';
 
 export function accessProperty(obj, key, start = 0) {
   if (!key && typeof key !== 'string') {
@@ -254,9 +253,7 @@ const getPostCssPlugins = config => {
       cssnano(),
       autoprefixer(),
       postCssHash({
-        manifest: tmp.fileSync({
-          dir: vpath([defaultConfig.name, 'assets']).full
-        }).name
+        manifest: tmpFile('manifest.json', 'assets')
       })
     ]);
   }

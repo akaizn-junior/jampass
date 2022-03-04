@@ -4,14 +4,13 @@ import dotenv from 'dotenv';
 import del from 'del';
 
 // node
-import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
 // local
 import defaultconfig from '../default.config.js';
 import { writeFile, newReadable } from './stream.js';
-import { vpath } from './path.js';
+import { vpath, createDirSync } from './path.js';
 import { safeFun } from './helpers.js';
 
 export const exit = (code = 1) => {
@@ -24,25 +23,24 @@ export const loadUserEnv = () => dotenv.config({
 });
 
 export const tmpdir = (() => {
-  const dir = path.join(os.tmpdir(), defaultconfig.name);
-  // others temp dirs
-  const thtml = path.join(os.tmpdir(), defaultconfig.name, 'html');
-  const tassets = path.join(os.tmpdir(), defaultconfig.name, 'assets');
+  // create all static tmp dirs here
+  const base = createDirSync(
+    path.join(os.tmpdir(), defaultconfig.name)
+  );
 
-  function attempt(d) {
-    try {
-      fs.statSync(d);
-    } catch (err) {
-      // create if dir does not exist
-      fs.mkdirSync(d);
-    }
-  }
+  const html = createDirSync(
+    path.join(os.tmpdir(), defaultconfig.name, 'html')
+  );
 
-  attempt(dir);
-  attempt(thtml);
-  attempt(tassets);
+  const assets = createDirSync(
+    path.join(os.tmpdir(), defaultconfig.name, 'assets')
+  );
 
-  return dir;
+  return {
+    base,
+    html,
+    assets
+  };
 })();
 
 // consola instance
@@ -117,7 +115,7 @@ export function isValidSource(config, cliHelp) {
   try {
     // no source provided, ok only if cwd has an 'index.html'
     if (!config.src) {
-    // does cwd have an 'index.html' file
+    // does cwd have an 'index.html' file?
       vpath([config.cwd, 'index.html'], true);
     }
     return true;

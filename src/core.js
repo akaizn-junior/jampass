@@ -2,7 +2,6 @@ import cons from 'consolidate';
 import browserSync from 'browser-sync';
 import chokidar from 'chokidar';
 import del from 'del';
-import tmp from 'tmp';
 import { ESLint } from 'eslint';
 import * as marky from 'marky';
 import { bold, strikethrough, blue } from 'colorette';
@@ -71,6 +70,7 @@ import {
 import * as bSync from './utils/bs.middleware.js';
 import * as keep from './utils/keep.js';
 import defaultConfig from './default.config.js';
+import { tmpDirSync } from './utils/tmp.js';
 
 // quick setup
 
@@ -583,8 +583,11 @@ async function withConfig(config, done, cliHelp) {
   // output working directory
   config.owd = config.cwd;
   if (config.watch) {
-    const tempo = tmp.dirSync({ dir: defaultConfig.name });
-    config.owd = tempo.name;
+    // the full source path is a suficiently unique name
+    // to base a temporary name from
+    const uname = vpath([config.cwd, config.src]).full;
+    const tempo = tmpDirSync(uname);
+    config.owd = tempo;
     config.output.path = '';
   }
 

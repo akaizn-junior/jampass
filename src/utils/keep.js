@@ -63,3 +63,7 @@ export function appendAssetsTo(to, assets) {
 
   return null;
 }
+
+export function debug() {
+  return keep;
+}
