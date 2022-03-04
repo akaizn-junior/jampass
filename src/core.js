@@ -28,7 +28,7 @@ import {
   PARTIALS_TOKEN
 } from './utils/constants.js';
 
-import { bundleSearchFeature, buildIndexes } from './utils/search.js';
+import { buildIndexes } from './utils/search.js';
 import { asyncRead, htmlsNamesGenerator, writeFile } from './utils/stream.js';
 
 import {
@@ -634,7 +634,6 @@ async function gen(config, watching = null, ext) {
   }
 
   buildIndexes(config);
-  bundleSearchFeature(config);
 
   try {
     const parsed = await parseViews(config, files, read);
@@ -658,6 +657,8 @@ async function watch(config, cb = () => {}) {
   const watcher = chokidar.watch([
     `${watchPath.full}/**/*.html`,
     `${watchPath.full}/**/*.css`,
+    `${watchPath.full}/**/*.sass`,
+    `${watchPath.full}/**/*.scss`,
     `${watchPath.full}/**/*.js`,
     `${watchPath.full}/**/*.mjs`,
     `${watchPath.full}/static/*.*`

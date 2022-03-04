@@ -1,5 +1,5 @@
 import { bold, red, dim } from 'colorette';
-import browserify from 'browserify';
+import esbuild from 'esbuild';
 import tmp from 'tmp';
 
 // postcss and plugins
@@ -8,6 +8,8 @@ import postcssPresetEnv from 'postcss-preset-env';
 import cssnano from 'cssnano';
 import autoprefixer from 'autoprefixer';
 import postCssHash from 'postcss-hash';
+import postCssSass from 'postcss-sass';
+import postCssScss from 'postcss-scss';
 
 // node
 import { EOL } from 'os';
@@ -16,7 +18,6 @@ import path from 'path';
 // local
 import {
   createHash,
-  compress,
   inRange,
   partition,
   isObj,
@@ -206,68 +207,128 @@ export async function processJs(config, file, out, opts = {}) {
   }, opts);
 
   const outpath = vpath(out);
+  const input = vpath(file);
   let to = outpath.full;
+  const _loader = input.ext.startsWith('.')
+    ? input.ext.split('.')[1] : input.ext;
 
-  const b = browserify({
-    standalone: _opts.libName
+  const res = await esbuild.transform(await asyncRead(input.full), {
+    charset: 'utf8',
+    sourcefile: input.full,
+    format: 'iife',
+    target: [
+      'es6'
+    ],
+    sourcemap: !config.isDev,
+    legalComments: 'inline',
+    globalName: _opts.libName,
+    minify: !config.isDev,
+    minifyWhitespace: !config.isDev,
+    minifyIdentifiers: !config.isDev,
+    minifySyntax: !config.isDev,
+    treeShaking: true,
+    keepNames: true,
+    loader: _loader,
+    banner: '',
+    footer: ''
   });
-
-  const tmpfile = tmp.fileSync({
-    dir: vpath([defaultConfig.name, 'assets']).full
-  }).name.concat('.js');
-
-  const bundle = f => new Promise((res, rej) => {
-    b.add(f);
-    b.bundle((err, data) => err ? rej(err) : res(data));
-  });
-
-  const min = {
-    code: await bundle(file)
-  };
-
-  b.reset();
 
   if (!config.isDev && _opts.hash) {
-    await writeFile(newReadable(min.code), tmpfile);
-    min.code = await compress(config, tmpfile, 'js', {
-      compress: true,
-      mangle: true
-    });
-    const hash = createHash(min.code, 10);
+    const hash = createHash(res.code, 10);
     to = outpath.noext.concat('.', hash, outpath.ext);
   }
 
   return {
     to,
-    code: min.code
+    code: res.code
   };
+}
+
+const getPostCssPlugins = config => {
+  const plugins = [
+    postcssPresetEnv()
+  ];
+
+  if (!config.isDev) {
+    plugins.concat([
+      cssnano(),
+      autoprefixer(),
+      postCssHash({
+        manifest: tmp.fileSync({
+          dir: vpath([defaultConfig.name, 'assets']).full
+        }).name
+      })
+    ]);
+  }
+
+  return plugins;
+};
+
+async function processScss(config, file, out) {
+  try {
+    const code = await asyncRead(file);
+    const processed = await postcss(getPostCssPlugins(config))
+      .process(code, { from: file, to: out, syntax: postCssScss });
+
+    return {
+      to: processed.opts.to,
+      code: processed.css
+    };
+  } catch (err) {
+    if (err.name === 'SassSyntaxError') {
+      const emsg = splitPathCwd(config.cwd, err.file || file)
+        .concat(':', err.line, ':', err.column);
+
+      err.snippet = await genSnippet({
+        code: err.source,
+        line: err.line,
+        column: err.column,
+        title: `CssSyntaxError ${emsg} "${err.reason}"`
+      });
+    }
+
+    throw err;
+  }
+}
+
+async function processSass(config, file, out) {
+  try {
+    const code = await asyncRead(file);
+    const processed = await postcss(getPostCssPlugins(config))
+      .process(code, { from: file, to: out, syntax: postCssSass });
+
+    return {
+      to: processed.opts.to,
+      code: processed.css
+    };
+  } catch (err) {
+    if (err.name === 'SassSyntaxError') {
+      const emsg = splitPathCwd(config.cwd, err.file || file)
+        .concat(':', err.line, ':', err.column);
+
+      err.snippet = await genSnippet({
+        code: err.source,
+        line: err.line,
+        column: err.column,
+        title: `CssSyntaxError ${emsg} "${err.reason}"`
+      });
+    }
+
+    throw err;
+  }
 }
 
 export async function processCss(config, file, out, opts = {
   justCode: '',
   startIndex: 0
 }) {
-  const plugins = [
-    postcssPresetEnv(),
-    cssnano(),
-    autoprefixer()
-  ];
-
-  !config.isDev && plugins.push(
-    postCssHash({
-      manifest: tmp.fileSync({
-        dir: vpath([defaultConfig.name, 'assets']).full
-      }).name
-    })
-  );
-
   try {
     let code = opts.justCode;
     if (file && !opts.justCode) {
       code = await asyncRead(file);
     }
 
-    const processed = await postcss(plugins)
+    const processed = await postcss(getPostCssPlugins(config))
       .process(code, { from: file, to: out });
 
     return {
@@ -295,7 +356,10 @@ export async function processCss(config, file, out, opts = {
 function processAsset(ext, config, file, out) {
   const fns = {
     '.css': processCss,
-    '.js': processJs
+    '.sass': processSass,
+    '.scss': processScss,
+    '.js': processJs,
+    '.mjs': processJs
   };
 
   try {

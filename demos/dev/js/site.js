@@ -1,4 +1,4 @@
-const { sub } = require('./sub');
+import { sub } from './sub.js';
 
 function add(a, b) {
   return a + b;

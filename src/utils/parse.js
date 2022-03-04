@@ -240,10 +240,15 @@ export async function validateAndUpdateHtml(config, data) {
   const outname = data.name;
   const htmlOutFile = data.outputPath.join(data.srcBase, outname).full;
 
+  const tmpfile = tmp.fileSync({
+    dir: vpath([defaultConfig.name, 'html']).full
+  }).name.concat('.html');
+
   const html = {
     from: data.viewPath,
     out: htmlOutFile,
-    code: compiled
+    code: compiled,
+    tmpfile
   };
 
   try {
@@ -296,12 +301,8 @@ async function updateAndWriteHtml(config, parsed) {
     if (config.isDev) {
       await writeFile(rs, html.out);
     } else {
-      const tmpfile = tmp.fileSync({
-        dir: vpath([defaultConfig.name, 'html']).full
-      }).name.concat('.html');
-
-      await writeFile(rs, tmpfile, async() => {
-        const min = await minifyHtml(config, tmpfile);
+      await writeFile(rs, html.tmpfile, async() => {
+        const min = await minifyHtml(config, html.tmpfile);
         await writeFile(newReadable(min), html.out);
       });
     }

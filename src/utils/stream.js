@@ -70,7 +70,7 @@ export function newReadable(data) {
       // from the default 16kb to ReadStreams's 64kb
       const _size = size;
       let i = 0;
-      while (i <= data.length) {
+      while (i <= data?.length) {
         const chunk = String(data).substring(i, _size + i);
         rs.push(chunk);
 

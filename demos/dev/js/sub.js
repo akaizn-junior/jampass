@@ -1,3 +1,1 @@
-const sub = (x, y) => x - y;
-
-module.exports = { sub };
+export const sub = (x, y) => x - y;
