@@ -6,9 +6,8 @@ export function add(name, value = {}) {
   if (!keep[name]) keep[name] = isObj(value) ? value : {};
 }
 
-export function upsert(name, value = {}) {
-  keep[name] = isObj(value)
-    ? Object.assign(keep[name] || {}, value) : {};
+export function upsert(name, value = null) {
+  keep[name] = isObj(value) ? value : {};
 }
 
 export function peek(at = 0) {
@@ -29,41 +28,25 @@ export function appendHtmlTo(to, name, data) {
   return null;
 }
 
-export function appendAssetsTo(to, assets) {
+export function appendAssetTo(to, asset) {
   const item = keep[to];
 
   if (item) {
-    item.assets = assets;
-    const assetList = Object.values(assets)
-      .reduce((acc, list) => acc.concat(list), []);
+    if (!item.assets) {
+      keep[to].assets = [asset];
+    } else {
+      keep[to].assets.push(asset);
+    }
 
-    for (const asset of assetList) {
-      if (!item[asset.from]) {
-        // add asset data straight to the object
-        keep[to][asset.from] = {
-          ...asset
-        };
-      }
-
-      if (!keep[asset.from]) {
-        // this asset points back to objects that include it
-        keep[asset.from] = {
-          ...asset,
-          htmls: [to]
-        };
-      } else if (!keep[asset.from].htmls.includes(to)) {
-        // append new generated html to the list of htmls
-        // that link this asset
-        keep[asset.from].htmls.push(to);
-      }
+    if (!item[asset.from]) {
+      // add asset data straight to the object
+      keep[to][asset.from] = {
+        ...asset
+      };
     }
 
     return item;
   }
 
   return null;
-}
-
-export function debug() {
-  return keep;
 }

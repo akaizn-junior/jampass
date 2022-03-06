@@ -67,7 +67,9 @@ function writePageContent(opts) {
 
     const possible = [
       `${opts.serverRoot + uri}.html`,
-      `${opts.serverRoot + uri}/index.html`
+      `${opts.serverRoot + uri}/index.html`,
+      `${opts.serverRoot + uri}.htm`,
+      `${opts.serverRoot + uri}/index.htm`
     ];
 
     const exists = possible.filter(u => fs.existsSync(u));

@@ -1,51 +1,19 @@
 import { HtmlValidate } from 'html-validate';
-import cheerio from 'cheerio';
+import * as cheerio from 'cheerio';
 import del from 'del';
-import { blue } from 'colorette';
 
 // node
 import { EOL } from 'os';
 
 // local
-import { vpath, splitPathCwd, pathDistance } from './path.js';
-import { logger, debuglog } from './init.js';
+import { vpath, splitPathCwd } from './path.js';
+import { debuglog } from './init.js';
 import { genSnippet, minifyHtml } from './helpers.js';
 import { writeFile, newReadable } from './stream.js';
 import { processCss, processLinkedAssets } from './process.js';
 import * as keep from './keep.js';
 
 const wrapCheerioElem = m => '\n'.concat(m, '\n');
-
-function writeAssets(assets) {
-  // flatten all asset lists
-  const flat = Object.values(assets)
-    .reduce((acc, list) => acc.concat(list), []);
-
-  flat.forEach(asset => {
-    const exists = keep.get(asset.from);
-
-    if (!exists || exists.out !== asset.out) {
-      debuglog('generated asset', asset.out);
-      writeFile(newReadable(asset.code), asset.out);
-    }
-  });
-}
-
-function rearrangeAssetPaths(html, assets) {
-  for (const ext in assets) {
-    const list = assets[ext];
-
-    if (list) {
-      assets[ext] = list.map(asset => {
-        const res = pathDistance(html.out, asset.out);
-        asset.to = res.distance;
-        return asset;
-      });
-    }
-  }
-
-  return assets;
-}
 
 export async function validateHtml(config, html, opts) {
   if (!html || typeof html !== 'string') {
@@ -103,11 +71,6 @@ export function parseHtmlLinked(config, code) {
     }
   };
 
-  const notFoundLog = (asset, isStatic = false) => {
-    const exists = keep.get(`${asset}-404`);
-    !exists && !isStatic && logger.log(blue('skipped'), `"${asset}" not found locally`);
-  };
-
   $('link[rel]').each((_, el) => {
     try {
       const hrefPath = vpath(
@@ -123,12 +86,8 @@ export function parseHtmlLinked(config, code) {
 
       addLinked(hrefPath.ext, data);
     } catch (err) {
-      if (err.code === 'ENOENT') {
-        err.name = 'HtmlLinkedCssWarn';
-
-        const isStatic = el.attribs['data-static'] === 'true';
-        notFoundLog(el.attribs.href, isStatic);
-        keep.add(`${el.attribs.href}-404`, { skipped: true });
+      if (err.code !== 'ENOENT') {
+        throw err;
       }
     }
   });
@@ -148,13 +107,7 @@ export function parseHtmlLinked(config, code) {
 
       addLinked(srcPath.ext, data);
     } catch (err) {
-      if (err.code === 'ENOENT') {
-        err.name = 'HtmlLinkedScriptWarn';
-
-        const isStatic = el.attribs['data-static'] === 'true';
-        notFoundLog(el.attribs.src, isStatic);
-        keep.add(`${el.attribs.src}-404`, { skipped: true });
-      } else {
+      if (err.code !== 'ENOENT') {
         throw err;
       }
     }
@@ -246,28 +199,22 @@ export async function validateAndUpdateHtml(config, data) {
 
   try {
     const exists = keep.get(html.from);
-    let linked = {};
-    let assets = {};
 
     if (!exists.isValidHtml) {
       validateHtml(config, html.code.toString(), {
         view: data.viewPath
       });
-      keep.upsert(html.from, { isValidHtml: true });
+
+      // parse html and get linked assets
+      const linked = parseHtmlLinked(config, html.code);
+
+      keep.upsert(html.from, { isValidHtml: true, linked });
     }
 
-    // parse html and get linked assets
-    linked = parseHtmlLinked(config, html.code);
-    // an object of schema { [ext]: [] } / ex: { '.css': [] }
-    assets = await processLinkedAssets(config, linked);
-
-    const reAssets = rearrangeAssetPaths(html, assets);
-    writeAssets(reAssets);
-
+    const assets = await processLinkedAssets(config, html, exists?.linked || {});
     keep.appendHtmlTo(html.from, html.out, html);
-    keep.appendAssetsTo(html.from, reAssets);
 
-    return await updateAndWriteHtml(config, { html, assets: reAssets });
+    return await updateAndWriteHtml(config, { html, assets });
   } catch (err) {
     if (!config.watch) {
       const d = await del([data.outputPath.full], { force: true });

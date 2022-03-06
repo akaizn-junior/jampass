@@ -9,7 +9,7 @@
   },
   "scripts": {
     "lint": "eslint src",
-    "serve": "node src/cli serve -s demos/dev",
+    "serve": "node --trace-warnings src/cli serve -s demos/dev",
     "watch": "node src/cli watch -s demos/dev",
     ":lint": "node src/cli lint -s demos/dev",
     "start": "node src/cli -s demos/dev --env production",

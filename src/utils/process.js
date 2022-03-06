@@ -29,7 +29,7 @@ import {
   logger
 } from './init.js';
 
-import { vpath, getSrcBase, splitPathCwd } from './path.js';
+import { vpath, getSrcBase, splitPathCwd, pathDistance } from './path.js';
 import { writeFile, newReadable, asyncRead } from './stream.js';
 import * as keep from './keep.js';
 
@@ -397,9 +397,9 @@ export async function processWatchedAsset(config, asset, ext) {
         };
 
         writeFile(newReadable(res.code), res.out);
-        logger.success('processed asset', `"${fileBase}"`);
+        debuglog('processed asset', `"${fileBase}"`);
       } else {
-        logger.error('failed processing asset');
+        debuglog('failed processing asset');
       }
     }
   }
@@ -407,8 +407,9 @@ export async function processWatchedAsset(config, asset, ext) {
   return asset;
 }
 
-export async function processLinkedAssets(config, assets) {
+export async function processLinkedAssets(config, html, assets) {
   const srcBase = getSrcBase(config, false);
+
   // and the h is for helper
   const h = list => {
     const ps = list.map(async item => {
@@ -424,17 +425,26 @@ export async function processLinkedAssets(config, assets) {
         if (out) {
           const passed = {
             from: entry,
-            to: vpath(out.to).base,
+            to: pathDistance(html.out, out.to).distance,
             code: out.code,
             out: out.to
           };
 
+          keep.add(entry, { ...passed, htmls: [html.from] });
+          keep.appendAssetTo(html.from, passed);
+
+          writeFile(newReadable(passed.code), passed.out, () => {
+            // console.log('done');
+          });
           return passed;
         } else {
-          logger.error('failed processing asset');
+          debuglog('failed processing asset');
+          return item;
         }
       }
 
+      exists.to = pathDistance(html.out, exists.out).distance;
+      exists.htmls.push(html.from);
       return exists;
     });
 

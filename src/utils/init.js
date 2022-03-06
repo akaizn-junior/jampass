@@ -111,7 +111,7 @@ export function handleThrown(config) {
   };
 }
 
-export function isValidSource(config, cliHelp) {
+export function isValidSource(config) {
   try {
     // no source provided, ok only if cwd has an 'index.html'
     if (!config.src) {
@@ -121,6 +121,6 @@ export function isValidSource(config, cliHelp) {
     return true;
   } catch (err) {
     logger.warn('Missing source. Set a source folder or add an "index.html" to the cwd');
-    safeFun(cliHelp)();
+    safeFun(config.cliHelp)();
   }
 }

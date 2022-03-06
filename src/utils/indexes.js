@@ -2,8 +2,8 @@ import * as marky from 'marky';
 import { blue } from 'colorette';
 
 // local
-import { accessProperty, parsedNameKeysToPath, parseDynamicName, processJs } from './process.js';
-import { logger } from './init.js';
+import { accessProperty, parsedNameKeysToPath, parseDynamicName } from './process.js';
+import { debuglog } from './init.js';
 import { formatBytes, markyStop, showTime, getDataItemPageClosure } from './helpers.js';
 import { getSrcBase, vpath } from './path.js';
 import { writeFile, newReadable } from './stream.js';
@@ -52,7 +52,7 @@ export async function buildIndexes(config) {
           }
         }
       } catch (err) {
-        logger.info(blue('skipped'), `"${index}" is undefined. cannot set index`);
+        debuglog(blue('skipped'), `"${index}" is undefined. cannot set index`);
       }
 
       return JSON.stringify(_acc);
@@ -84,46 +84,11 @@ export async function buildIndexes(config) {
         const lap = markyStop('build time');
         const time = showTime(end, lap);
 
-        logger.success('generated indexes "%s" -', fnm,
+        debuglog('generated indexes "%s" -', fnm,
           formatBytes(file.length), time);
       });
     });
 
     keep.upsert(fnm, { name: fnm, processed: true });
-  }
-}
-
-export async function bundleSearchFeature(config) {
-  const file = 'src/search/index.js';
-  const name = 'search.min.js';
-
-  const exists = keep.get(name);
-  const { indexes } = config.funneled;
-  const { lib } = config.build.search;
-
-  if (!indexes || !indexes.length) return;
-
-  if (!exists && lib) {
-    marky.mark('bundle search');
-
-    const srcBase = getSrcBase(config, false);
-    const out = vpath([config.owd, config.output.path, srcBase, name]).full;
-
-    const { to, code } = await processJs(config, file, out, {
-      libName: 'Search',
-      hash: false
-    });
-
-    writeFile(newReadable(code), to, () => {
-      markyStop('bundle search', end => {
-        const lap = markyStop('build time');
-        const time = showTime(end, lap);
-
-        logger.success('bundled search "search.min.js" -',
-          formatBytes(code.length), time);
-      });
-    });
-
-    keep.add(name, { name, processed: true });
   }
 }

@@ -4,7 +4,7 @@ import chokidar from 'chokidar';
 import del from 'del';
 import { ESLint } from 'eslint';
 import * as marky from 'marky';
-import { bold, strikethrough, blue } from 'colorette';
+import { bold, strikethrough, blue, yellow } from 'colorette';
 
 // node
 import { Readable } from 'stream';
@@ -27,7 +27,7 @@ import {
   PARTIALS_TOKEN
 } from './utils/constants.js';
 
-import { buildIndexes } from './utils/search.js';
+import { buildIndexes } from './utils/indexes.js';
 import { asyncRead, htmlsNamesGenerator, writeFile } from './utils/stream.js';
 
 import {
@@ -314,7 +314,7 @@ async function getLocales(config, files) {
   markyStop('get locales', end => {
     const lap = markyStop('build time');
     const time = showTime(end, lap);
-    logger.success('loaded', fromFiles.length, LOCALES_PATH_NAME, time);
+    debuglog('loaded', fromFiles.length, LOCALES_PATH_NAME, time);
   });
 
   return res;
@@ -369,7 +369,7 @@ async function parseViews(config, files, read) {
         markyStop('build views', end => {
           const lap = markyStop('build time');
           const time = showTime(end, lap);
-          logger.success(`"${viewPath.base}" -`, _ps.length, time);
+          debuglog(`"${viewPath.base}" -`, _ps.length, time);
         });
       }
     }
@@ -431,7 +431,7 @@ async function handleStaticAssets(config, files) {
     markyStop('static assets', end => {
       const lap = markyStop('build time');
       const time = showTime(end, lap);
-      logger.success('copied static assets -', _files.length, time);
+      debuglog('copied static assets -', _files.length, time);
     });
   } catch (err) {
     throw err;
@@ -557,7 +557,7 @@ async function unlinkFiles(config, toDel) {
     deld.length && markyStop('deleting files', end => {
       const label = strikethrough(delp.base);
       const count = names.length;
-      logger.success(`"${label}" -`, count, `- ${end}s`);
+      debuglog(`"${label}" -`, count, `- ${end}s`);
     });
   } catch (err) {
     throw err;
@@ -641,6 +641,7 @@ async function gen(config, watching = null, ext) {
   try {
     const parsed = await parseViews(config, files, read);
     await handleStaticAssets(config, files);
+
     return parsed;
   } catch (e) {
     throw e;
@@ -653,7 +654,7 @@ async function gen(config, watching = null, ext) {
  * @param {object} config user configurations
  * @param {Function} cb Runs on triggered events
  */
-async function watch(config, cb = () => {}) {
+async function watch(config, cb = () => {}, { skipLog = false }) {
   const watchPath = vpath([config.cwd, config.src], true);
   const _cb = safeFun(cb);
 
@@ -670,7 +671,7 @@ async function watch(config, cb = () => {}) {
   });
 
   watcher.once('ready', () => {
-    logger.info(blue('watching'),
+    !skipLog && logger.info(blue('watching'),
       splitPathCwd(config.cwd, watchPath.full), EOL);
 
     gen(config);
@@ -693,10 +694,7 @@ async function watch(config, cb = () => {}) {
     const isStatic = p.includes(`/${STATIC_PATH_NAME}/`);
     if (isStatic) watching.static = [p];
 
-    gen(config, watching, ext)
-      .then(res => {
-        res.length && _cb();
-      });
+    gen(config, watching, ext);
   };
 
   const unl = async p => {
@@ -728,11 +726,15 @@ async function serve(config) {
   const host = 'http://localhost';
   const entry = config.src;
 
-  const bs = browserSync({
+  const bs = browserSync.init({
     port,
     open: config.devServer.open,
     notify: false,
     online: true,
+    logLevel: 'silent',
+    ui: false,
+    watch: true,
+    injectChanges: true,
     server: {
       baseDir: serverRoot,
       directory: config.devServer.directory,
@@ -741,7 +743,12 @@ async function serve(config) {
       }
     },
     middleware: bSync.middlewareList({
-      host, port, entry, serverRoot
+      host,
+      port,
+      entry,
+      serverRoot,
+      cwd: config.cwd,
+      src: config.src
     }),
     /**
      * @see https://browsersync.io/docs/options/#option-callbacks
@@ -754,7 +761,8 @@ async function serve(config) {
     }
   });
 
-  watch(config, bs.reload);
+  logger.info(yellow('serving at'), `${host}:${port}`);
+  watch(config, bs.reload, { skipLog: true });
 }
 
 async function lint(config) {
