@@ -654,7 +654,7 @@ async function gen(config, watching = null, ext) {
  * @param {object} config user configurations
  * @param {Function} cb Runs on triggered events
  */
-async function watch(config, cb = () => {}, { skipLog = false }) {
+async function watch(config, cb = () => {}, { skipLog = false } = {}) {
   const watchPath = vpath([config.cwd, config.src], true);
   const _cb = safeFun(cb);
 
@@ -671,8 +671,9 @@ async function watch(config, cb = () => {}, { skipLog = false }) {
   });
 
   watcher.once('ready', () => {
-    !skipLog && logger.info(blue('watching'),
-      splitPathCwd(config.cwd, watchPath.full), EOL);
+    !skipLog && logger.log(
+      blue(`Watching ${splitPathCwd(config.cwd, watchPath.full)}`),
+      EOL);
 
     gen(config);
     _cb();
@@ -761,7 +762,7 @@ async function serve(config) {
     }
   });
 
-  logger.info(yellow('serving at'), `${host}:${port}`);
+  logger.log(yellow(`Serving at ${host}:${port}`));
   watch(config, bs.reload, { skipLog: true });
 }
 
