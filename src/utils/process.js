@@ -168,11 +168,11 @@ export function spliceCodeSnippet(code, lnumber, column = 0, opts = {}) {
     return { lower, upper };
   };
 
-  const markLine = (s, a, b, max) => {
-    const prefix = s.substring(0, a);
-    const word = s.substring(a, b);
-    const suffix = s.substring(b, max);
-    return prefix.concat(red(word), suffix);
+  const markLine = s => {
+    const p = String().padStart(s.length)
+      .concat(bold(red('^^^^^^')));
+
+    return s.concat(EOL, p, EOL);
   };
 
   // get only lines withing a range
@@ -186,12 +186,16 @@ export function spliceCodeSnippet(code, lnumber, column = 0, opts = {}) {
     const ln = i + 1 + opts.startIndex;
 
     if (ln === lnumber + opts.startIndex) {
-      const c = cut(column - 1, column + 1, line.length);
-      const ml = markLine(line, c.lower, c.upper + 1, line.length);
-      return bold(`${ln} ${ml}`).concat(EOL);
+      const ml = markLine(line);
+      const out = bold(`${ln} \u00b7 ${ml}`);
+      return out;
     }
 
-    return dim(`${ln} ${line}`).concat(EOL);
+    let res = dim(`${ln} \u00b7 ${line}`).concat(EOL);
+    // max line length
+    if (res.length > 100) res = res.substring(0, 100).concat('...');
+
+    return res;
   })
     .slice(lrange.lower, lrange.upper);
 
