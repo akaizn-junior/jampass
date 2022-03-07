@@ -42,4 +42,4 @@
 
 - [] read env as cli option
 
-- [] for development mode static asssets should be symlinks, so changes afect the output
+- [x] for development mode static asssets should be symlinks, so changes affect the output

@@ -4,7 +4,7 @@ import chokidar from 'chokidar';
 import del from 'del';
 import { ESLint } from 'eslint';
 import * as marky from 'marky';
-import { bold, strikethrough, blue, yellow } from 'colorette';
+import { bold, strikethrough, blue, yellow, green } from 'colorette';
 
 // node
 import { Readable } from 'stream';
@@ -28,7 +28,7 @@ import {
 } from './utils/constants.js';
 
 import { buildIndexes } from './utils/indexes.js';
-import { asyncRead, htmlsNamesGenerator, writeFile } from './utils/stream.js';
+import { asyncRead, htmlsNamesGenerator, symlink, writeFile } from './utils/stream.js';
 
 import {
   vpath,
@@ -50,7 +50,7 @@ import {
   logger,
   debuglog,
   toggleDebug,
-  isValidSource
+  isValidSrcBase
 } from './utils/init.js';
 
 import {
@@ -64,7 +64,8 @@ import {
   getDataItemPageClosure,
   isDef,
   isObj,
-  genSnippet
+  genSnippet,
+  timeWithUnit
 } from './utils/helpers.js';
 
 import * as bSync from './utils/bs.middleware.js';
@@ -261,7 +262,7 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 
     const res = await Promise.all(ps);
     markyStop('pagination indexes', end => {
-      debuglog('generated', len, 'pages', `${end}s`);
+      debuglog('generated', len, 'pages', timeWithUnit(end));
     });
 
     return {
@@ -420,8 +421,14 @@ async function handleStaticAssets(config, files) {
 
       if (!exists) {
         const dest = out.join(_static.split(STATIC_PATH_NAME)[1]).full;
-        // fails if path exists
-        await writeFile(_static, dest, null, { flags: 'wx' });
+
+        if (config.isDev) {
+          await symlink(_static, dest);
+        } else {
+          // fails if path exists
+          await writeFile(_static, dest, null, { flags: 'wx' });
+        }
+
         keep.add(_static, { proc: true });
       }
     });
@@ -557,7 +564,7 @@ async function unlinkFiles(config, toDel) {
     deld.length && markyStop('deleting files', end => {
       const label = strikethrough(delp.base);
       const count = names.length;
-      debuglog(`"${label}" -`, count, `- ${end}s`);
+      debuglog(`"${label}" -`, count, `- ${timeWithUnit(end)}`);
     });
   } catch (err) {
     throw err;
@@ -568,12 +575,12 @@ async function unlinkFiles(config, toDel) {
 // RUN WITH CONFIG
 // +++++++++++++++++++++++++++++++
 
-async function withConfig(config, done, cliHelp) {
+async function withConfig(config, done) {
   process.on('uncaughtException', handleThrown(config));
   process.on('unhandledRejection', handleThrown(config));
 
   // verify if user directory is a valid source
-  isValidSource(config, cliHelp);
+  isValidSrcBase(config);
 
   toggleDebug(config.build.debug);
   debuglog('user config %O', config);
@@ -641,6 +648,10 @@ async function gen(config, watching = null, ext) {
   try {
     const parsed = await parseViews(config, files, read);
     await handleStaticAssets(config, files);
+
+    logger.success(bold(green(
+      `Built in ${timeWithUnit(markyStop('build time'))}`
+    )));
 
     return parsed;
   } catch (e) {
@@ -793,7 +804,7 @@ async function lint(config) {
 }
 
 export default {
-  gen: (c, cliHelp) => withConfig(c, gen, cliHelp),
+  gen: c => withConfig(c, gen),
   watch: c => withConfig(c, watch),
   serve: c => withConfig(c, serve),
   lint: c => withConfig(c, lint)

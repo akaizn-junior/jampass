@@ -4,7 +4,7 @@ import { createWriteStream, createReadStream } from 'fs';
 import { Readable } from 'stream';
 
 // local
-import { vpath } from './path.js';
+import { createDir, vpath } from './path.js';
 import { safeFun } from './helpers.js';
 
 /**
@@ -48,23 +48,21 @@ export async function writeFile(from, to, onend = null, opts = {}) {
     }
   };
 
-  try {
-    const stats = await fs.stat(dest.dir);
-    if (!stats.isDirectory()) {
-      throw Error('public output must be a directory');
-    }
+  await createDir(dest.dir, done, { dry: false });
+}
 
-    return done();
-  } catch {
-    if (!_opts.dry) {
-      try {
-        await fs.mkdir(dest.dir, { recursive: true });
-        return done();
-      } catch (e) {
-        throw e;
-      }
-    }
-  }
+export async function symlink(from, to, opts = {}) {
+  const _opts = Object.assign({
+    dry: false
+  }, opts);
+
+  // destination path
+  const dest = vpath(to);
+  const done = async() => {
+    await fs.symlink(from, dest.full, 'dir');
+  };
+
+  await createDir(dest.dir, done, { dry: _opts.dry });
 }
 
 export function newReadable(data) {

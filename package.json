@@ -13,7 +13,7 @@
     "watch": "node src/cli watch -s demos/dev",
     ":lint": "node src/cli lint -s demos/dev",
     "start": "node src/cli -s demos/dev --env production",
-    "debug": "node --inspect src/cli watch -s demos/dev -D",
+    "debug": "node --inspect src/cli serve -s demos/dev -D",
     "beginner": "node src/cli serve -s demos/beginner",
     "tidy": "node src/cli serve -s demos/tidy",
     "with-config": "node src/cli serve -s demos/with-config"

@@ -126,7 +126,10 @@ cli.option('--watch-funnel',
 cli
   .command('gen', { isDefault: true })
   .description('build source')
-  .action((_, d) => withConfig(d, c => core.gen(c, cli.help.bind(cli))));
+  .action((_, d) => withConfig(d, c => {
+    c.showCliHelp = cli.help.bind(cli);
+    core.gen(c);
+  }));
 
 cli
   .command('serve')

@@ -21,7 +21,7 @@ export const safeFun = cb => isDef(cb) && typeof cb === 'function' ? cb : () => 
 
 export function markyStop(name, log = null) {
   const timer = marky.stop(name);
-  const end = Math.floor(timer.duration) / 1000;
+  const end = Math.floor(timer.duration);
   return log ? safeFun(log)(end) : end;
 }
 
@@ -104,9 +104,17 @@ export function reduceViewsByChecksum(config, rewatch = null) {
   };
 }
 
+export function timeWithUnit(time) {
+  if (time > 1000) {
+    return `${time / 1000}s`;
+  }
+
+  return `${time}ms`;
+}
+
 export function showTime(end, lap, show = true) {
   return show
-    ? `(${bold(`${end}s`)} \u00b7 ${lap}s)`
+    ? `(${bold(timeWithUnit(end))} \u00b7 ${timeWithUnit(lap)})`
     : '';
 }
 

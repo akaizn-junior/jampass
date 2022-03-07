@@ -153,7 +153,7 @@ export function getSrcBase(config, withCwd = true) {
 }
 
 /**
- *
+ * Recursively creates all directories on a path
  * @param {string} dirname directory name
  */
 export function createDirSync(dirname) {
@@ -162,8 +162,36 @@ export function createDirSync(dirname) {
     fs.statSync(dirname);
   } catch (err) {
     // create
-    fs.mkdirSync(dirname);
+    fs.mkdirSync(dirname, { recursive: true });
   }
 
   return dirname;
+}
+
+/**
+ * Recursively creates all directories on a path
+ * @param {string} dest directory path
+ * @param {function} done callback
+ * @param {object} opts more options
+ */
+export async function createDir(dest, done = () => {}, opts = {}) {
+  const _opts = Object.assign({ dry: false }, opts);
+
+  try {
+    const stats = await fs.promises.stat(dest);
+    if (!stats.isDirectory()) {
+      throw Error('public output must be a directory');
+    }
+
+    return done();
+  } catch {
+    if (!_opts.dry) {
+      try {
+        await fs.promises.mkdir(dest, { recursive: true });
+        return done();
+      } catch (e) {
+        throw e;
+      }
+    }
+  }
 }
