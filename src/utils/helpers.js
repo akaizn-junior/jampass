@@ -1,4 +1,4 @@
-import { minify } from 'html-minifier-terser';
+import { minify as htmlMinifier } from 'html-minifier-terser';
 import * as marky from 'marky';
 import { bold } from 'colorette';
 
@@ -42,7 +42,7 @@ export function createHash(content, len = null) {
 
 export async function minifyHtml(config, html) {
   try {
-    const res = await minify(html, {
+    const res = await htmlMinifier(html, {
       html5: true,
       minifyCSS: true,
       minifyJS: true,

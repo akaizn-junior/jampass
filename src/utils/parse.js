@@ -59,32 +59,42 @@ export async function validateHtml(config, html, opts) {
   }
 }
 
-export function parseHtmlLinked(config, code) {
-  const $ = cheerio.load(code);
-
+function accessAsset(config, cheerioElement, attr) {
   const linked = {};
+
   const addLinked = (ext, data) => {
-    if (!linked[ext]) {
-      linked[ext] = [data];
-    } else {
-      linked[ext].push(data);
-    }
+    if (!linked[ext]) linked[ext] = [data];
+    if (!linked.ext) linked.ext = ext;
+    linked[ext].push(data);
   };
 
-  $('link[rel]').each((_, el) => {
+  const isNotDataUrlOrThrow = str => {
+    if (str.startsWith('data:')) {
+      const err = Error();
+      err.code = 'ENOENT';
+      throw err;
+    }
+    return str;
+  };
+
+  cheerioElement.each((_, el) => {
     try {
-      const hrefPath = vpath(
-        [config.cwd, config.src, el.attribs.href],
+      // verify if attribute is not a data url
+      const _path = isNotDataUrlOrThrow(el.attribs[attr]);
+
+      // verify if path of asset exists locally
+      const assetPath = vpath(
+        [config.cwd, config.src, _path],
         true
       );
 
       const data = {
-        ext: hrefPath.ext,
-        assetPath: hrefPath.full,
+        ext: assetPath.ext,
+        assetPath: assetPath.full,
         ...el.attribs
       };
 
-      addLinked(hrefPath.ext, data);
+      addLinked(assetPath.ext, data);
     } catch (err) {
       if (err.code !== 'ENOENT') {
         throw err;
@@ -92,26 +102,20 @@ export function parseHtmlLinked(config, code) {
     }
   });
 
-  $('script[src]').each((_, el) => {
-    try {
-      const srcPath = vpath(
-        [config.cwd, config.src, el.attribs.src],
-        true
-      );
+  return linked;
+}
 
-      const data = {
-        ext: srcPath.ext,
-        assetPath: srcPath.full,
-        ...el.attribs
-      };
+export function parseHtmlLinked(config, code) {
+  const $ = cheerio.load(code);
+  const linked = {};
 
-      addLinked(srcPath.ext, data);
-    } catch (err) {
-      if (err.code !== 'ENOENT') {
-        throw err;
-      }
-    }
-  });
+  const hrefs = accessAsset(config, $('link[rel]'), 'href');
+  const scripts = accessAsset(config, $('script[src]'), 'src');
+  const imgs = accessAsset(config, $('img[src]'), 'src');
+
+  hrefs && (linked[hrefs.ext] = hrefs[hrefs.ext]);
+  scripts && (linked[scripts.ext] = scripts[scripts.ext]);
+  imgs && (linked[imgs.ext] = imgs[imgs.ext]);
 
   return linked;
 }
@@ -207,7 +211,6 @@ export async function validateAndUpdateHtml(config, data) {
 
       // parse html and get linked assets
       const linked = parseHtmlLinked(config, html.code);
-
       keep.upsert(html.from, { isValidHtml: true, linked });
     }
 

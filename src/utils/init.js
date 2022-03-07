@@ -28,17 +28,12 @@ export const tmpdir = (() => {
     path.join(os.tmpdir(), defaultconfig.name)
   );
 
-  const html = createDirSync(
-    path.join(os.tmpdir(), defaultconfig.name, 'html')
-  );
-
   const assets = createDirSync(
     path.join(os.tmpdir(), defaultconfig.name, 'assets')
   );
 
   return {
     base,
-    html,
     assets
   };
 })();
