@@ -660,6 +660,7 @@ async function watch(config, cb = () => {}, { skipLog = false } = {}) {
 
   const watcher = chokidar.watch([
     `${watchPath.full}/**/*.html`,
+    `${watchPath.full}/**/*.htm`,
     `${watchPath.full}/**/*.css`,
     `${watchPath.full}/**/*.sass`,
     `${watchPath.full}/**/*.scss`,
