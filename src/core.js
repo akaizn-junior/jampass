@@ -617,7 +617,7 @@ async function withConfig(config, done) {
 // INTERFACE
 // ++++++++++++++++
 
-async function gen(config, watching = null, ext) {
+async function gen(config, watching = null, ext = null, done = () => {}) {
   marky.mark('build time');
 
   const funCacheBust = config.watchFunnel ? Date.now() : null;
@@ -652,6 +652,8 @@ async function gen(config, watching = null, ext) {
     // eslint-disable-next-line no-console
     console.clear();
 
+    safeFun(done)();
+
     logger.success(bold(green(
       `Built in ${timeWithUnit(markyStop('build time'))}`
     )));
@@ -668,7 +670,7 @@ async function gen(config, watching = null, ext) {
  * @param {object} config user configurations
  * @param {Function} cb Runs on triggered events
  */
-async function watch(config, cb = () => {}, { skipLog = false } = {}) {
+async function watch(config, cb = () => {}, { customLog = false } = {}) {
   const watchPath = vpath([config.cwd, config.src], true);
   const _cb = safeFun(cb);
 
@@ -685,12 +687,14 @@ async function watch(config, cb = () => {}, { skipLog = false } = {}) {
     ignored: []
   });
 
-  watcher.once('ready', () => {
-    !skipLog && logger.log(
-      blue(`Watching ${splitPathCwd(config.cwd, watchPath.full)}`),
-      EOL);
+  const announce = () => {
+    const msg = customLog ? customLog
+      : blue(`Watching ${splitPathCwd(config.cwd, watchPath.full)}`);
+    logger.log(msg, EOL);
+  };
 
-    gen(config);
+  watcher.once('ready', () => {
+    gen(config, null, null, announce);
     _cb();
   });
 
@@ -710,7 +714,7 @@ async function watch(config, cb = () => {}, { skipLog = false } = {}) {
     const isStatic = p.includes(`/${STATIC_PATH_NAME}/`);
     if (isStatic) watching.static = [p];
 
-    gen(config, watching, ext);
+    gen(config, watching, ext, announce);
   };
 
   const unl = async p => {
@@ -777,8 +781,9 @@ async function serve(config) {
     }
   });
 
-  logger.log(yellow(`Serving at ${host}:${port}`));
-  watch(config, bs.reload, { skipLog: true });
+  watch(config, bs.reload, {
+    customLog: yellow(`Serving at ${host}:${port}`)
+  });
 }
 
 async function lint(config) {
