@@ -1,4 +1,4 @@
-import { bold, red, dim } from 'colorette';
+import { bold, red, dim, reset } from 'colorette';
 import esbuild from 'esbuild';
 
 // postcss and plugins
@@ -21,7 +21,7 @@ import {
   partition,
   isObj,
   formatPageEntry,
-  genSnippet
+  getSnippet
 } from './helpers.js';
 
 import {
@@ -154,7 +154,7 @@ export function parseDynamicName(fnm) {
   };
 }
 
-export function spliceCodeSnippet(code, lnumber, column = 0, opts = {}) {
+export function generateCodeSnippet(code, lnumber, opts = {}) {
   const multiLineString = code;
   const lines = multiLineString.split(EOL);
   opts = Object.assign({
@@ -195,7 +195,7 @@ export function spliceCodeSnippet(code, lnumber, column = 0, opts = {}) {
     // max line length
     if (res.length > 100) res = res.substring(0, 100).concat('...');
 
-    return res;
+    return reset(res);
   })
     .slice(lrange.lower, lrange.upper);
 
@@ -280,7 +280,7 @@ async function processScss(config, file, out) {
       const emsg = splitPathCwd(config.cwd, err.file || file)
         .concat(':', err.line, ':', err.column);
 
-      err.snippet = await genSnippet({
+      err.snippet = await getSnippet({
         code: err.source,
         line: err.line,
         column: err.column,
@@ -307,7 +307,7 @@ async function processSass(config, file, out) {
       const emsg = splitPathCwd(config.cwd, err.file || file)
         .concat(':', err.line, ':', err.column);
 
-      err.snippet = await genSnippet({
+      err.snippet = await getSnippet({
         code: err.source,
         line: err.line,
         column: err.column,
@@ -341,7 +341,7 @@ export async function processCss(config, file, out, opts = {
       const emsg = splitPathCwd(config.cwd, err.file || file)
         .concat(':', err.line + opts.startIndex, ':', err.column);
 
-      err.snippet = await genSnippet({
+      err.snippet = await getSnippet({
         code: err.source,
         line: err.line,
         column: err.column,

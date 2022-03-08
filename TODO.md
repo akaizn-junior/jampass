@@ -6,7 +6,7 @@
 
 - [x] improve code snippet styling (phase 1)
 
-- [] include better js handling
+- [x] include better js handling
 
 - [x] add search index build
 
@@ -24,22 +24,22 @@
 
 - [x] improve view engine error handling
 
-- [] partials edits should only trigger a build if they are used
+- [] partials edits should only trigger a build if they are used (seems tough)
 
 - [] provide current page for pagination
 
-- [] improve search logic / consider using lunr.js / https://lunrjs.com/guides/core_concepts.html
+- [x] improve search logic / consider using lunr.js / https://lunrjs.com/guides/core_concepts.html (DO NOT INCLUDE SEARCH FEATURE, DO BUILD INDEXES THO)
 
-- [] fix serve error when using bad source folder
+- [] fix serve error when using bad source folder (recreate and fix)
 
 - [] improve watch funnel for regenerating pages on funnel changes
 
-- [] improve watch mode in production env
+- [] improve watch mode in production env (fix watch when names have hashes)
 
 - [] watch static assets
 
 - [] play with htmlvalidate json, and see how to properly implement it
 
-- [] read env as cli option
+- [x] read env as cli option
 
 - [x] for development mode static asssets should be symlinks, so changes affect the output

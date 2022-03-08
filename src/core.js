@@ -64,7 +64,7 @@ import {
   getDataItemPageClosure,
   isDef,
   isObj,
-  genSnippet,
+  getSnippet,
   timeWithUnit
 } from './utils/helpers.js';
 
@@ -105,7 +105,7 @@ async function compileView(config, file, locals) {
     if (isParsingError) {
       const maybe = err.message.split(lineNumberPrefix)[1];
       const line = parseInt(maybe, 10);
-      err.snippet = await genSnippet({
+      err.snippet = await getSnippet({
         line,
         title: `CompileViewError ${err.message}`
       }, file);
@@ -648,6 +648,9 @@ async function gen(config, watching = null, ext) {
   try {
     const parsed = await parseViews(config, files, read);
     await handleStaticAssets(config, files);
+
+    // eslint-disable-next-line no-console
+    console.clear();
 
     logger.success(bold(green(
       `Built in ${timeWithUnit(markyStop('build time'))}`

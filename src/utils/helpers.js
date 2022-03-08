@@ -12,7 +12,7 @@ import { asyncRead } from './stream.js';
 import * as keep from './keep.js';
 import { DEFAULT_PAGE_NUMBER, PARTIALS_PATH_NAME, PARTIALS_TOKEN } from './constants.js';
 import { vpath } from './path.js';
-import { spliceCodeSnippet } from './process.js';
+import { generateCodeSnippet } from './process.js';
 
 export const isDef = val => val !== null && val !== void 0;
 
@@ -181,7 +181,7 @@ export function getDataItemPageClosure(config) {
   };
 }
 
-export async function genSnippet(opts, file = '') {
+export async function getSnippet(opts, file = '') {
   const _opts = Object.assign({
     code: null,
     line: 0,
@@ -192,7 +192,7 @@ export async function genSnippet(opts, file = '') {
   }, opts);
 
   const code = _opts.code || await asyncRead(file);
-  const snippet = spliceCodeSnippet(code, _opts.line, _opts.column, {
+  const snippet = generateCodeSnippet(code, _opts.line, {
     range: _opts.range,
     startIndex: _opts.startIndex
   });

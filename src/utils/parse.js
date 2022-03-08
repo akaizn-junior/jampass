@@ -8,7 +8,7 @@ import { EOL } from 'os';
 // local
 import { vpath, splitPathCwd } from './path.js';
 import { debuglog } from './init.js';
-import { genSnippet, minifyHtml } from './helpers.js';
+import { getSnippet, minifyHtml } from './helpers.js';
 import { writeFile, newReadable } from './stream.js';
 import { processCss, processLinkedAssets } from './process.js';
 import * as keep from './keep.js';
@@ -42,7 +42,7 @@ export async function validateHtml(config, html, opts) {
         .concat(':', msg.line, ':', msg.column);
 
       msg.name = 'HtmlValidatorError';
-      msg.snippet = await genSnippet({
+      msg.snippet = await getSnippet({
         code: html,
         line: msg.line,
         column: msg.column,
@@ -209,12 +209,12 @@ export async function validateAndUpdateHtml(config, data) {
         view: data.viewPath
       });
 
-      // parse html and get linked assets
-      const linked = parseHtmlLinked(config, html.code);
-      keep.upsert(html.from, { isValidHtml: true, linked });
+      keep.upsert(html.from, { isValidHtml: true });
     }
 
-    const assets = await processLinkedAssets(config, html, exists?.linked || {});
+    // parse html and get linked assets
+    const linked = parseHtmlLinked(config, html.code);
+    const assets = await processLinkedAssets(config, html, linked);
     keep.appendHtmlTo(html.from, html.out, html);
 
     return await updateAndWriteHtml(config, { html, assets });
