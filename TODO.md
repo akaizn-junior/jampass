@@ -43,3 +43,5 @@
 - [x] read env as cli option
 
 - [x] for development mode static asssets should be symlinks, so changes affect the output
+
+- [] rebuild source, if output dir is deleted on watch mode
