@@ -3,6 +3,8 @@ import { asyncRead } from './stream.js';
 import { vpath } from './path.js';
 import { INDEX_PAGE } from './constants.js';
 
+const isHtml = ext => ['', '.htm', '.html'].includes(ext);
+
 function redirectToEntryWithSlash(opts) {
   return (req, res, next) => {
     const url = new URL(`${opts.host}:${opts.port}${req.url}`);
@@ -56,7 +58,7 @@ function writePageContent(opts) {
 
     // ignore other extensions
     const ext = vpath(uri).ext;
-    if (!['', '.htm', '.html'].includes(ext)) {
+    if (!isHtml(ext)) {
       return next();
     }
 
@@ -92,13 +94,19 @@ function writePageContent(opts) {
 }
 
 export function restMiddleware(pagePath) {
-  return async(_, res) => {
-    res.writeHead(302, {
-      location: pagePath,
-      'Content-Type': 'text/html'
-    });
+  return async(req, res) => {
+    // ignore other extensions
+    const ext = vpath(req.url).ext;
+    if (isHtml(ext)) {
+      res.writeHead(302, {
+        location: pagePath,
+        'Content-Type': 'text/html'
+      });
+    } else {
+      res.statusCode = 404;
+    }
 
-    res.end('404');
+    res.end('Not Found!');
   };
 }
 
