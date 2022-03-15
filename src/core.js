@@ -715,6 +715,7 @@ async function watch(config, cb = () => {}, { customLog = false } = {}) {
     if (isStatic) watching.static = [p];
 
     gen(config, watching, ext, announce);
+    _cb();
   };
 
   const unl = async p => {

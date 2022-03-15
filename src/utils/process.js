@@ -212,12 +212,12 @@ export async function processJs(config, file, out, opts = {}) {
   const outpath = vpath(out);
   const input = vpath(file);
   let to = outpath.full;
-  const _loader = input.ext.startsWith('.')
-    ? input.ext.split('.')[1] : input.ext;
 
-  const res = await esbuild.transform(await asyncRead(input.full), {
+  const res = await esbuild.build({
+    entryPoints: [input.full],
+    bundle: true,
+    write: false,
     charset: 'utf8',
-    sourcefile: input.full,
     format: 'iife',
     target: [
       'es6'
@@ -231,15 +231,17 @@ export async function processJs(config, file, out, opts = {}) {
     minifySyntax: !config.isDev,
     treeShaking: true,
     keepNames: true,
-    loader: _loader,
-    banner: '',
-    footer: ''
+    loader: {},
+    banner: {},
+    footer: {}
   });
 
   if (!config.isDev && _opts.hash) {
     const hash = createHash(res.code, 10);
     to = outpath.noext.concat('.', hash, outpath.ext);
   }
+
+  res.code = res.outputFiles[0].text;
 
   return {
     to,
