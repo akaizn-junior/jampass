@@ -24,7 +24,16 @@ import {
   DEFAULT_PAGE_NUMBER,
   STATIC_PATH_NAME,
   PARTIALS_PATH_NAME,
-  PARTIALS_TOKEN
+  PARTIALS_TOKEN,
+  VIEWS_PATH_NAME,
+  DATA_PATH_NAME,
+  SCRIPT_PATH_NAME,
+  STYLE_PATH_NAME,
+  STATIC_PATH_EXT,
+  STYLE_PATH_EXT,
+  SCRIPT_PATH_EXT,
+  LOCALES_PATH_EXT,
+  VIEWS_PATH_EXT
 } from './utils/constants.js';
 
 import { buildIndexes } from './utils/indexes.js';
@@ -518,13 +527,26 @@ async function readSource(src) {
   debuglog('source data', files);
 
   const classified = files.reduce((acc, file) => {
-    const ext = vpath(file).ext;
-    const isStatic = file.includes(`/${STATIC_PATH_NAME}/`);
+    const _file = vpath(file);
+    const ext = _file.ext;
+    const name = _file.name;
+    const dir = _file.dir;
 
-    if (isStatic) {
-      acc.static.push(file);
-      return acc;
-    }
+    const isStatic = dir.includes(`/${STATIC_PATH_NAME}/`) || STATIC_PATH_EXT.some(e => name.endsWith(e));
+    const isLocale = dir.includes(`/${LOCALES_PATH_NAME}/`) || LOCALES_PATH_EXT.some(e => file.endsWith(e));
+    const isView = dir.includes(`/${VIEWS_PATH_NAME}/`) || VIEWS_PATH_EXT.some(e => file.endsWith(e));
+    const isData = dir.includes(`/${DATA_PATH_NAME}/`);
+    const isPartial = dir.includes(`/${PARTIALS_PATH_NAME}/`) || name.startsWith(PARTIALS_TOKEN);
+    const isScript = dir.includes(`/${SCRIPT_PATH_NAME}/`) || SCRIPT_PATH_EXT.some(e => file.endsWith(e));
+    const isStyle = dir.includes(`/${STYLE_PATH_NAME}/`) || STYLE_PATH_EXT.some(e => file.endsWith(e));
+
+    if (isStatic) acc.static.push(file);
+    if (isLocale) acc.locales.push(file);
+    if (isView) acc.views.push(file);
+    if (isPartial) acc.partials.push(file);
+    if (isScript) acc.scripts.push(file);
+    if (isStyle) acc.styles.push(file);
+    if (isData) acc.data.push(file);
 
     if (!acc[ext]) {
       acc[ext] = [file];
@@ -533,7 +555,15 @@ async function readSource(src) {
     }
 
     return acc;
-  }, { static: [] });
+  }, {
+    static: [],
+    data: [],
+    views: [],
+    locales: [],
+    partials: [],
+    scripts: [],
+    styles: []
+  });
 
   debuglog('files classified by extension', classified);
   return classified;
@@ -628,6 +658,9 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
 
   const srcPath = vpath([config.cwd, config.src]);
   const read = await readSource(srcPath.full);
+
+  console.log(read);
+
   // files read from source or currently being watched
   const files = watching || read;
 
@@ -650,7 +683,7 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
     await handleStaticAssets(config, files);
 
     // eslint-disable-next-line no-console
-    console.clear();
+    // console.clear();
 
     safeFun(done)();
 
