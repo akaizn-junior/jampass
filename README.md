@@ -51,7 +51,7 @@ export default {
   raw: ...,
   pagination: {
     pages: ...,
-    every: 5 // generate output every pages items read
+    every: 5 // generate output every page items read
   }
 }
 
@@ -63,7 +63,7 @@ In addition to definning where pages come from, you need to define what html vie
 
 Jampass looks at file names for clues on how to handle a file.
 
-- "-" dash/loop token (only considered if the first character of a file name)
+- "-" dash/loop token (only considered if first character of a file name)
 - "_" undercore/slash token (only considered if inside dynamic key tokens)
 - "[" and "]" dynamic keys tokens (enclose dynamic keys that will be read from funneled data), for example a slug.
 
@@ -76,7 +76,8 @@ See docs for more.
 
 ## Development environment
 
-Jampass provides users with a modern platorm to develop with. Latest JS support with [esbuild](https://esbuild.github.io/). Latest CSS with [postcss](https://postcss.org/) and optional templating with [consolidate.js](https://www.npmjs.com/package/consolidate)
+Jampass provides users with a modern platorm to develop with. Latest JS support with [esbuild](https://esbuild.github.io/).
+Latest CSS with [postcss](https://postcss.org/) and optional templating with [consolidate.js](https://www.npmjs.com/package/consolidate)
 
 ## Demos
 
