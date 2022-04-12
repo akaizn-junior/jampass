@@ -45,3 +45,7 @@
 - [x] for development mode static asssets should be symlinks, so changes affect the output
 
 - [] rebuild source, if output dir is deleted on watch mode
+
+- [] notify user about linking a static asset to html, did they really mean to do it.
+static assets are not transformed, regular assets are, so a linked static asset is transformed,
+user may not want this behaviour
