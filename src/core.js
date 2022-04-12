@@ -49,7 +49,7 @@ import {
 import {
   parseDynamicName,
   parsedNameKeysToPath,
-  processWatchedAsset,
+  processEditedAsset,
   paginationForPagesArray
 } from './utils/process.js';
 
@@ -77,7 +77,7 @@ import {
   timeWithUnit
 } from './utils/helpers.js';
 
-import * as bSync from './utils/bs.middleware.js';
+import * as bSync from './utils/server.middleware.js';
 import * as keep from './utils/keep.js';
 import defaultConfig from './default.config.js';
 import { tmpDirSync } from './utils/tmp.js';
@@ -284,11 +284,7 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 async function getLocales(config, files) {
   marky.mark('get locales');
 
-  const dotjson = files['.json'] || [];
-  const locales = dotjson.filter(file =>
-    file.includes(`/${LOCALES_PATH_NAME}/`)
-    && file.endsWith('.json')
-  );
+  const locales = files.locales;
 
   if (!locales.length) return {};
 
@@ -296,10 +292,19 @@ async function getLocales(config, files) {
 
   const localesProm = locales.map(async locale => {
     const url = new URL(locale, import.meta.url);
+    let contents = '';
 
-    const contents = JSON.parse(
-      await asyncRead(url)
-    );
+    try {
+      contents = JSON.parse(
+        await asyncRead(url)
+      );
+    } catch (err) {
+      const known = ['SyntaxError'];
+      if (!known.includes(err.name)) {
+        throw err;
+      }
+      contents = {};
+    }
 
     const name = vpath(locale).name;
     const [lang, region] = name.split(LOCALES_SEP);
@@ -410,8 +415,8 @@ async function parseViews(config, files, read) {
   return _views;
 }
 
-async function handleStaticAssets(config, files) {
-  marky.mark('static assets');
+async function handleStaticFiles(config, files) {
+  marky.mark('static files');
 
   const _files = files.static || [];
 
@@ -425,29 +430,32 @@ async function handleStaticAssets(config, files) {
 
   try {
     const ps = _files.map(async file => {
-      const _static = file;
+      const _static = vpath(file);
       const exists = keep.get(_static);
 
       if (!exists) {
-        const dest = out.join(_static.split(STATIC_PATH_NAME)[1]).full;
+        const [_name] = _static.name.split(STATIC_PATH_EXT);
+        const destName = _name.concat(_static.ext);
+
+        const dest = out.join(destName).full;
 
         if (config.isDev) {
-          await symlink(_static, dest);
+          await symlink(_static.full, dest);
         } else {
           // fails if path exists
-          await writeFile(_static, dest, null, { flags: 'wx' });
+          await writeFile(_static.full, dest, null, { flags: 'wx' });
         }
 
-        keep.add(_static, { proc: true });
+        keep.add(_static.full, { proc: true });
       }
     });
 
     Promise.all(ps);
 
-    markyStop('static assets', end => {
+    markyStop('static files', end => {
       const lap = markyStop('build time');
       const time = showTime(end, lap);
-      debuglog('copied static assets -', _files.length, time);
+      debuglog('copied static files -', _files.length, time);
     });
   } catch (err) {
     throw err;
@@ -466,19 +474,43 @@ async function getData(config, cacheBust = '') {
     debuglog('funneled data url', url);
 
     const imported = await import(url);
-    const funneled = 'default' in imported ? imported.default : imported;
+    const userFunnel = 'default' in imported ? imported.default : imported;
     let previewKeys = [];
 
-    if (funneled) {
-      if (!funneled.raw) funneled.raw = [];
-      funneled.meta = {};
-      funneled.partials = {};
+    if (!userFunnel) {
+      throw new Error(`invalid funneled data ${bold(userFunnel)}`);
+    }
 
-      if (Array.isArray(funneled.raw)) {
-        previewKeys = Object.keys(funneled.raw[0]);
+    // consolidate funneled
+    const funneled = Object.assign({
+      raw: []
+    }, userFunnel);
+
+    // reserved keys
+    funneled.meta = {};
+    funneled.partials = {};
+
+    if (Array.isArray(funneled.raw)) {
+      previewKeys = Object.keys(funneled.raw[0] ?? {});
+      const {
+        metaPages, pages, flatPages, paginate
+      } = paginationForPagesArray(funneled.pagination, funneled.raw);
+
+      funneled.pages = pages;
+      funneled.flatPages = flatPages;
+      funneled.meta.pages = metaPages;
+      // expedite
+      config.paginate = paginate;
+    }
+
+    if (isObj(funneled.raw)) {
+      previewKeys = Object.keys(funneled.raw || {});
+      const _fpages = funneled.pagination?.pages;
+
+      if (Array.isArray(_fpages)) {
         const {
           metaPages, pages, flatPages, paginate
-        } = paginationForPagesArray(funneled.pagination, funneled.raw);
+        } = paginationForPagesArray(funneled.pagination);
 
         funneled.pages = pages;
         funneled.flatPages = flatPages;
@@ -486,29 +518,10 @@ async function getData(config, cacheBust = '') {
         // expedite
         config.paginate = paginate;
       }
-
-      if (isObj(funneled.raw)) {
-        previewKeys = Object.keys(funneled.raw || {});
-        const _fpages = funneled.pagination?.pages;
-
-        if (Array.isArray(_fpages)) {
-          const {
-            metaPages, pages, flatPages, paginate
-          } = paginationForPagesArray(funneled.pagination);
-
-          funneled.pages = pages;
-          funneled.flatPages = flatPages;
-          funneled.meta.pages = metaPages;
-          // expedite
-          config.paginate = paginate;
-        }
-      }
-
-      debuglog('preview funneled data', previewKeys);
-      return funneled;
     }
 
-    throw new Error(`invalid funneled data ${bold(funneled)}`);
+    debuglog('preview funneled data', previewKeys);
+    return funneled;
   } catch (err) {
     err.name = 'DataFunnelError';
     if (err.code === 'ENOENT') {
@@ -532,7 +545,7 @@ async function readSource(src) {
     const name = _file.name;
     const dir = _file.dir;
 
-    const isStatic = dir.includes(`/${STATIC_PATH_NAME}/`) || STATIC_PATH_EXT.some(e => name.endsWith(e));
+    const isStatic = dir.includes(`/${STATIC_PATH_NAME}/`) || name.endsWith(STATIC_PATH_EXT);
     const isLocale = dir.includes(`/${LOCALES_PATH_NAME}/`) || LOCALES_PATH_EXT.some(e => file.endsWith(e));
     const isView = dir.includes(`/${VIEWS_PATH_NAME}/`) || VIEWS_PATH_EXT.some(e => file.endsWith(e));
     const isData = dir.includes(`/${DATA_PATH_NAME}/`);
@@ -548,11 +561,8 @@ async function readSource(src) {
     if (isStyle) acc.styles.push(file);
     if (isData) acc.data.push(file);
 
-    if (!acc[ext]) {
-      acc[ext] = [file];
-    } else {
-      acc[ext].push(file);
-    }
+    if (!acc[ext]) acc[ext] = [file];
+    else acc[ext].push(file);
 
     return acc;
   }, {
@@ -659,14 +669,12 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
   const srcPath = vpath([config.cwd, config.src]);
   const read = await readSource(srcPath.full);
 
-  console.log(read);
-
   // files read from source or currently being watched
   const files = watching || read;
 
   if (watching && ext !== '.html' && !config.watchFunnel) {
     const asset = watching[ext] || [];
-    return await processWatchedAsset(config, asset, ext);
+    return await processEditedAsset(config, asset, ext);
   }
 
   const locales = await getLocales(config, read);
@@ -680,7 +688,7 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
 
   try {
     const parsed = await parseViews(config, files, read);
-    await handleStaticAssets(config, files);
+    await handleStaticFiles(config, files);
 
     // eslint-disable-next-line no-console
     // console.clear();

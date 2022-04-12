@@ -19,7 +19,7 @@ export const SCRIPT_PATH_EXT = ['.js', '.mjs'];
 export const STYLE_PATH_NAME = 'style';
 export const STYLE_PATH_EXT = ['.css', '.scss', '.sass'];
 export const STATIC_PATH_NAME = 'static';
-export const STATIC_PATH_EXT = ['.static'];
+export const STATIC_PATH_EXT = '.static';
 
 // other
 export const INDEX_PAGE = 'index.html';

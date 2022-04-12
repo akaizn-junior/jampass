@@ -376,7 +376,7 @@ function processAsset(ext, config, file, out) {
   }
 }
 
-export async function processWatchedAsset(config, asset, ext) {
+export async function processEditedAsset(config, asset, ext) {
   debuglog('parsing asset');
   const srcBase = getSrcBase(config);
   const properCwd = config.multi
@@ -508,7 +508,7 @@ export function paginationForPagesArray(funPagination, rawData = []) {
       ? partition(rdata, every)
       : [rdata];
 
-    // rdata is assumed to be a flat array, but for my sanity
+    // rdata is assumed to be a flat array, but for sanity sake
     // and since this is a user input just flatten it
     flatPages = rdata.flat();
   }

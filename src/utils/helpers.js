@@ -67,16 +67,16 @@ export function reduceViewsByChecksum(config, rewatch = null) {
     try {
       const exists = keep.get(view);
       const checksum = await asyncRead(view, c => createHash(c, 64));
-      const newContent = checksum !== exists?.checksum;
+      const hasNewContent = checksum !== exists?.checksum;
 
       const viewName = vpath(view).name;
-      const withPartialsToken = viewName.startsWith(PARTIALS_TOKEN);
-      const isPartial = withPartialsToken || view.includes(`/${PARTIALS_PATH_NAME}/`);
+      const hasPartialsToken = viewName.startsWith(PARTIALS_TOKEN);
+      const isPartial = hasPartialsToken || view.includes(`/${PARTIALS_PATH_NAME}/`);
 
       if (isPartial) {
         // register partials to funneled data
         let partial = viewName;
-        if (withPartialsToken) partial = viewName.split(PARTIALS_TOKEN)[1];
+        if (hasPartialsToken) partial = viewName.split(PARTIALS_TOKEN)[1];
 
         const def = config.funneled.partials[partial];
         if (!def) config.funneled.partials[partial] = view;
@@ -85,10 +85,10 @@ export function reduceViewsByChecksum(config, rewatch = null) {
         return acc;
       }
 
-      const add = newContent && !isPartial;
+      // only allow views with new content
+      const add = hasNewContent && !isPartial;
 
       if (add || config.bypass) {
-        // only allow views with new content
         (await acc).push({ path: view, checksum });
       }
 
@@ -168,7 +168,7 @@ export function getDataItemPageClosure(config) {
 
   /**
    * generates a page number string based on an index given by
-   * checking it against the chunks the make the pagination
+   * checking it against the chunks that make the pagination
    * @param {number} i an item index in a overall dataset
    */
   return i => {
@@ -203,7 +203,7 @@ export async function getSnippet(opts, file = '') {
 /**
  * format a value in bytes
  * @param {number|string} bytes value in bytes
- * @param {number} base the units number base
+ * @param {number} base unit number base
  */
 export function formatBytes(bytes, base = 10) {
   const _bytes = Number(bytes);
