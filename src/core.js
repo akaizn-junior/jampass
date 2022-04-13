@@ -306,14 +306,15 @@ async function getLocales(config, files) {
       contents = {};
     }
 
-    const name = vpath(locale).name;
-    const [lang, region] = name.split(LOCALES_SEP);
+    const fileName = vpath(locale).base;
+    const localeName = fileName.split(LOCALES_PATH_EXT)[0];
+    const [lang, region] = localeName.split(LOCALES_SEP);
 
     return {
       contents,
-      locale: name,
+      locale: localeName,
       lang,
-      region
+      region: region ?? null
     };
   });
 
@@ -332,14 +333,16 @@ async function getLocales(config, files) {
     debuglog('loaded', fromFiles.length, LOCALES_PATH_NAME, time);
   });
 
+  debuglog('locales', res);
   return res;
 }
 
 async function parseViews(config, files, read) {
   debuglog('parsing src views');
 
-  const views = config.watchFunnel || config.bypass
-    ? read['.html'] : files['.html'] || [];
+  const views = config.bypass
+    ? read.views
+    : files['.html'] || [];
 
   const srcBase = getSrcBase(config);
   const outputPath = vpath([config.owd, config.output.path]);
@@ -546,7 +549,7 @@ async function readSource(src) {
     const dir = _file.dir;
 
     const isStatic = dir.includes(`/${STATIC_PATH_NAME}/`) || name.endsWith(STATIC_PATH_EXT);
-    const isLocale = dir.includes(`/${LOCALES_PATH_NAME}/`) || LOCALES_PATH_EXT.some(e => file.endsWith(e));
+    const isLocale = dir.includes(`/${LOCALES_PATH_NAME}/`) || _file.base.endsWith(LOCALES_PATH_EXT);
     const isView = dir.includes(`/${VIEWS_PATH_NAME}/`) || VIEWS_PATH_EXT.some(e => file.endsWith(e));
     const isData = dir.includes(`/${DATA_PATH_NAME}/`);
     const isPartial = dir.includes(`/${PARTIALS_PATH_NAME}/`) || name.startsWith(PARTIALS_TOKEN);
@@ -575,7 +578,7 @@ async function readSource(src) {
     styles: []
   });
 
-  debuglog('files classified by extension', classified);
+  debuglog('files classified by kind and extension', classified);
   return classified;
 }
 
@@ -723,7 +726,10 @@ async function watch(config, cb = () => {}, { customLog = false } = {}) {
     `${watchPath.full}/**/*.scss`,
     `${watchPath.full}/**/*.js`,
     `${watchPath.full}/**/*.mjs`,
-    `${watchPath.full}/static/*.*`
+    `${watchPath.full}/static/*.*`,
+    `${watchPath.full}/*.static.*`,
+    `${watchPath.full}/locales/*.*`,
+    `${watchPath.full}/*.locale.json`
   ], {
     ignored: []
   });
@@ -741,7 +747,8 @@ async function watch(config, cb = () => {}, { customLog = false } = {}) {
 
   const run = p => {
     debuglog('altered', p);
-    const ext = vpath(p).ext;
+    const _p = vpath(p);
+    const ext = _p.ext;
     const watching = { [ext]: [p] };
 
     const isFunnel = p.endsWith(defaultConfig.funnelName);
@@ -750,7 +757,12 @@ async function watch(config, cb = () => {}, { customLog = false } = {}) {
     const isPartial = p.includes(`/${PARTIALS_PATH_NAME}/`)
       || vpath(p).name.startsWith(PARTIALS_TOKEN);
 
-    config.bypass = isPartial;
+    const isLocale = p.includes(`/${LOCALES_PATH_NAME}/`)
+      || _p.base.endsWith(LOCALES_PATH_EXT);
+
+    config.bypass = isPartial || isLocale || config.watchFunnel;
+
+    debuglog('bypass checksum check', config.bypass);
 
     const isStatic = p.includes(`/${STATIC_PATH_NAME}/`);
     if (isStatic) watching.static = [p];

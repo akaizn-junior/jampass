@@ -49,3 +49,6 @@
 - [] notify user about linking a static asset to html, did they really mean to do it.
 static assets are not transformed, regular assets are, so a linked static asset is transformed,
 user may not want this behaviour
+
+- [] create testing tool that will generate files to test all different approaches jampass supports.
+It should verify files created adn files output based on test params

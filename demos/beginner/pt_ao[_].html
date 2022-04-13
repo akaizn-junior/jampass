@@ -1,20 +1,19 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt">
 
   <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Beginner Approach - Jampass</title>
+    <title>{{ locales.pt_ao.[Beginner approach] }} - Jampass</title>
     <link rel="stylesheet" href="index.css">
     <script src="index.static.js"></script>
-    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
   </head>
 
   <body>
 
     <div class="wrapper">
-      {{#with locales.en_us }}
+      {{#with locales.pt_ao }}
         <h1>
           <i>{{ [Beginner approach] }}</i>
         </h1>
@@ -23,7 +22,7 @@
         <h4>{{ [Welcome] }}</h4>
       {{/with}}
       <dl class="lang">
-        <dt>Lang</dt>
+        <dt>{{ locales.pt_ao.lang }}</dt>
         {{#each meta.locales}}
           <dd>
             <a href="{{ locale }}">

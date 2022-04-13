@@ -1,10 +1,10 @@
 body {
-  background-color: bisque;
+  background-color: #fff8ef;
   color: #000000;
   font-size: 1.45em;
 }
 
 .wrapper {
-  max-width: 1000px;
-  margin: 3% auto;
+  max-width: 1200px;
+  margin: 0% auto;
 }

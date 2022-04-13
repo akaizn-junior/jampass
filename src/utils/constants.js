@@ -9,7 +9,7 @@ export const PARTIALS_TOKEN = '__';
 
 // paths
 export const LOCALES_PATH_NAME = 'locales';
-export const LOCALES_PATH_EXT = ['.locale.json'];
+export const LOCALES_PATH_EXT = '.locale.json';
 export const PARTIALS_PATH_NAME = 'partials';
 export const VIEWS_PATH_NAME = 'views';
 export const VIEWS_PATH_EXT = ['.htm', '.html'];
