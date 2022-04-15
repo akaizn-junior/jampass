@@ -549,11 +549,6 @@ async function readSource(src) {
     const name = _file.name;
     const dir = _file.dir;
 
-    if (_file.name === 'manifest') {
-      console.log(_file);
-      console.log(dir.includes(`/${STATIC_PATH_NAME}`));
-    }
-
     const isStatic = dir.includes(`/${STATIC_PATH_NAME}`) || name.endsWith(STATIC_PATH_EXT);
     const isLocale = dir.includes(`/${LOCALES_PATH_NAME}`) || _file.base.endsWith(LOCALES_PATH_EXT);
     const isView = dir.includes(`/${VIEWS_PATH_NAME}`) || VIEWS_PATH_EXT.some(e => file.endsWith(e));
