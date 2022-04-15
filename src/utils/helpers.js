@@ -71,7 +71,7 @@ export function reduceViewsByChecksum(config, rewatch = null) {
 
       const viewName = vpath(view).name;
       const hasPartialsToken = viewName.startsWith(PARTIALS_TOKEN);
-      const isPartial = hasPartialsToken || view.includes(`/${PARTIALS_PATH_NAME}/`);
+      const isPartial = hasPartialsToken || view.includes(PARTIALS_PATH_NAME);
 
       if (isPartial) {
         // register partials to funneled data

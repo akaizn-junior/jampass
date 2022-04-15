@@ -306,8 +306,13 @@ async function getLocales(config, files) {
       contents = {};
     }
 
-    const fileName = vpath(locale).base;
-    const localeName = fileName.split(LOCALES_PATH_EXT)[0];
+    const fileName = vpath(locale);
+    let localeName = fileName.name;
+
+    if (fileName.base.endsWith(LOCALES_PATH_EXT[1])) {
+      localeName = fileName.base.split(LOCALES_PATH_EXT[1])[0];
+    }
+
     const [lang, region] = localeName.split(LOCALES_SEP);
 
     return {
@@ -549,13 +554,18 @@ async function readSource(src) {
     const name = _file.name;
     const dir = _file.dir;
 
-    const isStatic = dir.includes(`/${STATIC_PATH_NAME}`) || name.endsWith(STATIC_PATH_EXT);
-    const isLocale = dir.includes(`/${LOCALES_PATH_NAME}`) || _file.base.endsWith(LOCALES_PATH_EXT);
-    const isView = dir.includes(`/${VIEWS_PATH_NAME}`) || VIEWS_PATH_EXT.some(e => file.endsWith(e));
-    const isData = dir.includes(`/${DATA_PATH_NAME}`);
-    const isPartial = dir.includes(`/${PARTIALS_PATH_NAME}`) || name.startsWith(PARTIALS_TOKEN);
-    const isScript = dir.includes(`/${SCRIPT_PATH_NAME}`) || SCRIPT_PATH_EXT.some(e => file.endsWith(e));
-    const isStyle = dir.includes(`/${STYLE_PATH_NAME}`) || STYLE_PATH_EXT.some(e => file.endsWith(e));
+    const isFunnel = file.endsWith(defaultConfig.funnelName);
+
+    const isStatic = dir.includes(STATIC_PATH_NAME) || name.endsWith(STATIC_PATH_EXT);
+
+    const isLocale = dir.includes(LOCALES_PATH_NAME) && _file.base.endsWith(LOCALES_PATH_EXT[0])
+      || _file.base.endsWith(LOCALES_PATH_EXT[1]);
+
+    const isView = dir.includes(VIEWS_PATH_NAME) || VIEWS_PATH_EXT.some(e => file.endsWith(e));
+    const isData = dir.includes(DATA_PATH_NAME);
+    const isPartial = dir.includes(PARTIALS_PATH_NAME) || name.startsWith(PARTIALS_TOKEN);
+    const isScript = !isFunnel && (dir.includes(SCRIPT_PATH_NAME) || SCRIPT_PATH_EXT.some(e => file.endsWith(e)));
+    const isStyle = dir.includes(STYLE_PATH_NAME) || STYLE_PATH_EXT.some(e => file.endsWith(e));
 
     if (isStatic) acc.static.push(file);
     if (isLocale) acc.locales.push(file);
@@ -755,17 +765,18 @@ async function watch(config, cb = () => {}, { customLog = false } = {}) {
     const isFunnel = p.endsWith(defaultConfig.funnelName);
     config.watchFunnel = isFunnel && config.build.watchFunnel;
 
-    const isPartial = p.includes(`/${PARTIALS_PATH_NAME}/`)
+    const isPartial = p.includes(PARTIALS_PATH_NAME)
       || vpath(p).name.startsWith(PARTIALS_TOKEN);
 
-    const isLocale = p.includes(`/${LOCALES_PATH_NAME}/`)
-      || _p.base.endsWith(LOCALES_PATH_EXT);
+    const isLocale = p.includes(LOCALES_PATH_NAME)
+    && _p.base.endsWith(LOCALES_PATH_EXT[0])
+      || _p.base.endsWith(LOCALES_PATH_EXT[1]);
 
     config.bypass = isPartial || isLocale || config.watchFunnel;
 
     debuglog('bypass checksum check', config.bypass);
 
-    const isStatic = p.includes(`/${STATIC_PATH_NAME}/`);
+    const isStatic = p.includes(STATIC_PATH_NAME);
     if (isStatic) watching.static = [p];
 
     gen(config, watching, ext, announce);
