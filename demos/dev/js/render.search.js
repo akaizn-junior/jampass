@@ -1,29 +1,8 @@
-/* globals Search */
-
 const srch = document.getElementById('search');
-const panel = document.getElementById('search-results');
+// const panel = document.getElementById('search-results');
 
-function paint(results) {
-  panel.style.display = results.length
-    ? 'block' : 'none';
-
-  panel.innerHTML = results.map(result => {
-    const item = result.value;
-    const text = item.value[item.index];
-    const name = item.value.name;
-
-    if (item.index !== 'name') {
-      return `<div class="search-item">
-        <p>${item.index}: ${text}</p>
-        <a href="${item.url}">${name}</a>
-      </div>`;
-    }
-
-    return `<div class="search-item">
-        <p>${item.index}</p>
-        <a href="${item.url}">${name}</a>
-      </div>`;
-  }).join('');
+function queryFn(term) {
+  console.log(term);
 }
 
 function handleUrlSearch() {
@@ -32,7 +11,7 @@ function handleUrlSearch() {
   if (query.has('s')) {
     const term = query.get('s');
     srch.setAttribute('value', term);
-    Search.query(term, paint);
+    queryFn(term);
   }
 }
 
@@ -40,9 +19,9 @@ handleUrlSearch();
 
 srch.addEventListener('keyup', e => {
   const term = e.target.value;
-  Search.query(term, paint);
+  queryFn(term);
 }, false);
 
 srch.addEventListener('search', () => {
-  Search.query('', paint);
+  queryFn('');
 }, false);

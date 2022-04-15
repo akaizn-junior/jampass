@@ -236,12 +236,12 @@ export async function processJs(config, file, out, opts = {}) {
     footer: {}
   });
 
+  res.code = res.outputFiles[0].text;
+
   if (!config.isDev && _opts.hash) {
     const hash = createHash(res.code, 10);
     to = outpath.noext.concat('.', hash, outpath.ext);
   }
-
-  res.code = res.outputFiles[0].text;
 
   return {
     to,

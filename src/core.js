@@ -438,9 +438,10 @@ async function handleStaticFiles(config, files) {
 
       if (!exists) {
         const [_name] = _static.name.split(STATIC_PATH_EXT);
+        const [, _dir] = _static.dir.split(STATIC_PATH_NAME);
         const destName = _name.concat(_static.ext);
 
-        const dest = out.join(destName).full;
+        const dest = out.join(_dir ?? '', destName).full;
 
         if (config.isDev) {
           await symlink(_static.full, dest);
@@ -548,13 +549,18 @@ async function readSource(src) {
     const name = _file.name;
     const dir = _file.dir;
 
-    const isStatic = dir.includes(`/${STATIC_PATH_NAME}/`) || name.endsWith(STATIC_PATH_EXT);
-    const isLocale = dir.includes(`/${LOCALES_PATH_NAME}/`) || _file.base.endsWith(LOCALES_PATH_EXT);
-    const isView = dir.includes(`/${VIEWS_PATH_NAME}/`) || VIEWS_PATH_EXT.some(e => file.endsWith(e));
-    const isData = dir.includes(`/${DATA_PATH_NAME}/`);
-    const isPartial = dir.includes(`/${PARTIALS_PATH_NAME}/`) || name.startsWith(PARTIALS_TOKEN);
-    const isScript = dir.includes(`/${SCRIPT_PATH_NAME}/`) || SCRIPT_PATH_EXT.some(e => file.endsWith(e));
-    const isStyle = dir.includes(`/${STYLE_PATH_NAME}/`) || STYLE_PATH_EXT.some(e => file.endsWith(e));
+    if (_file.name === 'manifest') {
+      console.log(_file);
+      console.log(dir.includes(`/${STATIC_PATH_NAME}`));
+    }
+
+    const isStatic = dir.includes(`/${STATIC_PATH_NAME}`) || name.endsWith(STATIC_PATH_EXT);
+    const isLocale = dir.includes(`/${LOCALES_PATH_NAME}`) || _file.base.endsWith(LOCALES_PATH_EXT);
+    const isView = dir.includes(`/${VIEWS_PATH_NAME}`) || VIEWS_PATH_EXT.some(e => file.endsWith(e));
+    const isData = dir.includes(`/${DATA_PATH_NAME}`);
+    const isPartial = dir.includes(`/${PARTIALS_PATH_NAME}`) || name.startsWith(PARTIALS_TOKEN);
+    const isScript = dir.includes(`/${SCRIPT_PATH_NAME}`) || SCRIPT_PATH_EXT.some(e => file.endsWith(e));
+    const isStyle = dir.includes(`/${STYLE_PATH_NAME}`) || STYLE_PATH_EXT.some(e => file.endsWith(e));
 
     if (isStatic) acc.static.push(file);
     if (isLocale) acc.locales.push(file);
