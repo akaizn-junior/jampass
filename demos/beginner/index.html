@@ -37,6 +37,18 @@
         {{/each}}
       </dl>
     </div>
+    <article class="data">
+      <h2>Articles</h2>
+      <ul>
+        {{#each raw }}
+          <li>
+            <p><b>name:</b> {{ name }}</p>
+            <p><b>slug:</b> {{ slug }}</p>
+            <div><b>content:</b> {{{ content }}}</div>
+          </li>
+        {{/each}}
+      </ul>
+    </article>
   </body>
 
 </html>
