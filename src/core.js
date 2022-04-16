@@ -661,7 +661,7 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
   const funCacheBust = config.watchFunnel ? Date.now() : null;
 
   if (!config.funneled || funCacheBust) {
-    config.funneled = await handleData(config, readData(config, funCacheBust));
+    config.funneled = handleData(config, await readData(config, funCacheBust));
   }
 
   const srcPath = vpath([config.cwd, config.src]);
