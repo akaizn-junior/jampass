@@ -16,6 +16,7 @@ export const PARTIALS_PATH_NAME = `${path.sep}partials`;
 export const VIEWS_PATH_NAME = `${path.sep}views`;
 export const VIEWS_PATH_EXT = ['.htm', '.html'];
 export const DATA_PATH_NAME = `${path.sep}data`;
+export const DATA_PATH_EXT = ['.data.md', '.data.txt'];
 export const SCRIPT_PATH_NAME = `${path.sep}script`;
 export const SCRIPT_PATH_EXT = ['.js', '.mjs'];
 export const STYLE_PATH_NAME = `${path.sep}style`;

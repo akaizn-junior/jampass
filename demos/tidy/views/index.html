@@ -36,6 +36,15 @@
           </dd>
         {{/each}}
       </dl>
+      <section class="articles">
+        <ul>
+          {{#each raw }}
+            <li>
+              <a href="blog/{{ slug }}" title="{{ name }}">{{ name }}</a>
+            </li>
+          {{/each}}
+        </ul>
+      </section>
     </div>
   </body>
 

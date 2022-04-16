@@ -20,9 +20,9 @@ for (let i = 0; i < fakeItemsCount; i++) {
 
 export default {
   raw: fakeData,
-  pagination: {
-    every: 5
-  },
+  // pagination: {
+  //   every: 5
+  // },
   indexes: [
     'name',
     'breed',

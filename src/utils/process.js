@@ -492,28 +492,29 @@ export function parsedNameKeysToPath(keys, locals, i = 0) {
  * @param {array} rawData funneled data as an array
  */
 export function paginationForPagesArray(funPagination, rawData = []) {
-  let pages = [];
   let flatPages = [];
   let metaPages = [];
   let paginate = false;
+  let pages = null;
+  let every = null;
 
   if (isObj(funPagination)) {
-    const every = funPagination.every;
-    const _pages = funPagination.pages;
-    // pagination pages or raw array for pages
-    const rdata = _pages && Array.isArray(_pages) ? _pages : rawData || [];
-
-    paginate = every && typeof every === 'number' && every <= rdata.length;
-
-    // pages is a list of lists partitioned in 'every' chunks
-    pages = paginate
-      ? partition(rdata, every)
-      : [rdata];
-
-    // rdata is assumed to be a flat array, but for sanity sake
-    // and since this is a user input just flatten it
-    flatPages = rdata.flat();
+    every = funPagination.every;
+    pages = funPagination.pages;
   }
+
+  // pagination pages or raw array for pages
+  const rdata = pages && Array.isArray(pages) ? pages : rawData || [];
+  paginate = every && typeof every === 'number' && every <= rdata.length;
+
+  // pages is a list of lists partitioned in 'every' chunks
+  pages = paginate
+    ? partition(rdata, every)
+    : [rdata];
+
+  // rdata is assumed to be a flat array, but for sanity sake
+  // and since this is a user input just flatten it
+  flatPages = rdata.flat();
 
   if (paginate) {
     const pageCount = inRange(pages.length);

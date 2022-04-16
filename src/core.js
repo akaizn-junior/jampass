@@ -4,6 +4,10 @@ import del from 'del';
 import { ESLint } from 'eslint';
 import * as marky from 'marky';
 import { bold, strikethrough, blue, yellow } from 'colorette';
+import slugify from 'slugify';
+import matter from 'gray-matter';
+import { marked } from 'marked';
+import sanitize from 'sanitize-html';
 
 // node
 import { Readable } from 'stream';
@@ -32,7 +36,8 @@ import {
   STYLE_PATH_EXT,
   SCRIPT_PATH_EXT,
   LOCALES_PATH_EXT,
-  VIEWS_PATH_EXT
+  VIEWS_PATH_EXT,
+  DATA_PATH_EXT
 } from './utils/constants.js';
 
 import { buildIndexes } from './utils/indexes.js';
@@ -521,7 +526,15 @@ async function unlinkFiles(config, toDel) {
 // READERS
 // ++++++++++++++++
 
-async function readData(config, cacheBust = '') {
+async function readData(config, fromFiles, cacheBust = '') {
+  // default keys
+  const dKeys = {
+    raw: [],
+    meta: {},
+    pages: [],
+    partials: {}
+  };
+
   try {
     // if no config.funnel
     const dataPath = vpath([config.cwd, config.src, defaultConfig.funnelName], true).full;
@@ -541,21 +554,55 @@ async function readData(config, cacheBust = '') {
 
     // consolidate funneled
     const funneled = Object.assign({
-      raw: []
+      raw: dKeys.raw
     }, userFunnel);
 
     return funneled;
   } catch (err) {
+    if (fromFiles.length) {
+      for await (const f of fromFiles) {
+        const p = vpath(f);
+        const tmp = {
+          _name: p.name,
+          _slug: slugify(p.name, { lower: true }),
+          _read: await asyncRead(p.full)
+        };
+
+        tmp.matter = matter(tmp._read);
+
+        if (p.ext === '.md') {
+          tmp.content = sanitize(marked(tmp.matter.content ?? ''));
+        }
+
+        if (p.ext === '.txt') {
+          tmp.content = sanitize(tmp.matter.content);
+        }
+
+        const data = Object.assign({
+          name: tmp._name,
+          slug: tmp._slug
+        },
+        // override default keys
+        tmp.matter.data,
+        // must override any 'content' key in the front matter
+        { content: tmp.content }
+        );
+
+        dKeys.raw.push(data);
+      }
+
+      dKeys.pages = dKeys.raw;
+      return dKeys;
+    }
+
     err.name = 'DataFunnelError';
     if (err.code === 'ENOENT') {
       // if no 'jampass.data.js' found
+      // or data file read
       // return default keys with default values
-      return {
-        meta: {},
-        pages: [],
-        partials: {}
-      };
+      return dKeys;
     }
+
     throw err;
   }
 }
@@ -571,14 +618,13 @@ async function readSource(src) {
     const dir = _file.dir;
 
     const isFunnel = file.endsWith(defaultConfig.funnelName);
-
     const isStatic = dir.includes(STATIC_PATH_NAME) || name.endsWith(STATIC_PATH_EXT);
 
     const isLocale = dir.includes(LOCALES_PATH_NAME) && _file.base.endsWith(LOCALES_PATH_EXT[0])
       || _file.base.endsWith(LOCALES_PATH_EXT[1]);
 
     const isView = dir.includes(VIEWS_PATH_NAME) || VIEWS_PATH_EXT.some(e => file.endsWith(e));
-    const isData = dir.includes(DATA_PATH_NAME);
+    const isData = dir.includes(DATA_PATH_NAME) || DATA_PATH_EXT.some(e => file.endsWith(e));
     const isPartial = dir.includes(PARTIALS_PATH_NAME) || name.startsWith(PARTIALS_TOKEN);
     const isScript = !isFunnel && (dir.includes(SCRIPT_PATH_NAME) || SCRIPT_PATH_EXT.some(e => file.endsWith(e)));
     const isStyle = dir.includes(STYLE_PATH_NAME) || STYLE_PATH_EXT.some(e => file.endsWith(e));
@@ -658,14 +704,13 @@ async function withConfig(config, done) {
 async function gen(config, watching = null, ext = null, done = () => {}) {
   marky.mark('build time');
 
+  const srcPath = vpath([config.cwd, config.src]);
+  const read = await readSource(srcPath.full);
   const funCacheBust = config.watchFunnel ? Date.now() : null;
 
   if (!config.funneled || funCacheBust) {
-    config.funneled = handleData(config, await readData(config, funCacheBust));
+    config.funneled = handleData(config, await readData(config, read.data, funCacheBust));
   }
-
-  const srcPath = vpath([config.cwd, config.src]);
-  const read = await readSource(srcPath.full);
 
   // files read from source or currently being watched
   const files = watching || read;
@@ -686,7 +731,6 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
     buildIndexes(config);
     await handleViews(config, files, read);
     await handleStaticFiles(config, files);
-
     safeFun(done)();
   } catch (e) {
     throw e;
@@ -711,6 +755,10 @@ async function watch(config, cb = () => {}, { customLog = false } = {}) {
     `${watchPath.full}/**/*.scss`,
     `${watchPath.full}/**/*.js`,
     `${watchPath.full}/**/*.mjs`,
+    `${watchPath.full}/data/*.md`,
+    `${watchPath.full}/data/*.txt`,
+    `${watchPath.full}/*.data.md`,
+    `${watchPath.full}/*.data.txt`,
     `${watchPath.full}/static/*.*`,
     `${watchPath.full}/*.static.*`,
     `${watchPath.full}/locales/*.*`,
@@ -737,7 +785,9 @@ async function watch(config, cb = () => {}, { customLog = false } = {}) {
     const watching = { [ext]: [p] };
 
     const isFunnel = p.endsWith(defaultConfig.funnelName);
-    config.watchFunnel = isFunnel && config.build.watchFunnel;
+    const isData = _p.dir.includes(DATA_PATH_NAME)
+      || DATA_PATH_EXT.some(e => p.endsWith(e));
+    config.watchFunnel = (isFunnel || isData) && config.build.watchFunnel;
 
     const isPartial = p.includes(PARTIALS_PATH_NAME)
       || vpath(p).name.startsWith(PARTIALS_TOKEN);
