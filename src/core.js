@@ -42,8 +42,9 @@ import { asyncRead, htmlsNamesGenerator, symlink, writeFile } from './utils/stre
 import {
   vpath,
   getDirPaths,
-  getSrcBase,
-  splitPathCwd
+  withSrcBase,
+  splitPathCwd,
+  withViewsPath
 } from './utils/path.js';
 
 import {
@@ -156,9 +157,14 @@ async function funnel(config, file, flags = { onlyNames: false }) {
       pathName = parsed.place(prop);
     }
 
-    const srcView = vpath([config.cwd, config.src, parsed.name]).full;
-    let pageEntry = '';
+    const srcView = vpath([
+      config.cwd,
+      config.src,
+      withViewsPath(config),
+      parsed.name
+    ]).full;
 
+    let pageEntry = '';
     const _pageNo = _opts.pageNo || parsed.page;
 
     const _locals = {
@@ -349,7 +355,7 @@ async function parseViews(config, files, read) {
     ? read.views
     : files['.html'] || [];
 
-  const srcBase = getSrcBase(config);
+  const srcBase = withSrcBase(config);
   const outputPath = vpath([config.owd, config.output.path]);
 
   const _views = await Promise.all(
@@ -392,7 +398,7 @@ async function parseViews(config, files, read) {
         markyStop('build views', end => {
           const lap = markyStop('build time');
           const time = showTime(end, lap);
-          debuglog(`"${viewPath.base}" -`, _ps.length, time);
+          logger.log(`"${viewPath.base}" -`, _ps.length, time);
         });
       }
     }
@@ -433,7 +439,7 @@ async function handleStaticFiles(config, files) {
   const out = vpath([
     config.owd,
     config.output.path,
-    getSrcBase(config, false)
+    withSrcBase(config, false)
   ]);
 
   try {
@@ -534,6 +540,8 @@ async function getData(config, cacheBust = '') {
   } catch (err) {
     err.name = 'DataFunnelError';
     if (err.code === 'ENOENT') {
+      // if no 'jampass.data.js' found
+      // return default keys with default values
       return {
         meta: {},
         pages: [],
@@ -604,7 +612,7 @@ async function unlinkFiles(config, toDel) {
     onlyNames: true
   });
 
-  const srcBase = getSrcBase(config, false);
+  const srcBase = withSrcBase(config, false);
   const fnms = names.map(nm => vpath([
     config.owd,
     config.output.path,
@@ -698,21 +706,15 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
     config.funneled.meta.locales = locales.meta || [];
   }
 
-  buildIndexes(config);
-
   try {
     const parsed = await parseViews(config, files, read);
     await handleStaticFiles(config, files);
-
-    // eslint-disable-next-line no-console
-    // console.clear();
+    buildIndexes(config);
 
     safeFun(done)();
-
     logger.success(bold(green(
       `Built in ${timeWithUnit(markyStop('build time'))}`
     )));
-
     return parsed;
   } catch (e) {
     throw e;

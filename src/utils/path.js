@@ -144,12 +144,28 @@ export function splitPathCwd(cwd, s) {
   return s;
 }
 
-export function getSrcBase(config, withCwd = true) {
+export function withSrcBase(config, withCwd = true) {
   // allow multiple folders in the output directory
   if (config.multi) {
     return vpath([withCwd ? config.cwd : '', config.src]).base;
   }
   return '';
+}
+
+export function withViewsPath(config) {
+  try {
+    // test if path exists
+    // vpath with 'true' will check the path stats
+    vpath([
+      config.cwd,
+      config.src,
+      config.views.path
+    ], true);
+
+    return config.views.path;
+  } catch {
+    return '';
+  }
 }
 
 /**

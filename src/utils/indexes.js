@@ -5,7 +5,7 @@ import { blue } from 'colorette';
 import { accessProperty, parsedNameKeysToPath, parseDynamicName } from './process.js';
 import { debuglog } from './init.js';
 import { formatBytes, markyStop, showTime, getDataItemPageClosure } from './helpers.js';
-import { getSrcBase, vpath } from './path.js';
+import { withSrcBase, vpath } from './path.js';
 import { writeFile, newReadable } from './stream.js';
 import * as keep from './keep.js';
 
@@ -76,7 +76,7 @@ export async function buildIndexes(config) {
       file = getIndexes(rawData);
     }
 
-    const srcBase = getSrcBase(config, false);
+    const srcBase = withSrcBase(config, false);
     const out = vpath([config.owd, config.output.path, srcBase, fnm]).full;
 
     writeFile(newReadable(file), out, () => {

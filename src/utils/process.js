@@ -29,7 +29,7 @@ import {
   logger
 } from './init.js';
 
-import { vpath, getSrcBase, splitPathCwd, pathDistance } from './path.js';
+import { vpath, withSrcBase, splitPathCwd, pathDistance } from './path.js';
 import { writeFile, newReadable, asyncRead } from './stream.js';
 import * as keep from './keep.js';
 
@@ -378,7 +378,7 @@ function processAsset(ext, config, file, out) {
 
 export async function processEditedAsset(config, asset, ext) {
   debuglog('parsing asset');
-  const srcBase = getSrcBase(config);
+  const srcBase = withSrcBase(config);
   const properCwd = config.multi
     ? config.cwd
     : config.cwd + path.sep + config.src;
@@ -414,7 +414,7 @@ export async function processEditedAsset(config, asset, ext) {
 }
 
 export async function processLinkedAssets(config, html, assets) {
-  const srcBase = getSrcBase(config, false);
+  const srcBase = withSrcBase(config, false);
 
   // and the h is for helper
   const h = list => {
