@@ -1,5 +1,6 @@
 import { bold, red, dim, reset } from 'colorette';
 import esbuild from 'esbuild';
+import cons from 'consolidate';
 
 // postcss and plugins
 import postcss from 'postcss';
@@ -21,7 +22,8 @@ import {
   partition,
   isObj,
   formatPageEntry,
-  getSnippet
+  getSnippet,
+  safeFun
 } from './helpers.js';
 
 import {
@@ -532,4 +534,39 @@ export function paginationForPagesArray(funPagination, rawData = []) {
     flatPages,
     pages
   };
+}
+
+export async function processView(config, file, locals) {
+  const filePath = vpath(file);
+  const name = config.views.engine.name ?? 'handlebars';
+  const eConfig = safeFun(config.views.engine.config);
+
+  try {
+    // the consolidated template engine
+    const engine = cons[name];
+    // expose the actual template engine being internally used
+    let actualEngine = await import(name);
+    actualEngine = actualEngine.default || actualEngine;
+    // expose
+    eConfig(actualEngine);
+
+    return await engine(filePath.full, locals);
+  } catch (err) {
+    // some engine error literals
+    const isParsingError = err.message.startsWith('Parse');
+    const lineNumberPrefix = 'line ';
+
+    if (isParsingError) {
+      const maybe = err.message.split(lineNumberPrefix)[1];
+      const line = parseInt(maybe, 10);
+      err.snippet = await getSnippet({
+        line,
+        title: `ProcessViewError ${err.message}`
+      }, file);
+      delete err.stack; // not needed here
+    }
+
+    err.name = 'ProcessViewError';
+    throw err;
+  }
 }

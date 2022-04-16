@@ -1,10 +1,9 @@
-import cons from 'consolidate';
 import browserSync from 'browser-sync';
 import chokidar from 'chokidar';
 import del from 'del';
 import { ESLint } from 'eslint';
 import * as marky from 'marky';
-import { bold, strikethrough, blue, yellow, green } from 'colorette';
+import { bold, strikethrough, blue, yellow } from 'colorette';
 
 // node
 import { Readable } from 'stream';
@@ -51,7 +50,8 @@ import {
   parseDynamicName,
   parsedNameKeysToPath,
   processEditedAsset,
-  paginationForPagesArray
+  paginationForPagesArray,
+  processView
 } from './utils/process.js';
 
 import {
@@ -74,7 +74,6 @@ import {
   getDataItemPageClosure,
   isDef,
   isObj,
-  getSnippet,
   timeWithUnit
 } from './utils/helpers.js';
 
@@ -92,41 +91,6 @@ debuglog(userEnv);
 // HELPERS
 // ++++++++++++++++
 
-async function compileView(config, file, locals) {
-  const filePath = vpath(file);
-  const name = config.views.engine.name ?? 'handlebars';
-  const eConfig = safeFun(config.views.engine.config);
-
-  try {
-    // the consolidated template engine
-    const engine = cons[name];
-    // expose the actual template engine being internally used
-    let actualEngine = await import(name);
-    actualEngine = actualEngine.default || actualEngine;
-    // expose
-    eConfig(actualEngine);
-
-    return await engine(filePath.full, locals);
-  } catch (err) {
-    // some engine error literals
-    const isParsingError = err.message.startsWith('Parse');
-    const lineNumberPrefix = 'line ';
-
-    if (isParsingError) {
-      const maybe = err.message.split(lineNumberPrefix)[1];
-      const line = parseInt(maybe, 10);
-      err.snippet = await getSnippet({
-        line,
-        title: `CompileViewError ${err.message}`
-      }, file);
-      delete err.stack; // not needed here
-    }
-
-    err.name = 'CompileViewError';
-    throw err;
-  }
-}
-
 async function funnel(config, file, flags = { onlyNames: false }) {
   debuglog('funnel data to', file);
 
@@ -135,7 +99,7 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 
   const withView = async(name, locals) => {
     if (flags.onlyNames) return;
-    return compileView(config, name, locals);
+    return processView(config, name, locals);
   };
 
   const getItemPage = getDataItemPageClosure(config);
@@ -287,7 +251,11 @@ async function funnel(config, file, flags = { onlyNames: false }) {
   }
 }
 
-async function getLocales(config, files) {
+// ++++++++++++++++
+// HANDLERS
+// ++++++++++++++++
+
+async function handleLocales(config, files) {
   marky.mark('get locales');
 
   const locales = files.locales;
@@ -348,7 +316,7 @@ async function getLocales(config, files) {
   return res;
 }
 
-async function parseViews(config, files, read) {
+async function handleViews(config, files, read) {
   debuglog('parsing src views');
 
   const views = config.bypass
@@ -477,7 +445,83 @@ async function handleStaticFiles(config, files) {
   }
 }
 
-async function getData(config, cacheBust = '') {
+function handleData(config, funneled) {
+  let previewKeys = [];
+  // reserved keys
+  funneled.meta = {};
+  funneled.partials = {};
+
+  if (Array.isArray(funneled.raw)) {
+    previewKeys = Object.keys(funneled.raw[0] ?? {});
+    const {
+      metaPages, pages, flatPages, paginate
+    } = paginationForPagesArray(funneled.pagination, funneled.raw);
+
+    funneled.pages = pages;
+    funneled.flatPages = flatPages;
+    funneled.meta.pages = metaPages;
+    // expedite
+    config.paginate = paginate;
+  }
+
+  if (isObj(funneled.raw)) {
+    previewKeys = Object.keys(funneled.raw || {});
+    const _fpages = funneled.pagination?.pages;
+
+    if (Array.isArray(_fpages)) {
+      const {
+        metaPages, pages, flatPages, paginate
+      } = paginationForPagesArray(funneled.pagination);
+
+      funneled.pages = pages;
+      funneled.flatPages = flatPages;
+      funneled.meta.pages = metaPages;
+      // expedite
+      config.paginate = paginate;
+    }
+  }
+
+  debuglog('preview funneled data', previewKeys);
+  return funneled;
+}
+
+async function unlinkFiles(config, toDel) {
+  marky.mark('deleting files');
+
+  // path to delete
+  const delp = vpath(toDel);
+  config.funneled = await readData(config);
+
+  const { names } = await funnel(config, delp.full, {
+    onlyNames: true
+  });
+
+  const srcBase = withSrcBase(config, false);
+  const fnms = names.map(nm => vpath([
+    config.owd,
+    config.output.path,
+    srcBase,
+    nm
+  ]).full);
+
+  try {
+    const deld = await del(fnms, { force: true });
+
+    deld.length && markyStop('deleting files', end => {
+      const label = strikethrough(delp.base);
+      const count = names.length;
+      debuglog(`"${label}" -`, count, `- ${timeWithUnit(end)}`);
+    });
+  } catch (err) {
+    throw err;
+  }
+}
+
+// ++++++++++++++++
+// READERS
+// ++++++++++++++++
+
+async function readData(config, cacheBust = '') {
   try {
     // if no config.funnel
     const dataPath = vpath([config.cwd, config.src, defaultConfig.funnelName], true).full;
@@ -490,7 +534,6 @@ async function getData(config, cacheBust = '') {
 
     const imported = await import(url);
     const userFunnel = 'default' in imported ? imported.default : imported;
-    let previewKeys = [];
 
     if (!userFunnel) {
       throw new Error(`invalid funneled data ${bold(userFunnel)}`);
@@ -501,41 +544,6 @@ async function getData(config, cacheBust = '') {
       raw: []
     }, userFunnel);
 
-    // reserved keys
-    funneled.meta = {};
-    funneled.partials = {};
-
-    if (Array.isArray(funneled.raw)) {
-      previewKeys = Object.keys(funneled.raw[0] ?? {});
-      const {
-        metaPages, pages, flatPages, paginate
-      } = paginationForPagesArray(funneled.pagination, funneled.raw);
-
-      funneled.pages = pages;
-      funneled.flatPages = flatPages;
-      funneled.meta.pages = metaPages;
-      // expedite
-      config.paginate = paginate;
-    }
-
-    if (isObj(funneled.raw)) {
-      previewKeys = Object.keys(funneled.raw || {});
-      const _fpages = funneled.pagination?.pages;
-
-      if (Array.isArray(_fpages)) {
-        const {
-          metaPages, pages, flatPages, paginate
-        } = paginationForPagesArray(funneled.pagination);
-
-        funneled.pages = pages;
-        funneled.flatPages = flatPages;
-        funneled.meta.pages = metaPages;
-        // expedite
-        config.paginate = paginate;
-      }
-    }
-
-    debuglog('preview funneled data', previewKeys);
     return funneled;
   } catch (err) {
     err.name = 'DataFunnelError';
@@ -601,38 +609,6 @@ async function readSource(src) {
   return classified;
 }
 
-async function unlinkFiles(config, toDel) {
-  marky.mark('deleting files');
-
-  // path to delete
-  const delp = vpath(toDel);
-  config.funneled = await getData(config);
-
-  const { names } = await funnel(config, delp.full, {
-    onlyNames: true
-  });
-
-  const srcBase = withSrcBase(config, false);
-  const fnms = names.map(nm => vpath([
-    config.owd,
-    config.output.path,
-    srcBase,
-    nm
-  ]).full);
-
-  try {
-    const deld = await del(fnms, { force: true });
-
-    deld.length && markyStop('deleting files', end => {
-      const label = strikethrough(delp.base);
-      const count = names.length;
-      debuglog(`"${label}" -`, count, `- ${timeWithUnit(end)}`);
-    });
-  } catch (err) {
-    throw err;
-  }
-}
-
 // +++++++++++++++++++++++++++++++
 // RUN WITH CONFIG
 // +++++++++++++++++++++++++++++++
@@ -685,7 +661,7 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
   const funCacheBust = config.watchFunnel ? Date.now() : null;
 
   if (!config.funneled || funCacheBust) {
-    config.funneled = await getData(config, funCacheBust);
+    config.funneled = await handleData(config, readData(config, funCacheBust));
   }
 
   const srcPath = vpath([config.cwd, config.src]);
@@ -699,7 +675,7 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
     return await processEditedAsset(config, asset, ext);
   }
 
-  const locales = await getLocales(config, read);
+  const locales = await handleLocales(config, read);
 
   if (!config.funneled.locales) {
     config.funneled.locales = locales.locales || {};
@@ -707,15 +683,11 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
   }
 
   try {
-    const parsed = await parseViews(config, files, read);
-    await handleStaticFiles(config, files);
     buildIndexes(config);
+    await handleViews(config, files, read);
+    await handleStaticFiles(config, files);
 
     safeFun(done)();
-    logger.success(bold(green(
-      `Built in ${timeWithUnit(markyStop('build time'))}`
-    )));
-    return parsed;
   } catch (e) {
     throw e;
   }
@@ -878,6 +850,10 @@ async function lint(config) {
     throw err;
   }
 }
+
+// ++++++++++++++++
+// EXPORT
+// ++++++++++++++++
 
 export default {
   gen: c => withConfig(c, gen),
