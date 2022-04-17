@@ -54,3 +54,5 @@ user may not want this behaviour
 It should verify files created adn files output based on test params
 
 - [] concat data from data files into data from jampass.data
+
+- [] recursively create data from data files 

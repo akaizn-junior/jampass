@@ -24,17 +24,29 @@
         </header>
         <ul>
           {{#each raw}}
-            <li id="#{{ slug }}-item">
-              <a href="#{{ slug }}">{{ title }}</a>
+            <li>
+              {{ name }}
+              <ul>
+                {{#each data}}
+                  <li id="#{{ slug }}-item">
+                    <a href="#{{ slug }}">{{ title }}</a>
+                  </li>
+                {{/each}}
+              </ul>
             </li>
           {{/each}}
         </ul>
       </section>
       <section class="content">
         {{#each raw}}
-          <article id="#{{ slug }}">
-            {{{ content }}}
-          </article>
+          <h1>{{ name }}</h1>
+          <div>
+            {{#each data}}
+              <article id="#{{ slug }}">
+                {{{ content }}}
+              </article>
+            {{/each}}
+          </div>
         {{/each}}
       </section>
     </main>

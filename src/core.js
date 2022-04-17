@@ -12,6 +12,7 @@ import sanitize from 'sanitize-html';
 // node
 import { Readable } from 'stream';
 import { EOL } from 'os';
+import path from 'path';
 
 // local
 
@@ -560,8 +561,29 @@ async function readData(config, fromFiles, cacheBust = '') {
     return funneled;
   } catch (err) {
     if (fromFiles.length) {
+      const top = {};
+
+      const link = (name, data) => {
+        if (!top[name]) {
+          top[name] = {
+            name,
+            data: [data]
+          };
+        } else {
+          top[name].data.push(data);
+        }
+      };
+
       for await (const f of fromFiles) {
         const p = vpath(f);
+
+        const properCwd = config.multi
+          ? config.cwd
+          : config.cwd + path.sep + config.src;
+
+        const fileBase = splitPathCwd(properCwd + DATA_PATH_NAME, f);
+        const fb = vpath(fileBase);
+
         const tmp = {
           _name: p.name,
           _slug: slugify(p.name, { lower: true }),
@@ -588,7 +610,13 @@ async function readData(config, fromFiles, cacheBust = '') {
         { content: tmp.content }
         );
 
-        dKeys.raw.push(data);
+        link(fb.dir, data);
+      }
+
+      for (const k in top) {
+        if (top[k]) {
+          dKeys.raw.push(top[k]);
+        }
       }
 
       dKeys.pages = dKeys.raw;
