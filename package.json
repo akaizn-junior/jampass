@@ -22,7 +22,9 @@
     "SSG",
     "static",
     "site",
-    "generator"
+    "generator",
+    "jamstack",
+    "web"
   ],
   "author": "Simao Nziaka",
   "license": "MIT",
