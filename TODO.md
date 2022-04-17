@@ -52,3 +52,5 @@ user may not want this behaviour
 
 - [] create testing tool that will generate files to test all different approaches jampass supports.
 It should verify files created adn files output based on test params
+
+- [] concat data from data files into data from jampass.data

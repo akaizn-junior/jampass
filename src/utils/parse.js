@@ -59,13 +59,15 @@ export async function validateHtml(config, html, opts) {
   }
 }
 
-function accessAsset(config, cheerioElement, attr) {
-  const linked = {};
-
-  const addLinked = (ext, data) => {
-    if (!linked[ext]) linked[ext] = [data];
-    if (!linked.ext) linked.ext = ext;
-    linked[ext].push(data);
+function captureAsset(config, cheerioElement, attr) {
+  const linked = { ext: [] };
+  const capture = (ext, data) => {
+    if (!linked[ext]) {
+      linked[ext] = [data];
+      linked.ext.push(ext);
+    } else {
+      linked[ext].push(data);
+    }
   };
 
   const isNotDataUrlOrThrow = str => {
@@ -94,7 +96,7 @@ function accessAsset(config, cheerioElement, attr) {
         ...el.attribs
       };
 
-      addLinked(assetPath.ext, data);
+      capture(assetPath.ext, data);
     } catch (err) {
       if (err.code !== 'ENOENT') {
         throw err;
@@ -109,13 +111,21 @@ export function parseHtmlLinked(config, code) {
   const $ = cheerio.load(code);
   const linked = {};
 
-  const hrefs = accessAsset(config, $('link[rel]'), 'href');
-  const scripts = accessAsset(config, $('script[src]'), 'src');
-  const imgs = accessAsset(config, $('img[src]'), 'src');
+  const capture = items => {
+    if (items) {
+      for (const e of items.ext) {
+        linked[e] = items[e];
+      }
+    }
+  };
 
-  hrefs && (linked[hrefs.ext] = hrefs[hrefs.ext]);
-  scripts && (linked[scripts.ext] = scripts[scripts.ext]);
-  imgs && (linked[imgs.ext] = imgs[imgs.ext]);
+  const hrefs = captureAsset(config, $('link[rel]'), 'href');
+  const scripts = captureAsset(config, $('script[src]'), 'src');
+  const imgs = captureAsset(config, $('img[src]'), 'src');
+
+  capture(hrefs);
+  capture(scripts);
+  capture(imgs);
 
   return linked;
 }

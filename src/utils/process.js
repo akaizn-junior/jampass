@@ -27,8 +27,7 @@ import {
 } from './helpers.js';
 
 import {
-  debuglog,
-  logger
+  debuglog
 } from './init.js';
 
 import { vpath, withSrcBase, splitPathCwd, pathDistance } from './path.js';
@@ -89,7 +88,7 @@ export function parseDynamicName(fnm) {
 
     // check the prefix for the page number first
     // the prefix has to be numberlike to pass as the page number
-    // her page can be the dwfault valur or a Number (including isNaN of course)
+    // the page can be the default value or a Number (including isNaN)
     let page = isNaN(prefix) ? DEFAULT_PAGE_NUMBER : parseInt(prefix, 10);
     // if no page found in the prefix check the page token
     if ((page === DEFAULT_PAGE_NUMBER || isNaN(page)) && localKeys.startsWith(PAGE_TOKEN)) {
@@ -358,6 +357,22 @@ export async function processCss(config, file, out, opts = {
   }
 }
 
+function processAny(config, file) {
+  const out = vpath([
+    config.owd,
+    config.output.path,
+    withSrcBase(config, false)
+  ]);
+
+  const properCwd = config.multi
+    ? config.cwd
+    : config.cwd + path.sep + config.src;
+
+  const fileBase = splitPathCwd(properCwd, file);
+  const dest = out.join(fileBase).full;
+  writeFile(file, dest);
+}
+
 function processAsset(ext, config, file, out) {
   const fns = {
     '.css': processCss,
@@ -367,15 +382,9 @@ function processAsset(ext, config, file, out) {
     '.mjs': processJs
   };
 
-  try {
-    const fun = fns[ext];
-    if (!fun) throw Error('unknown extension');
-
-    return fun(config, file, out);
-  } catch (err) {
-    logger.info(ext, 'is not yet supported as an asset');
-    throw err;
-  }
+  const fun = fns[ext];
+  return fun ? fun(config, file, out)
+    : processAny(config, file);
 }
 
 export async function processEditedAsset(config, asset, ext) {
