@@ -2,7 +2,7 @@
 
 ![Another one](./jampass-logo.png)
 
-A static site generator.
+A static web builder.
 
 ## Install
 

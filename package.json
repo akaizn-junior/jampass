@@ -1,7 +1,7 @@
 {
   "name": "jampass",
   "version": "0.0.2-edge.2.7",
-  "description": "A static site generator",
+  "description": "A static web builder",
   "main": "src/jampass.js",
   "type": "module",
   "bin": {
@@ -16,7 +16,9 @@
     "debug": "node --inspect src/cli serve -s demos/dev -D",
     "beginner": "node src/cli serve -s demos/beginner",
     "tidy": "node src/cli serve -s demos/tidy",
-    "with-config": "node src/cli serve -s demos/with-config"
+    "with-config": "node src/cli serve -s demos/with-config",
+    "docs-serve": "node src/cli serve -s site",
+    "docs-build": "node src/cli -s site -d docs"
   },
   "keywords": [
     "SSG",
