@@ -225,3 +225,25 @@ export function formatBytes(bytes, base = 10) {
   const fixed = (_bytes / exponent).toFixed(1);
   return fixed + units[index];
 }
+
+export function objectDeepMerge(...objects) {
+  return objects.reduce((acc, curr) => {
+    // verify all keys
+    const allKeys = Object.keys(curr);
+
+    for (let i = 0; i < allKeys.length; i++) {
+      const key = allKeys[i];
+      // does the current key exist already
+      const accValue = acc[key];
+      const value = curr[key];
+
+      if (isObj(accValue) && isObj(value)) {
+        acc[key] = objectDeepMerge(accValue, value);
+      } else {
+        acc[key] = value;
+      }
+    }
+
+    return acc;
+  }, {});
+}

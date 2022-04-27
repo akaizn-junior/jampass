@@ -17,8 +17,8 @@
     "beginner": "node src/cli serve -s demos/beginner",
     "tidy": "node src/cli serve -s demos/tidy",
     "with-config": "node src/cli serve -s demos/with-config",
-    "docs-serve": "node src/cli serve -s site",
-    "docs-build": "node src/cli -s site -d docs"
+    "doc-serve": "node src/cli serve -s site",
+    "doc-build": "node src/cli -s site -d docs"
   },
   "keywords": [
     "SSG",

@@ -23,14 +23,15 @@ import {
   isObj,
   formatPageEntry,
   getSnippet,
-  safeFun
+  safeFun,
+  isDef
 } from './helpers.js';
 
 import {
   debuglog
 } from './init.js';
 
-import { vpath, withSrcBase, splitPathCwd, pathDistance } from './path.js';
+import { vpath, withSrcBase, splitPathCwd, pathDistance, getProperCwd } from './path.js';
 import { writeFile, newReadable, asyncRead } from './stream.js';
 import * as keep from './keep.js';
 
@@ -57,17 +58,17 @@ export function accessProperty(obj, key, start = 0) {
   const j = list[i];
   const value = obj[j];
 
-  if (!value) throw Error(`data key "${j}" is undefined`);
+  if (!isDef(value)) throw Error(`data key "${j}" is undefined`);
 
-  if (list.length < MAX_RECURSIVE_ACESS) {
-    if (i < list.length - 1) {
-      return accessProperty(value, key, ++i);
-    } else {
-      return value;
-    }
-  } else {
+  if (list.length >= MAX_RECURSIVE_ACESS) {
     throw Error(`reached max recursive acess ${MAX_RECURSIVE_ACESS}`);
   }
+
+  if (i < list.length - 1) {
+    return accessProperty(value, key, ++i);
+  }
+
+  return value;
 }
 
 export function parseDynamicName(fnm) {
@@ -364,11 +365,7 @@ function processAny(config, file) {
     withSrcBase(config, false)
   ]);
 
-  const properCwd = config.multi
-    ? config.cwd
-    : config.cwd + path.sep + config.src;
-
-  const fileBase = splitPathCwd(properCwd, file);
+  const fileBase = splitPathCwd(getProperCwd(config), file);
   const dest = out.join(fileBase).full;
   writeFile(file, dest);
 }
@@ -390,13 +387,10 @@ function processAsset(ext, config, file, out) {
 export async function processEditedAsset(config, asset, ext) {
   debuglog('parsing asset');
   const srcBase = withSrcBase(config);
-  const properCwd = config.multi
-    ? config.cwd
-    : config.cwd + path.sep + config.src;
 
   for (let i = 0; i < asset.length; i++) {
     const file = asset[0];
-    const fileBase = splitPathCwd(properCwd, file);
+    const fileBase = splitPathCwd(getProperCwd(config), file);
     const exists = keep.get(fileBase);
 
     // only parse asset if it exists

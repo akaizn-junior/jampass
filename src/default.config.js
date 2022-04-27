@@ -10,6 +10,12 @@ export default {
   version: pkg.version,
   rcFileName: 'jampass.config.js',
   funnelName: 'jampass.data.js',
+  funnelDefaultKeys: {
+    raw: [],
+    meta: {},
+    pages: [],
+    partials: {}
+  },
   userOpts: {
     cwd: process.cwd(),
     src: '',

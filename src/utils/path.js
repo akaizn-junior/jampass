@@ -2,6 +2,9 @@
 import fs from 'fs';
 import path from 'path';
 
+import { isObj, objectDeepMerge, safeFun } from './helpers.js';
+import { DATA_PATH_NAME } from './constants.js';
+
 /**
  * Validates and parses a path
  * @param {string|string[]} p The path to parse or a list of paths
@@ -52,8 +55,10 @@ export async function getDirPaths(srcPath, dirType = 'sub', dir = '') {
           path.join(dir, dirent.name)
         );
       }
+
+      const pdir = path.parse(dir);
       return dirType === 'full' ? path.join(srcPath, dirent.name)
-        : path.join(path.parse(dir).dir, path.parse(dir).base, dirent.name);
+        : path.join(pdir.dir, pdir.base, dirent.name);
     });
 
     // something like an async flat map
@@ -144,12 +149,24 @@ export function splitPathCwd(cwd, s) {
   return s;
 }
 
+/**
+ * Get the src folder depending on if outputing is in multi mode
+ */
 export function withSrcBase(config, withCwd = true) {
   // allow multiple folders in the output directory
   if (config.multi) {
     return vpath([withCwd ? config.cwd : '', config.src]).base;
   }
   return '';
+}
+
+/**
+ * Get the correct CWD path depending on if outputing is in multi mode
+ */
+export function getProperCwd(config) {
+  const properCwd = config.multi ? config.cwd
+    : config.cwd + path.sep + config.src;
+  return properCwd;
 }
 
 export function withViewsPath(config) {
@@ -210,4 +227,46 @@ export async function createDir(dest, done = () => {}, opts = {}) {
       }
     }
   }
+}
+
+/**
+ * Transforms a path to an object
+ * @param {string} p The path to transform
+ */
+export function pathToObject(p, append = () => {}) {
+  if (typeof p !== 'string') throw Error('the path must be a string');
+  const list = p.split(path.sep);
+
+  // allow customization of output data
+  const custom = () => {
+    const _f = safeFun(append);
+    const _fout = _f(); // formatted output
+    return isObj(_fout) ? _fout : {};
+  };
+
+  // build new object containing
+  // data from previous iteration
+  // allow user customization of data
+  return list.reduceRight((acc, name, i, arr) => {
+    // file
+    if (i === arr.length - 1) {
+      acc.data = custom() ?? name;
+      return acc;
+    }
+
+    // folder
+    return {
+      root: arr[0],
+      [name]: name,
+      ...acc
+    };
+  }, {});
+}
+
+export function fileTreeObject(config, files) {
+  return files.reduce((acc, f) => {
+    const relative = splitPathCwd(getProperCwd(config) + DATA_PATH_NAME, f);
+    const obj = pathToObject(relative);
+    return objectDeepMerge(acc, obj);
+  }, {});
 }

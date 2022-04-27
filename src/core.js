@@ -12,7 +12,7 @@ import sanitize from 'sanitize-html';
 // node
 import { Readable } from 'stream';
 import { EOL } from 'os';
-import path from 'path';
+import util from 'util';
 
 // local
 
@@ -49,7 +49,9 @@ import {
   getDirPaths,
   withSrcBase,
   splitPathCwd,
-  withViewsPath
+  withViewsPath,
+  pathToObject,
+  getProperCwd
 } from './utils/path.js';
 
 import {
@@ -496,7 +498,7 @@ async function unlinkFiles(config, toDel) {
 
   // path to delete
   const delp = vpath(toDel);
-  config.funneled = await readData(config);
+  config.funneled = await readDataJs(config);
 
   const { names } = await funnel(config, delp.full, {
     onlyNames: true
@@ -527,14 +529,58 @@ async function unlinkFiles(config, toDel) {
 // READERS
 // ++++++++++++++++
 
-async function readData(config, fromFiles, cacheBust = '') {
-  // default keys
-  const dKeys = {
-    raw: [],
-    meta: {},
-    pages: [],
-    partials: {}
-  };
+async function readDataFiles(config, files) {
+  const dKeys = defaultConfig.funnelDefaultKeys;
+  // and the h is for helper
+  async function h(f) {
+    const p = vpath(f);
+
+    const tmp = {
+      _name: p.name,
+      _slug: slugify(p.name, { lower: true }),
+      _read: await asyncRead(p.full)
+    };
+
+    tmp.matter = matter(tmp._read);
+
+    if (p.ext === '.md') {
+      tmp.content = sanitize(marked(tmp.matter.content ?? ''));
+    }
+
+    if (p.ext === '.txt') {
+      tmp.content = sanitize(tmp.matter.content);
+    }
+
+    const data = Object.assign({
+      name: tmp._name,
+      slug: tmp._slug
+    },
+    // override default keys
+    tmp.matter.data,
+    // must override any 'content' key in the front matter
+    { content: tmp.content }
+    );
+
+    return { data };
+  }
+
+  const filesData = files.map(async f => {
+    // remove the cwd to get the relative path
+    const relative = splitPathCwd(getProperCwd(config) + DATA_PATH_NAME, f);
+    const dataRead = await h(f);
+    const r = pathToObject(relative, () => dataRead.data);
+    return r;
+  });
+
+  dKeys.raw = await Promise.all(filesData);
+  dKeys.pages = dKeys.raw;
+
+  console.log(util.inspect(dKeys, true, 50));
+  return dKeys;
+}
+
+async function readDataJs(config, fromFiles, cacheBust = '') {
+  const dKeys = defaultConfig.funnelDefaultKeys;
 
   try {
     // if no config.funnel
@@ -558,75 +604,22 @@ async function readData(config, fromFiles, cacheBust = '') {
       raw: dKeys.raw
     }, userFunnel);
 
-    return funneled;
+    const fromDataFiles = await readDataFiles(config, fromFiles);
+
+    // merge data from datafiles and data.js.
+    // data.js data has priority
+    const merged = Object.assign({}, fromDataFiles, funneled);
+
+    return merged;
   } catch (err) {
     if (fromFiles.length) {
-      const top = {};
-
-      const link = (name, data) => {
-        if (!top[name]) {
-          top[name] = {
-            name,
-            data: [data]
-          };
-        } else {
-          top[name].data.push(data);
-        }
-      };
-
-      for await (const f of fromFiles) {
-        const p = vpath(f);
-
-        const properCwd = config.multi
-          ? config.cwd
-          : config.cwd + path.sep + config.src;
-
-        const fileBase = splitPathCwd(properCwd + DATA_PATH_NAME, f);
-        const fb = vpath(fileBase);
-
-        const tmp = {
-          _name: p.name,
-          _slug: slugify(p.name, { lower: true }),
-          _read: await asyncRead(p.full)
-        };
-
-        tmp.matter = matter(tmp._read);
-
-        if (p.ext === '.md') {
-          tmp.content = sanitize(marked(tmp.matter.content ?? ''));
-        }
-
-        if (p.ext === '.txt') {
-          tmp.content = sanitize(tmp.matter.content);
-        }
-
-        const data = Object.assign({
-          name: tmp._name,
-          slug: tmp._slug
-        },
-        // override default keys
-        tmp.matter.data,
-        // must override any 'content' key in the front matter
-        { content: tmp.content }
-        );
-
-        link(fb.dir, data);
-      }
-
-      for (const k in top) {
-        if (top[k]) {
-          dKeys.raw.push(top[k]);
-        }
-      }
-
-      dKeys.pages = dKeys.raw;
-      return dKeys;
+      return readDataFiles(config, fromFiles);
     }
 
     err.name = 'DataFunnelError';
     if (err.code === 'ENOENT') {
       // if no 'jampass.data.js' found
-      // or data file read
+      // or any data file read
       // return default keys with default values
       return dKeys;
     }
@@ -737,7 +730,7 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
   const funCacheBust = config.watchFunnel ? Date.now() : null;
 
   if (!config.funneled || funCacheBust) {
-    config.funneled = handleData(config, await readData(config, read.data, funCacheBust));
+    config.funneled = handleData(config, await readDataJs(config, read.data, funCacheBust));
   }
 
   // files read from source or currently being watched

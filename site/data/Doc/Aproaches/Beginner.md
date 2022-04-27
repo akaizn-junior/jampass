@@ -1,0 +1,5 @@
+---
+title: Beginner
+---
+
+# Beginner approach
