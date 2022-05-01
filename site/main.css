@@ -39,10 +39,15 @@ header {
 
 .menu ul {
   list-style-type: none;
+  padding: 2px;
+}
+
+.menu li:first-child {
+  padding-top: 5px;
 }
 
 .menu li {
-  padding: 3px;
+  padding: 2px 5px;
   text-transform: capitalize;
 }
 

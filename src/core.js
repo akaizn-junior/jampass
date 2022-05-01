@@ -49,9 +49,7 @@ import {
   getDirPaths,
   withSrcBase,
   splitPathCwd,
-  withViewsPath,
-  pathToObject,
-  getProperCwd
+  withViewsPath
 } from './utils/path.js';
 
 import {
@@ -83,7 +81,7 @@ import {
   isDef,
   isObj,
   timeWithUnit,
-  objectDeepMerge
+  buildDataFileTree
 } from './utils/helpers.js';
 
 import * as bSync from './utils/server.middleware.js';
@@ -535,10 +533,14 @@ async function readDataFiles(config, files) {
   // and the h is for helper
   async function h(f) {
     const p = vpath(f);
+    const slug = slugify(p.name, { lower: true });
 
     const tmp = {
       _name: p.name,
-      _slug: slugify(p.name, { lower: true }),
+      _slug: {
+        name: slug,
+        hash: `#${slug}`
+      },
       _read: await asyncRead(p.full)
     };
 
@@ -562,22 +564,13 @@ async function readDataFiles(config, files) {
     { content: tmp.content }
     );
 
-    return { data };
+    return data;
   }
 
-  const filesData = files.reduce(async(acc, f) => {
-    const relative = splitPathCwd(getProperCwd(config) + DATA_PATH_NAME, f);
-    const res = await h(f);
-    const obj = pathToObject(relative, () => res);
-    // console.log(obj);
-    return objectDeepMerge(await acc, obj);
-  }, {});
+  const filesData = await buildDataFileTree(config, files, h);
 
-  dKeys.raw = [await filesData];
+  dKeys.raw = filesData;
   dKeys.pages = dKeys.raw;
-
-  console.log(util.inspect(dKeys.raw, true, 50));
-
   return dKeys;
 }
 

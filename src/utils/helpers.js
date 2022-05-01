@@ -1,6 +1,7 @@
 import { minify as htmlMinifier } from 'html-minifier-terser';
 import * as marky from 'marky';
 import { bold } from 'colorette';
+import slugify from 'slugify';
 
 // node
 import crypto from 'crypto';
@@ -11,9 +12,10 @@ import path from 'path';
 
 import { asyncRead } from './stream.js';
 import * as keep from './keep.js';
-import { DEFAULT_PAGE_NUMBER, PARTIALS_PATH_NAME, PARTIALS_TOKEN } from './constants.js';
-import { vpath } from './path.js';
+import { DEFAULT_PAGE_NUMBER, PARTIALS_PATH_NAME, PARTIALS_TOKEN, DATA_PATH_NAME } from './constants.js';
+import { vpath, splitPathCwd, getProperCwd } from './path.js';
 import { generateCodeSnippet } from './process.js';
+import { } from './helpers.js';
 
 export const isDef = val => val !== null && val !== void 0;
 
@@ -227,43 +229,20 @@ export function formatBytes(bytes, base = 10) {
   return fixed + units[index];
 }
 
-export function objectDeepMerge(...objects) {
-  const res = objects.reduce((acc, curr) => {
-    // verify all keys
-    for (const key in curr) {
-      // does the current key exist already
-      const accValue = acc[key];
-      const value = curr[key];
-
-      acc[key] = value;
-
-      if (Array.isArray(value)) {
-        acc[key] = (accValue ?? []).concat(...value);
-      }
-
-      if (isObj(value)) {
-        acc[key] = objectDeepMerge(value, accValue);
-      }
-    }
-
-    return acc;
-  }, {});
-
-  return res;
-}
-
-export function buildDataFileTree(paths, append) {
+export async function buildDataFileTree(config, paths, append) {
   const res = { files: [] };
 
   // allow customization of output data
-  const custom = () => {
+  const custom = async f => {
     const _f = safeFun(append);
-    const _fout = _f(); // formatted output
+    const _fout = await _f(f); // formatted output
     return isObj(_fout) ? _fout : {};
   };
 
   for (const p of paths) {
-    const names = p.split(path.sep);
+    const relative = splitPathCwd(getProperCwd(config) + DATA_PATH_NAME, p);
+    const names = relative.split(path.sep);
+    const extra = await custom(p);
 
     names.reduce((acc, name, i, arr) => {
       // no empty names
@@ -274,16 +253,24 @@ export function buildDataFileTree(paths, append) {
         // remove extension from name
         acc.files.push({
           name: vpath(name).name,
-          ...custom()
+          ...extra
         });
         return acc;
       }
 
+      // slug
+      const slug = slugify(name, { lower: true });
+
       if (!acc[name]) {
         // build  the object for the next recursive step
         acc[name] = { files: [] };
+
         // push to files using the reference from the previous recursive step
-        acc.files.push({ name, files: acc[name].files });
+        acc.files.push({
+          name,
+          slug,
+          files: acc[name].files
+        });
       }
 
       return acc[name];

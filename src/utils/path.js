@@ -2,8 +2,6 @@
 import fs from 'fs';
 import path from 'path';
 
-import { isObj, safeFun } from './helpers.js';
-
 /**
  * Validates and parses a path
  * @param {string|string[]} p The path to parse or a list of paths
@@ -226,42 +224,4 @@ export async function createDir(dest, done = () => {}, opts = {}) {
       }
     }
   }
-}
-
-/**
- * Transforms a path to an object
- * @param {string} p The path to transform
- */
-export function pathToObject(p, append = () => {}) {
-  if (typeof p !== 'string') throw Error('the path must be a string');
-  const list = p.split(path.sep);
-
-  // allow customization of output data
-  const custom = () => {
-    const _f = safeFun(append);
-    const _fout = _f(); // formatted output
-    return isObj(_fout) ? _fout : {};
-  };
-
-  // build new object containing
-  // data from previous iteration
-  // allow user customization of data
-  return list.reduceRight((acc, name, i, arr) => {
-    // no empty names
-    if (name === '') return acc;
-
-    // file
-    if (i === arr.length - 1) {
-      // remove extension from name
-      return {
-        name: vpath(name).name,
-        ...custom()
-      };
-    }
-
-    return {
-      name,
-      files: [acc]
-    };
-  }, {});
 }

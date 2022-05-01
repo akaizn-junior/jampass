@@ -24,22 +24,19 @@
         </header>
         <ul>
           {{#each raw}}
-            <li>{{ Doc.name }}
+            <li>
+              <a href="{{ slug.name }}">{{ name }}</a>
               <ul>
-                <li>{{ Doc.Approaches.name }}
-                  <ul>
-                    {{#each Doc.Approaches.files}}
-                      <li id="#{{ data.name }}-item">
-                        <a href="#{{ data.slug }}">{{ data.title }}</a>
-                      </li>
-                    {{/each}}
-                  </ul>
-                </li>
-              </ul>
-              <ul>
-                {{#each Doc.files}}
-                  <li id="#{{ data.name }}-item">
-                    <a href="#{{ data.slug }}">{{ data.title }}</a>
+                {{#each files}}
+                  <li>
+                    <a href="{{ slug.hash }}">{{ name }}</a>
+                    <ul>
+                      {{#each files}}
+                        <li>
+                          <a href="{{ slug.hash }}">{{ name }}</a>
+                        </li>
+                      {{/each}}
+                    </ul>
                   </li>
                 {{/each}}
               </ul>
