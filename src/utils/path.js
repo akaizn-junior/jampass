@@ -2,8 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { isObj, objectDeepMerge, safeFun } from './helpers.js';
-import { DATA_PATH_NAME } from './constants.js';
+import { isObj, safeFun } from './helpers.js';
 
 /**
  * Validates and parses a path
@@ -248,25 +247,21 @@ export function pathToObject(p, append = () => {}) {
   // data from previous iteration
   // allow user customization of data
   return list.reduceRight((acc, name, i, arr) => {
+    // no empty names
+    if (name === '') return acc;
+
     // file
     if (i === arr.length - 1) {
-      acc.data = custom() ?? name;
-      return acc;
+      // remove extension from name
+      return {
+        name: vpath(name).name,
+        ...custom()
+      };
     }
 
-    // folder
     return {
-      root: arr[0],
-      [name]: name,
-      ...acc
+      name,
+      files: [acc]
     };
-  }, {});
-}
-
-export function fileTreeObject(config, files) {
-  return files.reduce((acc, f) => {
-    const relative = splitPathCwd(getProperCwd(config) + DATA_PATH_NAME, f);
-    const obj = pathToObject(relative);
-    return objectDeepMerge(acc, obj);
   }, {});
 }

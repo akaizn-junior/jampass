@@ -5,6 +5,7 @@ import { bold } from 'colorette';
 // node
 import crypto from 'crypto';
 import { EOL } from 'os';
+import path from 'path';
 
 // local
 
@@ -227,23 +228,67 @@ export function formatBytes(bytes, base = 10) {
 }
 
 export function objectDeepMerge(...objects) {
-  return objects.reduce((acc, curr) => {
+  const res = objects.reduce((acc, curr) => {
     // verify all keys
-    const allKeys = Object.keys(curr);
-
-    for (let i = 0; i < allKeys.length; i++) {
-      const key = allKeys[i];
+    for (const key in curr) {
       // does the current key exist already
       const accValue = acc[key];
       const value = curr[key];
 
-      if (isObj(accValue) && isObj(value)) {
-        acc[key] = objectDeepMerge(accValue, value);
-      } else {
-        acc[key] = value;
+      acc[key] = value;
+
+      if (Array.isArray(value)) {
+        acc[key] = (accValue ?? []).concat(...value);
+      }
+
+      if (isObj(value)) {
+        acc[key] = objectDeepMerge(value, accValue);
       }
     }
 
     return acc;
   }, {});
+
+  return res;
+}
+
+export function buildDataFileTree(paths, append) {
+  const res = { files: [] };
+
+  // allow customization of output data
+  const custom = () => {
+    const _f = safeFun(append);
+    const _fout = _f(); // formatted output
+    return isObj(_fout) ? _fout : {};
+  };
+
+  for (const p of paths) {
+    const names = p.split(path.sep);
+
+    names.reduce((acc, name, i, arr) => {
+      // no empty names
+      if (!name) return acc;
+
+      // last item is the filename
+      if (i === arr.length - 1) {
+        // remove extension from name
+        acc.files.push({
+          name: vpath(name).name,
+          ...custom()
+        });
+        return acc;
+      }
+
+      if (!acc[name]) {
+        // build  the object for the next recursive step
+        acc[name] = { files: [] };
+        // push to files using the reference from the previous recursive step
+        acc.files.push({ name, files: acc[name].files });
+      }
+
+      return acc[name];
+    }, res);
+  }
+
+  return res.files;
 }

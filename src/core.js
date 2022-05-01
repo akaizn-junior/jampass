@@ -82,7 +82,8 @@ import {
   getDataItemPageClosure,
   isDef,
   isObj,
-  timeWithUnit
+  timeWithUnit,
+  objectDeepMerge
 } from './utils/helpers.js';
 
 import * as bSync from './utils/server.middleware.js';
@@ -498,7 +499,7 @@ async function unlinkFiles(config, toDel) {
 
   // path to delete
   const delp = vpath(toDel);
-  config.funneled = await readDataJs(config);
+  config.funneled = await readData(config);
 
   const { names } = await funnel(config, delp.full, {
     onlyNames: true
@@ -564,22 +565,23 @@ async function readDataFiles(config, files) {
     return { data };
   }
 
-  const filesData = files.map(async f => {
-    // remove the cwd to get the relative path
+  const filesData = files.reduce(async(acc, f) => {
     const relative = splitPathCwd(getProperCwd(config) + DATA_PATH_NAME, f);
-    const dataRead = await h(f);
-    const r = pathToObject(relative, () => dataRead.data);
-    return r;
-  });
+    const res = await h(f);
+    const obj = pathToObject(relative, () => res);
+    // console.log(obj);
+    return objectDeepMerge(await acc, obj);
+  }, {});
 
-  dKeys.raw = await Promise.all(filesData);
+  dKeys.raw = [await filesData];
   dKeys.pages = dKeys.raw;
 
-  console.log(util.inspect(dKeys, true, 50));
+  console.log(util.inspect(dKeys.raw, true, 50));
+
   return dKeys;
 }
 
-async function readDataJs(config, fromFiles, cacheBust = '') {
+async function readData(config, fromFiles, cacheBust = '') {
   const dKeys = defaultConfig.funnelDefaultKeys;
 
   try {
@@ -730,7 +732,7 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
   const funCacheBust = config.watchFunnel ? Date.now() : null;
 
   if (!config.funneled || funCacheBust) {
-    config.funneled = handleData(config, await readDataJs(config, read.data, funCacheBust));
+    config.funneled = handleData(config, await readData(config, read.data, funCacheBust));
   }
 
   // files read from source or currently being watched
