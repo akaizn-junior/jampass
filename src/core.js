@@ -12,7 +12,6 @@ import sanitize from 'sanitize-html';
 // node
 import { Readable } from 'stream';
 import { EOL } from 'os';
-import util from 'util';
 
 // local
 
@@ -844,7 +843,7 @@ async function serve(config) {
   const serverRoot = vpath([config.owd, config.output.path]).full;
 
   const fallbackPagePath = config.devServer.pages['404'];
-  const port = config.devServer.port ?? 2000;
+  const port = config.devServer.port || 2000;
   const host = 'http://localhost';
   const entry = config.src;
 
