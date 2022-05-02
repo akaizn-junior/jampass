@@ -14,7 +14,8 @@ export default {
     raw: [],
     meta: {},
     pages: [],
-    partials: {}
+    partials: {},
+    fromFiles: []
   },
   userOpts: {
     cwd: process.cwd(),

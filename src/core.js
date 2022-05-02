@@ -140,6 +140,7 @@ async function funnel(config, file, flags = { onlyNames: false }) {
 
     const _locals = {
       raw: locals.raw,
+      fromFiles: locals.fromFiles,
       locales: locals.locales,
       meta: locals.meta,
       partials: locals.partials,
@@ -529,7 +530,6 @@ async function unlinkFiles(config, toDel) {
 // ++++++++++++++++
 
 async function readDataFiles(config, files) {
-  const dKeys = defaultConfig.funnelDefaultKeys;
   // and the h is for helper
   async function h(f) {
     const p = vpath(f);
@@ -541,6 +541,7 @@ async function readDataFiles(config, files) {
         name: slug,
         hash: `#${slug}`
       },
+      content: '',
       _read: await asyncRead(p.full)
     };
 
@@ -551,7 +552,7 @@ async function readDataFiles(config, files) {
     }
 
     if (p.ext === '.txt') {
-      tmp.content = sanitize(tmp.matter.content);
+      tmp.content = sanitize(tmp.matter.content ?? '');
     }
 
     const data = Object.assign({
@@ -569,9 +570,7 @@ async function readDataFiles(config, files) {
 
   const filesData = await buildDataFileTree(config, files, h);
 
-  dKeys.raw = filesData;
-  dKeys.pages = dKeys.raw;
-  return dKeys;
+  return filesData;
 }
 
 async function readData(config, fromFiles, cacheBust = '') {
@@ -599,16 +598,13 @@ async function readData(config, fromFiles, cacheBust = '') {
       raw: dKeys.raw
     }, userFunnel);
 
-    const fromDataFiles = await readDataFiles(config, fromFiles);
+    funneled.fromFiles = await readDataFiles(config, fromFiles);
 
-    // merge data from datafiles and data.js.
-    // data.js data has priority
-    const merged = Object.assign({}, fromDataFiles, funneled);
-
-    return merged;
+    return funneled;
   } catch (err) {
     if (fromFiles.length) {
-      return readDataFiles(config, fromFiles);
+      dKeys.fromFiles = await readDataFiles(config, fromFiles);
+      return dKeys;
     }
 
     err.name = 'DataFunnelError';
