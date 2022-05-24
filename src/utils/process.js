@@ -251,17 +251,17 @@ export async function processJs(config, file, out, opts = {}) {
   };
 }
 
-const getPostCssPlugins = config => {
-  const plugins = [
+const getPostCssPlugins = async config => {
+  let plugins = [
     postcssPresetEnv()
   ];
 
   if (!config.isDev) {
-    plugins.concat([
+    plugins = plugins.concat([
       cssnano(),
       autoprefixer(),
       postCssHash({
-        manifest: tmpFile('manifest.json', 'assets')
+        manifest: await tmpFile('manifest.json', 'assets')
       })
     ]);
   }
@@ -272,7 +272,7 @@ const getPostCssPlugins = config => {
 async function processScss(config, file, out) {
   try {
     const code = await asyncRead(file);
-    const processed = await postcss(getPostCssPlugins(config))
+    const processed = await postcss(await getPostCssPlugins(config))
       .process(code, { from: file, to: out, syntax: postCssScss });
 
     return {
@@ -299,7 +299,7 @@ async function processScss(config, file, out) {
 async function processSass(config, file, out) {
   try {
     const code = await asyncRead(file);
-    const processed = await postcss(getPostCssPlugins(config))
+    const processed = await postcss(await getPostCssPlugins(config))
       .process(code, { from: file, to: out, syntax: postCssSass });
 
     return {
@@ -333,7 +333,7 @@ export async function processCss(config, file, out, opts = {
       code = await asyncRead(file);
     }
 
-    const processed = await postcss(getPostCssPlugins(config))
+    const processed = await postcss(await getPostCssPlugins(config))
       .process(code, { from: file, to: out });
 
     return {
