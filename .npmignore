@@ -1,7 +1,16 @@
-test
 node_modules
+
+# dev config
 .eslintrc
 .editorconfig
 jampass.config.js
 .eslintignore
+.env
+
+# test files
+demos
+site
 manifest.json
+
+# md
+TODO.md
