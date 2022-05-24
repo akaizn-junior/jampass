@@ -1,6 +1,6 @@
 {
   "name": "jampass",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A static web builder",
   "main": "src/jampass.js",
   "type": "module",
