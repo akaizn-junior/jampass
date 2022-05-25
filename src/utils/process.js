@@ -10,6 +10,7 @@ import autoprefixer from 'autoprefixer';
 import postCssHash from 'postcss-hash';
 import postCssSass from 'postcss-sass';
 import postCssScss from 'postcss-scss';
+import postCssUrl from 'postcss-url';
 
 // node
 import { EOL } from 'os';
@@ -252,18 +253,22 @@ export async function processJs(config, file, out, opts = {}) {
 }
 
 const getPostCssPlugins = async config => {
-  let plugins = [
-    postcssPresetEnv()
+  const plugins = [
+    postcssPresetEnv(),
+    postCssUrl([{
+      url: 'copy',
+      assetsPath: path.join(config.owd, 'assets'),
+      useHash: !config.isDev
+    }])
   ];
 
   if (!config.isDev) {
-    plugins = plugins.concat([
-      cssnano(),
-      autoprefixer(),
-      postCssHash({
-        manifest: await tmpFile('manifest.json', 'assets')
-      })
-    ]);
+    plugins.push(cssnano());
+    plugins.push(autoprefixer());
+    plugins.push(autoprefixer());
+    plugins.push(postCssHash({
+      manifest: await tmpFile('manifest.json', 'assets')
+    }));
   }
 
   return plugins;
