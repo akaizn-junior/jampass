@@ -473,7 +473,7 @@ function handleData(config, funneled) {
 
   if (isObj(funneled.raw)) {
     previewKeys = Object.keys(funneled.raw || {});
-    const _fpages = funneled.pagination?.pages;
+    const _fpages = funneled.pagination?.pages || [];
 
     if (Array.isArray(_fpages)) {
       const {

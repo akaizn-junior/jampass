@@ -512,13 +512,14 @@ export function paginationForPagesArray(funPagination, rawData = []) {
   }
 
   // pagination pages or raw array for pages
-  const rdata = pages && Array.isArray(pages) ? pages : rawData || [];
+  const rdata = pages && Array.isArray(pages) && pages.length
+    ? pages : rawData || [];
   paginate = every && typeof every === 'number' && every <= rdata.length;
 
   // pages is a list of lists partitioned in 'every' chunks
   pages = paginate
     ? partition(rdata, every)
-    : [rdata];
+    : rdata.length ? [rdata] : [];
 
   // rdata is assumed to be a flat array, but for sanity sake
   // and since this is a user input just flatten it
