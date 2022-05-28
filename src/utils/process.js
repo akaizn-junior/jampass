@@ -253,18 +253,24 @@ export async function processJs(config, file, out, opts = {}) {
 }
 
 const getPostCssPlugins = async config => {
+  const assetsPath = vpath([
+    config.owd,
+    config.output.path,
+    withSrcBase(config, false),
+    'assets'
+  ]).full;
+
   const plugins = [
     postcssPresetEnv(),
     postCssUrl([{
       url: 'copy',
-      assetsPath: path.join(config.owd, 'assets'),
+      assetsPath,
       useHash: !config.isDev
     }])
   ];
 
   if (!config.isDev) {
     plugins.push(cssnano());
-    plugins.push(autoprefixer());
     plugins.push(autoprefixer());
     plugins.push(postCssHash({
       manifest: await tmpFile('manifest.json', 'assets')

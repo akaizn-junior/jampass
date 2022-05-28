@@ -29,7 +29,7 @@ export const tmpdir = (() => {
   );
 
   const assets = createDirSync(
-    path.join(os.tmpdir(), defaultconfig.name, 'assets')
+    path.join(os.tmpdir(), defaultconfig.name, 'tmpassets')
   );
 
   return {
