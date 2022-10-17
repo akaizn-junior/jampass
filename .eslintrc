@@ -6,7 +6,7 @@
   "parser": "@babel/eslint-parser",
   "parserOptions": {
     "sourceType": "module",
-    "ecmaVersion": 11,
+    "ecmaVersion": 12,
     "requireConfigFile": false
   },
   "settings": {
@@ -32,7 +32,6 @@
     "no-inner-declarations": 1,
     "no-invalid-regexp": 2,
     "no-irregular-whitespace": 2,
-    "no-negated-in-lhs": 2,
     "no-obj-calls": 2,
     "no-prototype-builtins": 0,
     "no-regex-spaces": 2,
@@ -41,7 +40,6 @@
     "no-unreachable": 2,
     "no-unsafe-finally": 2,
     "use-isnan": 2,
-    "valid-jsdoc": 0,
     "valid-typeof": 2,
 
     "accessor-pairs": 0,
@@ -80,14 +78,12 @@
     "no-magic-numbers": 0,
     "no-multi-spaces": 2,
     "no-multi-str": 0,
-    "no-native-reassign": 2,
     "no-new-func": 1,
     "no-new-wrappers": 0,
     "no-new": 2,
     "no-octal-escape": 0,
     "no-octal": 0,
     "no-param-reassign": 0,
-    "no-process-env": 0,
     "no-proto": 2,
     "no-redeclare": 2,
     "no-return-assign": 2,
@@ -113,7 +109,6 @@
     "strict": 0,
 
     "init-declarations": 0,
-    "no-catch-shadow": 2,
     "no-delete-var": 2,
     "no-label-var": 2,
     "no-restricted-globals": 0,
@@ -125,16 +120,7 @@
     "no-unused-vars": 2,
     "no-use-before-define": 0,
 
-    "callback-return": 2,
-    "global-require": 0,
-    "handle-callback-err": 2,
-    "no-mixed-requires": 2,
-    "no-new-require": 2,
-    "no-path-concat": 2,
-    "no-process-exit": 2,
     "no-restricted-imports": 0,
-    "no-restricted-modules": 0,
-    "no-sync": 0,
 
     "array-bracket-spacing": [2, "never"],
     "block-spacing": 0,
@@ -147,7 +133,7 @@
     "eol-last": 2,
     "func-names": 0,
     "func-style": 0,
-    "id-blacklist": 0,
+
     "id-length": 0,
     "id-match": 0,
     "indent": ["error", 2],
@@ -174,8 +160,7 @@
     "max-statements-per-line": 0,
     "new-cap": 0,
     "new-parens": 2,
-    "newline-after-var": 0,
-    "newline-before-return": 0,
+
     "newline-per-chained-call": [
       "error",
       {"ignoreChainWithDepth": 2}
@@ -193,7 +178,7 @@
     "no-new-object": 2,
     "no-plusplus": 0,
     "no-restricted-syntax": 0,
-    "no-spaced-func": 2,
+
     "no-ternary": 0,
 
     "no-underscore-dangle": 0,
@@ -209,7 +194,7 @@
     "padded-blocks": [2, "never"],
     "quote-props": [2, "as-needed"],
     "quotes": [2, "single", { "avoidEscape": true }],
-    "require-jsdoc": 0,
+
     "semi-spacing": 2,
     "sort-imports": 0,
     "semi": 2,
@@ -242,7 +227,7 @@
     "object-shorthand": 1,
     "prefer-arrow-callback": 2,
     "prefer-const": 2,
-    "prefer-reflect": 0,
+
     "prefer-rest-params": 1,
     "prefer-spread": 1,
     "prefer-template": 1,

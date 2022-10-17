@@ -1,1 +1,0 @@
-# Jampass tidy approach

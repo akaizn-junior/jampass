@@ -20,6 +20,9 @@ import { } from './helpers.js';
 export const isDef = val => val !== null && val !== void 0;
 
 export const isObj = o => isDef(o) && typeof o === 'object' && o.constructor === Object;
+
+export const isString = o => isDef(o) && typeof o === 'string';
+
 export const safeFun = cb => isDef(cb) && typeof cb === 'function' ? cb : () => {};
 
 export function markyStop(name, log = null) {

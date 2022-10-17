@@ -11,7 +11,7 @@ import * as keep from './keep.js';
 
 export async function buildIndexes(config) {
   const { indexes } = config.funneled;
-  const { indexKeyMaxSize, resultUrl } = config.build.search;
+  const { indexKeyMaxSize, resultUrl } = config.build.default.search;
 
   if (!indexes || !indexes.length) return;
 

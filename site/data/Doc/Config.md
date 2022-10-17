@@ -1,5 +1,0 @@
----
-title: Config
----
-
-# Config Jampass

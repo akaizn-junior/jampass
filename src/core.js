@@ -17,7 +17,7 @@ import { EOL } from 'os';
 
 import {
   validateAndUpdateHtml
-} from './utils/parse.js';
+} from './util/parse.js';
 
 import {
   LOOP_TOKEN,
@@ -38,10 +38,10 @@ import {
   LOCALES_PATH_EXT,
   VIEWS_PATH_EXT,
   DATA_PATH_EXT
-} from './utils/constants.js';
+} from './util/constants.js';
 
-import { buildIndexes } from './utils/indexes.js';
-import { asyncRead, htmlsNamesGenerator, symlink, writeFile } from './utils/stream.js';
+import { buildIndexes } from './util/indexes.js';
+import { asyncRead, htmlsNamesGenerator, symlink, writeFile } from './util/stream.js';
 
 import {
   vpath,
@@ -49,7 +49,7 @@ import {
   withSrcBase,
   splitPathCwd,
   withViewsPath
-} from './utils/path.js';
+} from './util/path.js';
 
 import {
   parseDynamicName,
@@ -57,7 +57,7 @@ import {
   processEditedAsset,
   paginationForPagesArray,
   processView
-} from './utils/process.js';
+} from './util/process.js';
 
 import {
   handleThrown,
@@ -66,7 +66,7 @@ import {
   debuglog,
   toggleDebug,
   isValidSrcBase
-} from './utils/init.js';
+} from './util/init.js';
 
 import {
   safeFun,
@@ -81,12 +81,12 @@ import {
   isObj,
   timeWithUnit,
   buildDataFileTree
-} from './utils/helpers.js';
+} from './util/helpers.js';
 
-import * as bSync from './utils/server.middleware.js';
-import * as keep from './utils/keep.js';
-import defaultConfig from './default.config.js';
-import { tmpDirSync } from './utils/tmp.js';
+import * as bSync from './util/server.middleware.js';
+import * as keep from './util/keep.js';
+import * as appConfig from './core.config.js';
+import { tmpDirSync } from './util/tmp.js';
 
 // quick setup
 
@@ -573,29 +573,24 @@ async function readDataFiles(config, files) {
 }
 
 async function readData(config, fromFiles, cacheBust = '') {
-  const dKeys = defaultConfig.funnelDefaultKeys;
+  const dKeys = appConfig.dataFileSchema;
 
   try {
     // if no config.funnel
-    const dataPath = vpath([config.cwd, config.src, defaultConfig.funnelName], true).full;
+    const funnelPath = vpath([config.cwd, config.src, appConfig.__jsDataFile], true).full;
     const cb = cacheBust || '';
-    const url = `${dataPath}?bust=${cb}`;
+    const url = `${funnelPath}?bust=${cb}`;
 
-    debuglog('funnel data path', dataPath);
+    debuglog('funnel data path', funnelPath);
     debuglog('funneled data cache bust', cacheBust);
     debuglog('funneled data url', url);
 
     const imported = await import(url);
-    const userFunnel = 'default' in imported ? imported.default : imported;
-
-    if (!userFunnel) {
-      throw new Error(`invalid funneled data ${bold(userFunnel)}`);
-    }
 
     // consolidate funneled
     const funneled = Object.assign({
-      raw: dKeys.raw
-    }, userFunnel);
+      raw: dKeys.raw.default
+    }, imported);
 
     funneled.fromFiles = await readDataFiles(config, fromFiles);
 
@@ -628,7 +623,7 @@ async function readSource(src) {
     const name = _file.name;
     const dir = _file.dir;
 
-    const isFunnel = file.endsWith(defaultConfig.funnelName);
+    const isFunnel = file.endsWith(appConfig.__jsDataFile);
     const isStatic = dir.includes(STATIC_PATH_NAME) || name.endsWith(STATIC_PATH_EXT);
 
     const isLocale = dir.includes(LOCALES_PATH_NAME) && _file.base.endsWith(LOCALES_PATH_EXT[0])
@@ -717,16 +712,16 @@ async function gen(config, watching = null, ext = null, done = () => {}) {
 
   const srcPath = vpath([config.cwd, config.src]);
   const read = await readSource(srcPath.full);
-  const funCacheBust = config.watchFunnel ? Date.now() : null;
+  const funnelCacheBust = config.datawatch ? Date.now() : null;
 
-  if (!config.funneled || funCacheBust) {
-    config.funneled = handleData(config, await readData(config, read.data, funCacheBust));
+  if (!config.funneled || funnelCacheBust) {
+    config.funneled = handleData(config, await readData(config, read.data, funnelCacheBust));
   }
 
   // files read from source or currently being watched
   const files = watching || read;
 
-  if (watching && ext !== '.html' && !config.watchFunnel) {
+  if (watching && ext !== '.html' && !config.datawatch) {
     const asset = watching[ext] || [];
     return await processEditedAsset(config, asset, ext);
   }
@@ -795,7 +790,7 @@ async function watch(config, cb = () => {}, { customLog = false } = {}) {
     const ext = _p.ext;
     const watching = { [ext]: [p] };
 
-    const isFunnel = p.endsWith(defaultConfig.funnelName);
+    const isFunnel = p.endsWith(appConfig.funnelName);
     const isData = _p.dir.includes(DATA_PATH_NAME)
       || DATA_PATH_EXT.some(e => p.endsWith(e));
     config.watchFunnel = (isFunnel || isData) && config.build.watchFunnel;
@@ -844,7 +839,7 @@ async function serve(config) {
 
   const fallbackPagePath = config.devServer.pages['404'];
   const port = config.devServer.port || 2000;
-  const host = 'http://localhost';
+  const host = config.devServer.host;
   const entry = config.src;
 
   const bs = browserSync.init({

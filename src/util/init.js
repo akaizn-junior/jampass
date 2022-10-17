@@ -8,7 +8,7 @@ import os from 'os';
 import path from 'path';
 
 // local
-import defaultconfig from '../default.config.js';
+import * as appConfig from '../core.config.js';
 import { writeFile, newReadable } from './stream.js';
 import { vpath, createDirSync } from './path.js';
 import { safeFun } from './helpers.js';
@@ -25,11 +25,11 @@ export const loadUserEnv = () => dotenv.config({
 export const tmpdir = (() => {
   // create all static tmp dirs here
   const base = createDirSync(
-    path.join(os.tmpdir(), defaultconfig.name)
+    path.join(os.tmpdir(), appConfig.__name)
   );
 
   const assets = createDirSync(
-    path.join(os.tmpdir(), defaultconfig.name, 'tmpassets')
+    path.join(os.tmpdir(), appConfig.__name, 'tmpassets')
   );
 
   return {
@@ -42,8 +42,8 @@ export const tmpdir = (() => {
 class HomeDirReporter extends consola.BasicReporter {
   constructor(options) {
     super(options);
-    this.historyFile = defaultconfig.historyFilePath;
-    this.lastFile = defaultconfig.lastCmdFilePath;
+    this.historyFile = appConfig.historyFilePath;
+    this.lastFile = appConfig.lastCmdFilePath;
   }
 
   log(logObj, { stdout } = {}) {
@@ -75,10 +75,10 @@ export const history = consola.create({
 
 // bind debug log to consola info
 debug.log = logger.log.bind(logger);
-export const debuglog = debug(defaultconfig.name);
+export const debuglog = debug(appConfig.__name);
 
 export function toggleDebug(toggle) {
-  if (toggle) debug.enable(defaultconfig.name);
+  if (toggle) debug.enable(appConfig.__name);
   else debug.disable();
 }
 
