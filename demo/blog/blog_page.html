@@ -1,0 +1,22 @@
+<template id="blog-page">
+    <style>
+        p { color: red; }
+        h1 {
+            color: purple;
+            font-size: 3em;
+        }
+        b { font-style: italic; }
+    </style>
+    <article>
+        <h1 id="yay">Hip! Hip!</h1>
+        <slot name="title"></slot>
+        <slot name="description"></slot>
+    </article>
+    <script>
+        let titleElem = document.querySelector('yay')[0];
+
+        if (titleElem) {
+            titleElem.innerHtml += ' Hooray!!';
+        }
+    </script>
+</template>
