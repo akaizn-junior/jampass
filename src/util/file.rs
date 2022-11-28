@@ -286,36 +286,6 @@ fn construct_templates_script(memo: &mut Memory) {
     println!("{}", result);
 }
 
-pub fn _css(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
-    let code = read_code(&file)?;
-    let checksum = adler32_slice(code.as_bytes());
-
-    if !memo.files.contains_key(&checksum) {
-        memo.files
-            .insert(checksum, File { checksum })
-            .unwrap_or(File::default());
-
-        recursive_output(&file, code)?;
-    }
-
-    Ok(())
-}
-
-pub fn _js(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
-    let code = read_code(&file)?;
-    let checksum = adler32_slice(code.as_bytes());
-
-    if !memo.files.contains_key(&checksum) {
-        memo.files
-            .insert(checksum, File { checksum })
-            .unwrap_or(File::default());
-
-        recursive_output(&file, code)?;
-    }
-
-    Ok(())
-}
-
 pub fn env(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
     let _code = read_code(&file)?;
     // reload env vars at this point
@@ -327,21 +297,6 @@ pub fn env(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
         // TODO: properly evaluate last edited env var, not just last added
         // TODO: check if dotenv throws an event from edited var
         println!("Added env var \"{}\"", latest.0);
-    }
-
-    Ok(())
-}
-
-pub fn _any(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
-    let code = read_code(&file)?;
-    let checksum = adler32_slice(code.as_bytes());
-
-    if !memo.files.contains_key(&checksum) {
-        memo.files
-            .insert(checksum, File { checksum })
-            .unwrap_or(File::default());
-
-        recursive_output(&file, code)?;
     }
 
     Ok(())
