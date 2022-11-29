@@ -23,6 +23,9 @@ pub struct Inject {
     pub html: Vec<PathBuf>,
 }
 
+/// Just the UNIX line separator
+const LINE_SEPARATOR: &str = "\n";
+
 pub fn read_code(file: &PathBuf) -> Result<String> {
     let content = read_to_string(file)?;
     Ok(content)
@@ -96,6 +99,9 @@ pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
     let mut parsed_code = parse_html(file, code, memo)?;
     parsed_code = source_check_up(parsed_code);
 
+    construct_templates_script(memo);
+    construct_templates_style(memo);
+
     // verify if the path has already been evaluated
     // or if the output does not exist
     if !memo.files.contains_key(&checksum) {
@@ -159,12 +165,15 @@ fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String>
 }
 
 fn source_check_up(source: String) -> String {
-    const LINE_SEPARATOR: &str = "\n";
     const HTML_COMMENT_START_TOKEN: &str = "<!--";
     const STATIC_COMPONENT_TAG_START_TOKEN: &str = "<x-";
 
     let lines = source.lines();
     let mut result = String::new();
+
+    fn custom_name(n: &str) -> Option<&str> {
+        n.get(n.find("<").unwrap() + 1..n.find(">").unwrap())
+    }
 
     for line in lines {
         let trimmed = line.trim();
@@ -177,8 +186,10 @@ fn source_check_up(source: String) -> String {
             continue;
         }
 
-        // remove unprocessed static component
+        // notify and remove unprocessed static component
         if trimmed.starts_with(STATIC_COMPONENT_TAG_START_TOKEN) {
+            let unknown_name = custom_name(trimmed).unwrap();
+            println!("Unknown static component {:?} removed", unknown_name);
             continue;
         }
 
@@ -194,7 +205,8 @@ fn source_check_up(source: String) -> String {
             && tag_end_token.is_some()
             && (dash.unwrap() < tag_end_token.unwrap())
         {
-            println!("Web component used here {}", trimmed);
+            let name = custom_name(trimmed).unwrap();
+            println!("Web component used here {:?} ignored", name);
         }
 
         result.push_str(line);
@@ -297,10 +309,7 @@ fn parse_component(file: PathBuf, c_id: &str, memo: &mut Memory) -> Result<Strin
             }
 
             let scope = checksum(&t_code);
-            let out_tag = format!(
-                "<div id=\"{}\" data-scope=\"{}\">{}</div>",
-                c_id, scope, t_code
-            );
+            let out_tag = format!("<div id=\"{c_id}\" data-scope=\"{scope}\">{t_code}</div>");
 
             return Ok(out_tag);
         }
@@ -309,31 +318,33 @@ fn parse_component(file: PathBuf, c_id: &str, memo: &mut Memory) -> Result<Strin
     Ok("".to_string())
 }
 
-fn _construct_templates_style(memo: &mut Memory) {
+fn construct_templates_style(memo: &mut Memory) {
     let style = memo.templates.get("style");
     let mut result = String::new();
 
     if style.is_some() {
         let data = style.unwrap();
         for val in data.values() {
-            result = format!("{}\n{}", result, val);
+            result.push_str(val);
+            result.push_str(LINE_SEPARATOR);
         }
-        result = format!("<style>{}</style>", result);
+        result = format!("<style>{result}</style>");
     }
 
     println!("{}", result);
 }
 
-fn _construct_templates_script(memo: &mut Memory) {
+fn construct_templates_script(memo: &mut Memory) {
     let script = memo.templates.get("script");
     let mut result = String::new();
 
     if script.is_some() {
         let data = script.unwrap();
         for val in data.values() {
-            result = format!("{}\n{}", result, val);
+            result.push_str(val);
+            result.push_str(LINE_SEPARATOR);
         }
-        result = format!("<script>{}</script>", result);
+        result = format!("<script>{result}</script>");
     }
 
     println!("{}", result);
