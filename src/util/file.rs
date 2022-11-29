@@ -96,9 +96,6 @@ pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
     let mut parsed_code = parse_html(file, code, memo)?;
     parsed_code = source_clean_up(parsed_code);
 
-    construct_templates_script(memo);
-    construct_templates_style(memo);
-
     // verify if the path has already been evaluated
     // or if the output does not exist
     if !memo.files.contains_key(&checksum) {
@@ -115,6 +112,11 @@ pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
 fn str_to_selector(s: &str) -> Option<Selector> {
     let result = Selector::parse(s);
     result.ok()
+}
+
+fn valid_component_name(c_id: &str) -> bool {
+    const JAMPASS_COMPONENT_NAME_TOKEN: &str = "x-";
+    c_id.starts_with(JAMPASS_COMPONENT_NAME_TOKEN)
 }
 
 fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String> {
@@ -139,6 +141,12 @@ fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String>
 
                 if c_id.is_some() {
                     let tag_id = c_id.unwrap();
+
+                    if !valid_component_name(tag_id) {
+                        println!("Invalid component name \"{tag_id}\"");
+                        continue;
+                    }
+
                     let p_code = parse_component(c_path, tag_id, memo)?;
                     let static_code = replace_component_with_static(result, tag_id, p_code);
                     result = static_code;
@@ -153,6 +161,7 @@ fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String>
 fn source_clean_up(source: String) -> String {
     const LINE_SEPARATOR: &str = "\n";
     const HTML_COMMENT_START_TOKEN: &str = "<!--";
+    const JAMPASS_COMPONENT_TAG_START_TOKEN: &str = "<x-";
 
     let lines = source.lines();
     let mut result = String::new();
@@ -163,6 +172,10 @@ fn source_clean_up(source: String) -> String {
 
         // remove linked components
         if !comment && component_link.is_some() {
+            continue;
+        }
+
+        if line.starts_with(JAMPASS_COMPONENT_TAG_START_TOKEN) {
             continue;
         }
 
@@ -216,8 +229,19 @@ fn parse_component(file: PathBuf, c_id: &str, memo: &mut Memory) -> Result<Strin
         let selector = c_selector.unwrap();
         let c_template = component.select(&selector).next();
 
+        // if an element is not found
+        // lets assume
+        // 1 - tag is not "template" tag
+        // 2 - the is id is not a valid id
+        if c_template.is_none() {
+            println!("Components must be defined as a template tag and have a valid id");
+            return Ok("".to_string());
+        }
+
         if c_template.is_some() {
             let template = c_template.unwrap();
+            let c_id = template.value().attr("id").unwrap();
+
             // and the t is for template
             let mut t_code = template.inner_html();
             let style_selector = str_to_selector("style").unwrap();
@@ -267,7 +291,7 @@ fn parse_component(file: PathBuf, c_id: &str, memo: &mut Memory) -> Result<Strin
     Ok("".to_string())
 }
 
-fn construct_templates_style(memo: &mut Memory) {
+fn _construct_templates_style(memo: &mut Memory) {
     let style = memo.templates.get("style");
     let mut result = String::new();
 
@@ -282,7 +306,7 @@ fn construct_templates_style(memo: &mut Memory) {
     println!("{}", result);
 }
 
-fn construct_templates_script(memo: &mut Memory) {
+fn _construct_templates_script(memo: &mut Memory) {
     let script = memo.templates.get("script");
     let mut result = String::new();
 
