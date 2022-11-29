@@ -152,17 +152,17 @@ fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String>
 
 fn source_clean_up(source: String) -> String {
     const LINE_SEPARATOR: &str = "\n";
+    const HTML_COMMENT_START_TOKEN: &str = "<!--";
+
     let lines = source.lines();
     let mut result = String::new();
 
     for line in lines {
-        // naive remove linked components, even if its commented
-        if line.find("rel=\"component\"").is_some() {
-            continue;
-        }
+        let comment = line.starts_with(HTML_COMMENT_START_TOKEN);
+        let component_link = line.find("rel=\"component\"");
 
-        // remove empty lines
-        if line.is_empty() {
+        // remove linked components
+        if !comment && component_link.is_some() {
             continue;
         }
 
@@ -200,7 +200,8 @@ fn replace_component_with_static(source: String, tag_id: &str, slice: String) ->
     return result;
 }
 
-fn get_checksum(slice: &str) -> String {
+/// Generates a checksum as an Hex string from a string slice
+fn checksum(slice: &str) -> String {
     let slice_as_u32 = adler32_slice(slice.as_bytes());
     format!("{:x}", slice_as_u32) // u32 as HEX number
 }
@@ -223,27 +224,37 @@ fn parse_component(file: PathBuf, c_id: &str, memo: &mut Memory) -> Result<Strin
             let script_selector = str_to_selector("script").unwrap();
 
             let style_tags = template.select(&style_selector);
-            for style_tag in style_tags {
-                let scope = get_checksum(&style_tag.html());
+            let script_tags = template.select(&script_selector);
+
+            for tag in style_tags {
+                let scope = checksum(&tag.html());
 
                 let entry = memo.templates.entry("style".to_string()).or_default();
-                entry.insert(scope, style_tag.inner_html());
+                entry.insert(scope, tag.inner_html());
 
-                t_code = t_code.replace(&style_tag.html(), "");
+                t_code = t_code
+                    .split(&tag.html())
+                    .collect::<Vec<&str>>()
+                    .join("")
+                    .trim()
+                    .to_string();
             }
 
-            let script_tags = template.select(&script_selector);
-            for script_tag in script_tags {
-                let scope = get_checksum(&script_tag.html());
+            for tag in script_tags {
+                let scope = checksum(&tag.html());
 
                 let entry = memo.templates.entry("script".to_string()).or_default();
-                entry.insert(scope, script_tag.inner_html());
+                entry.insert(scope, tag.inner_html());
 
-                t_code = t_code.replace(&script_tag.html(), "");
+                t_code = t_code
+                    .split(&tag.html())
+                    .collect::<Vec<&str>>()
+                    .join("")
+                    .trim()
+                    .to_string();
             }
 
-            let scope = get_checksum(&t_code);
-
+            let scope = checksum(&t_code);
             let out_tag = format!(
                 "<div id=\"{}\" data-scope=\"{}\">{}</div>",
                 c_id, scope, t_code
