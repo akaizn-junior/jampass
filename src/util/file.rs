@@ -94,7 +94,7 @@ pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
     }
 
     let mut parsed_code = parse_html(file, code, memo)?;
-    parsed_code = source_clean_up(parsed_code);
+    parsed_code = source_check_up(parsed_code);
 
     // verify if the path has already been evaluated
     // or if the output does not exist
@@ -115,8 +115,8 @@ fn str_to_selector(s: &str) -> Option<Selector> {
 }
 
 fn valid_component_name(c_id: &str) -> bool {
-    const JAMPASS_COMPONENT_NAME_TOKEN: &str = "x-";
-    c_id.starts_with(JAMPASS_COMPONENT_NAME_TOKEN)
+    const STATIC_COMPONENT_NAME_TOKEN: &str = "x-";
+    c_id.starts_with(STATIC_COMPONENT_NAME_TOKEN)
 }
 
 fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String> {
@@ -158,25 +158,43 @@ fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String>
     Ok(result)
 }
 
-fn source_clean_up(source: String) -> String {
+fn source_check_up(source: String) -> String {
     const LINE_SEPARATOR: &str = "\n";
     const HTML_COMMENT_START_TOKEN: &str = "<!--";
-    const JAMPASS_COMPONENT_TAG_START_TOKEN: &str = "<x-";
+    const STATIC_COMPONENT_TAG_START_TOKEN: &str = "<x-";
 
     let lines = source.lines();
     let mut result = String::new();
 
     for line in lines {
-        let comment = line.starts_with(HTML_COMMENT_START_TOKEN);
-        let component_link = line.find("rel=\"component\"");
+        let trimmed = line.trim();
+
+        let comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
+        let component_link = trimmed.find("rel=\"component\"");
 
         // remove linked components
         if !comment && component_link.is_some() {
             continue;
         }
 
-        if line.starts_with(JAMPASS_COMPONENT_TAG_START_TOKEN) {
+        // remove unprocessed static component
+        if trimmed.starts_with(STATIC_COMPONENT_TAG_START_TOKEN) {
             continue;
+        }
+
+        let dash = trimmed.find("-");
+        let space = trimmed.find(" ");
+        let tag_end_token = trimmed.find(">");
+
+        // notify usage of possible web component
+        if trimmed.starts_with("<")
+            && !trimmed.starts_with("</") // ignore end tags
+            && dash.is_some()
+            && space.is_none() // ignore meta tags duh!
+            && tag_end_token.is_some()
+            && (dash.unwrap() < tag_end_token.unwrap())
+        {
+            println!("Web component used here {}", trimmed);
         }
 
         result.push_str(line);
