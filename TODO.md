@@ -1,0 +1,1 @@
+- [] fix editing a component outputs an empty file on watch. Editing a component should affect the files that link the component not the component file itself

@@ -14,15 +14,15 @@
         }
     </style>
     <article>
-        <h1 id="yay">Hip! Hip!</h1>
+        <h1 id="hiphip">Hip! Hip!</h1>
         <slot name="title"></slot>
         <slot name="description"></slot>
     </article>
     <script>
-        let titleElem = document.querySelector('yay')[0];
+        let titleElem = document.querySelector('#hiphip');
 
         if (titleElem) {
-            titleElem.innerHtml += ' Hooray!!';
+            titleElem.innerHTML += ' __ Hooray!!';
         }
     </script>
 </template>
