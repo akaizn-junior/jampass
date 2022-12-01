@@ -172,7 +172,7 @@ pub fn watch(config: Opts) -> Result<()> {
     let mut memo = Memory::default();
     memo.watch_mode = true;
 
-    gen(&config, PathList::default(), &mut memo)?;
+    // gen(&config, PathList::default(), &mut memo)?;
 
     loop {
         let event = rx.recv().expect("Watch event");

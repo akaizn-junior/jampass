@@ -608,15 +608,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90e5c1c8368803113bf0c9584fc495a58b86dc8a29edbf8fe877d21d9507e797"
 
 [[package]]
-name = "encoding_rs"
-version = "0.8.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9852635589dc9f9ea1b6fe9f05b50ef208c85c834a562f0c6abb1c475736ec2b"
-dependencies = [
- "cfg-if",
-]
-
-[[package]]
 name = "enum_kind"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1000,9 +991,8 @@ dependencies = [
  "clap",
  "dotenv",
  "futures",
- "lol_html",
+ "lightningcss",
  "notify",
- "parcel_css",
  "scraper",
  "swc",
 ]
@@ -1047,12 +1037,6 @@ name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
-
-[[package]]
-name = "lazycell"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "lexical"
@@ -1134,6 +1118,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55edcf6c0bb319052dea84732cf99db461780fd5e8d3eb46ab6ff312ab31f197"
 
 [[package]]
+name = "lightningcss"
+version = "1.0.0-alpha.37"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d49a0ec79cdf302404fb98f25f1837dda476a37293b49245c3c0a73c18160785"
+dependencies = [
+ "bitflags",
+ "const-str",
+ "cssparser 0.29.6",
+ "dashmap",
+ "data-encoding",
+ "itertools",
+ "lazy_static",
+ "lightningcss-derive",
+ "parcel_selectors",
+ "parcel_sourcemap",
+ "rayon",
+ "serde",
+ "smallvec",
+]
+
+[[package]]
+name = "lightningcss-derive"
+version = "1.0.0-alpha.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81b8ab8ebe3d3dc729a269c5b72f46adb4050f641b3a5b984a1960f89f10ead2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "link-cplusplus"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1159,25 +1175,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "abb12e687cfb44aa40f41fc3978ef76448f9b6038cad6aef4259d3c095a2382e"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "lol_html"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09ff2adf9c54f4de7d66a9177ea7d27d5b8108503bb03d5b719869b8f4bc2ab2"
-dependencies = [
- "bitflags",
- "cfg-if",
- "cssparser 0.27.2",
- "encoding_rs",
- "hashbrown",
- "lazy_static",
- "lazycell",
- "memchr",
- "safemem",
- "selectors",
- "thiserror",
 ]
 
 [[package]]
@@ -1413,30 +1410,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
 
 [[package]]
-name = "parcel_css"
-version = "1.0.0-alpha.32"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "227ba7ffdb83296ac3b215075650a0836ddf954abc9f8d4265745004556303f5"
-dependencies = [
- "bitflags",
- "const-str",
- "cssparser 0.29.6",
- "dashmap",
- "data-encoding",
- "itertools",
- "lazy_static",
- "parcel_selectors",
- "parcel_sourcemap",
- "rayon",
- "serde",
- "smallvec",
-]
-
-[[package]]
 name = "parcel_selectors"
-version = "0.24.7"
+version = "0.24.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f25f4bac7855f8a34833b5499ad655768ea6697cbe28facdf78a09dc7f2a2d0"
+checksum = "e008595fbef23c48b368c24e971a70dc32351ec139a67a7e5dd53a14dd90d954"
 dependencies = [
  "bitflags",
  "cssparser 0.29.6",
@@ -1949,12 +1926,6 @@ name = "ryu"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4501abdff3ae82a1c1b477a17252eb69cee9e66eb915c1abaa4f44d873df9f09"
-
-[[package]]
-name = "safemem"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef703b7cb59335eae2eb93ceb664c0eb7ea6bf567079d843e09420219668e072"
 
 [[package]]
 name = "same-file"

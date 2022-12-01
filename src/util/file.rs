@@ -16,13 +16,6 @@ use crate::{
     util::path,
 };
 
-#[derive(Debug)]
-pub struct Inject {
-    pub css: Vec<PathBuf>,
-    pub js: Vec<PathBuf>,
-    pub html: Vec<PathBuf>,
-}
-
 /// Just the UNIX line separator
 const LINE_SEPARATOR: &str = "\n";
 
@@ -57,7 +50,7 @@ fn recursive_output(file: &PathBuf, contents: String) -> Result<()> {
     Ok(())
 }
 
-pub fn is_template(code: &String) -> bool {
+fn is_template(code: &String) -> bool {
     let template_tag_token = "<template";
     let ccode = code.trim();
     ccode.starts_with(template_tag_token)
@@ -87,37 +80,15 @@ fn evaluate_href(file: &PathBuf, href: &str) -> Option<PathBuf> {
     Some(t_path)
 }
 
-pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
-    let code = read_code(&file)?;
-    let checksum = adler32_slice(code.as_bytes());
-
-    // if the code indicates that this html file is a template, skip it
-    if is_template(&code) {
-        return Ok(());
-    }
-
-    let mut parsed_code = parse_html(file, code, memo)?;
-    parsed_code = source_check_up(parsed_code);
-
-    construct_templates_script(memo);
-    construct_templates_style(memo);
-
-    // verify if the path has already been evaluated
-    // or if the output does not exist
-    if !memo.files.contains_key(&checksum) {
-        memo.files
-            .insert(checksum, File { checksum })
-            .unwrap_or(File::default());
-
-        recursive_output(&file, parsed_code)?;
-    }
-
-    Ok(())
-}
-
 fn str_to_selector(s: &str) -> Option<Selector> {
     let result = Selector::parse(s);
     result.ok()
+}
+
+/// Generates a checksum as an Hex string from a string slice
+fn checksum(slice: &str) -> String {
+    let slice_as_u32 = adler32_slice(slice.as_bytes());
+    format!("{:x}", slice_as_u32) // u32 as HEX number
 }
 
 fn valid_component_name(c_id: &str) -> bool {
@@ -147,6 +118,21 @@ fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String>
 
                 if c_id.is_some() {
                     let tag_id = c_id.unwrap();
+                    // generate a selector for the linked component
+                    let component_selector = str_to_selector(tag_id);
+
+                    // if the selector is valid
+                    if component_selector.is_some() {
+                        let selector = component_selector.unwrap();
+                        // verify if the linked component is actually used
+                        let component = doc.select(&selector).next();
+
+                        // skipped undeclared linked component
+                        if component.is_none() {
+                            println!("Linked component {:?} not used, ignored", tag_id);
+                            continue;
+                        }
+                    }
 
                     if !valid_component_name(tag_id) {
                         println!("Invalid component name \"{tag_id}\"");
@@ -171,8 +157,16 @@ fn source_check_up(source: String) -> String {
     let lines = source.lines();
     let mut result = String::new();
 
-    fn custom_name(n: &str) -> Option<&str> {
-        n.get(n.find("<").unwrap() + 1..n.find(">").unwrap())
+    /// Reads the name of a possible custom tag under special conditions
+    fn custom_tag_name(html_line: &str) -> Option<&str> {
+        let start_token = html_line.find("<");
+        let end_token = html_line.find(">");
+
+        if start_token.is_none() || end_token.is_none() {
+            return Some("");
+        }
+
+        html_line.get(start_token.unwrap() + 1..end_token.unwrap())
     }
 
     for line in lines {
@@ -188,8 +182,8 @@ fn source_check_up(source: String) -> String {
 
         // notify and remove unprocessed static component
         if trimmed.starts_with(STATIC_COMPONENT_TAG_START_TOKEN) {
-            let unknown_name = custom_name(trimmed).unwrap();
-            println!("Unknown static component {:?} removed", unknown_name);
+            let unknown_name = custom_tag_name(trimmed).unwrap();
+            println!("Undefined static component {:?} removed", unknown_name);
             continue;
         }
 
@@ -205,7 +199,7 @@ fn source_check_up(source: String) -> String {
             && tag_end_token.is_some()
             && (dash.unwrap() < tag_end_token.unwrap())
         {
-            let name = custom_name(trimmed).unwrap();
+            let name = custom_tag_name(trimmed).unwrap();
             println!("Web component used here {:?} ignored", name);
         }
 
@@ -243,12 +237,6 @@ fn replace_component_with_static(source: String, tag_id: &str, slice: String) ->
     return result;
 }
 
-/// Generates a checksum as an Hex string from a string slice
-fn checksum(slice: &str) -> String {
-    let slice_as_u32 = adler32_slice(slice.as_bytes());
-    format!("{:x}", slice_as_u32) // u32 as HEX number
-}
-
 fn parse_component(file: PathBuf, c_id: &str, memo: &mut Memory) -> Result<String> {
     let c_sel_str = format!("template[id={}]", c_id);
     let c_selector = str_to_selector(&c_sel_str);
@@ -262,7 +250,7 @@ fn parse_component(file: PathBuf, c_id: &str, memo: &mut Memory) -> Result<Strin
         // if an element is not found
         // lets assume
         // 1 - tag is not "template" tag
-        // 2 - the is id is not a valid id
+        // 2 - the id is not a valid id
         if c_template.is_none() {
             println!("Components must be defined as a template tag and have a valid id");
             return Ok("".to_string());
@@ -274,17 +262,41 @@ fn parse_component(file: PathBuf, c_id: &str, memo: &mut Memory) -> Result<Strin
 
             // and the t is for template
             let mut t_code = template.inner_html();
+            let component_scope = checksum(&t_code);
+
             let style_selector = str_to_selector("style").unwrap();
             let script_selector = str_to_selector("script").unwrap();
 
-            let style_tags = template.select(&style_selector);
-            let script_tags = template.select(&script_selector);
+            let style_tag = template.select(&style_selector).next();
+            let script_tag = template.select(&script_selector).next();
 
-            for tag in style_tags {
-                let scope = checksum(&tag.html());
+            if style_tag.is_some() {
+                let tag = style_tag.unwrap();
+                let css_code = tag.inner_html();
+                let mut scoped_css = String::new();
+
+                let style_checksum = checksum(&css_code);
+
+                for line in css_code.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+
+                    let open_token = "{";
+                    if trimmed.contains(open_token) {
+                        let scoped_selector =
+                            format!("\n[data-scope={:?}] {}\n", component_scope, trimmed);
+                        scoped_css.push_str(&scoped_selector);
+                        continue;
+                    }
+
+                    scoped_css.push_str(line);
+                    scoped_css.push_str(LINE_SEPARATOR);
+                }
 
                 let entry = memo.templates.entry("style".to_string()).or_default();
-                entry.insert(scope, tag.inner_html());
+                entry.insert(style_checksum, scoped_css);
 
                 t_code = t_code
                     .split(&tag.html())
@@ -294,11 +306,15 @@ fn parse_component(file: PathBuf, c_id: &str, memo: &mut Memory) -> Result<Strin
                     .to_string();
             }
 
-            for tag in script_tags {
-                let scope = checksum(&tag.html());
+            if script_tag.is_some() {
+                let tag = script_tag.unwrap();
+                let script_code = tag.inner_html();
+                let script_checksum = checksum(&script_code);
+                let scoped_script_code =
+                    format!("\n{{//{}\n{}\n}}", component_scope, script_code.trim());
 
                 let entry = memo.templates.entry("script".to_string()).or_default();
-                entry.insert(scope, tag.inner_html());
+                entry.insert(script_checksum, scoped_script_code);
 
                 t_code = t_code
                     .split(&tag.html())
@@ -308,8 +324,9 @@ fn parse_component(file: PathBuf, c_id: &str, memo: &mut Memory) -> Result<Strin
                     .to_string();
             }
 
-            let scope = checksum(&t_code);
-            let out_tag = format!("<div id=\"{c_id}\" data-scope=\"{scope}\">{t_code}</div>");
+            let out_tag = format!(
+                "\t<div id=\"{c_id}\" data-scope=\"{component_scope}\">\n\t{t_code}\n\t</div>"
+            );
 
             return Ok(out_tag);
         }
@@ -318,7 +335,7 @@ fn parse_component(file: PathBuf, c_id: &str, memo: &mut Memory) -> Result<Strin
     Ok("".to_string())
 }
 
-fn construct_templates_style(memo: &mut Memory) {
+fn construct_components_style(memo: &mut Memory) -> String {
     let style = memo.templates.get("style");
     let mut result = String::new();
 
@@ -331,10 +348,10 @@ fn construct_templates_style(memo: &mut Memory) {
         result = format!("<style>{result}</style>");
     }
 
-    println!("{}", result);
+    return result;
 }
 
-fn construct_templates_script(memo: &mut Memory) {
+fn construct_components_script(memo: &mut Memory) -> String {
     let script = memo.templates.get("script");
     let mut result = String::new();
 
@@ -347,7 +364,74 @@ fn construct_templates_script(memo: &mut Memory) {
         result = format!("<script>{result}</script>");
     }
 
-    println!("{}", result);
+    return result;
+}
+
+fn add_components_style(mut source: String, slice: String) -> String {
+    let head_tag_close = "</head>";
+
+    let mut style_tag = slice;
+    style_tag.push_str(LINE_SEPARATOR);
+    style_tag.push_str(head_tag_close);
+
+    source = source
+        .split(head_tag_close)
+        .collect::<Vec<&str>>()
+        .join(&style_tag)
+        .trim()
+        .to_string();
+
+    source
+}
+
+fn add_components_script(mut source: String, slice: String) -> String {
+    let body_tag_close = "</body>";
+
+    let mut script_tag = slice;
+    script_tag.push_str(LINE_SEPARATOR);
+    script_tag.push_str(body_tag_close);
+
+    source = source
+        .split(body_tag_close)
+        .collect::<Vec<&str>>()
+        .join(&script_tag)
+        .trim()
+        .to_string();
+
+    source
+}
+
+// Interface
+
+pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
+    let code = read_code(&file)?;
+    let checksum = adler32_slice(code.as_bytes());
+
+    // if the code indicates that this html file is a template, skip it
+    if is_template(&code) {
+        return Ok(());
+    }
+
+    let mut parsed_code = parse_html(file, code, memo)?;
+    parsed_code = source_check_up(parsed_code);
+
+    let script = construct_components_script(memo);
+    let style = construct_components_style(memo);
+
+    parsed_code = add_components_style(parsed_code, style);
+    parsed_code = add_components_script(parsed_code, script);
+
+    // verify if the path has already been evaluated
+    // or if the output does not exist
+    if !memo.files.contains_key(&checksum) {
+        memo.files
+            .insert(checksum, File { checksum })
+            .unwrap_or(File::default());
+
+        recursive_output(&file, parsed_code)?;
+    }
+
+    Ok(())
 }
 
 pub fn env(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
