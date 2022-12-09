@@ -19,10 +19,9 @@
         <slot name="description"></slot>
     </article>
     <script>
-        let titleElem = document.querySelector('#hiphip');
-
-        if (titleElem) {
-            titleElem.innerHTML += ' Hooray!!';
-        }
+        let h1 = useElement('h1')
+        h1(function (el) {
+            el.innerHTML += ' Oppssiiieee!! '
+        })
     </script>
 </template>

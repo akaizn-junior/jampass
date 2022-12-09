@@ -17,7 +17,10 @@ pub fn eval_dotenv() {
 /// Sets the current working directory
 /// and parses the local .env file
 pub fn config(root: &str) {
+    // capture the package's active CWD
+    env::set_var("PACKAGE_CWD", current_dir());
     let c = util::path::canonical(root).unwrap_or(PathBuf::from("."));
+    // change the CWD to the user's project root
     let res = env::set_current_dir(c);
 
     if res.is_ok() {
@@ -42,6 +45,11 @@ pub fn output_dir() -> PathBuf {
     let cwd = current_dir();
     let default = cwd.join("public").to_string_lossy().to_string();
     let var = env::var("JAMPASS_OWD").unwrap_or(default);
+    return PathBuf::from(var);
+}
+
+pub fn package_cwd() -> PathBuf {
+    let var = env::var("PACKAGE_CWD").unwrap_or(".".to_string());
     return PathBuf::from(var);
 }
 

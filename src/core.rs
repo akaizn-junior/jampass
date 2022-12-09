@@ -34,6 +34,10 @@ fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result
             file::env(config, pb, memo)?;
         }
 
+        if file::is_component(&pb)? {
+            continue;
+        }
+
         let pb_ext = pb.extension().and_then(|s| s.to_str());
 
         match pb_ext {
@@ -55,11 +59,9 @@ fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result
 }
 
 fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<()> {
-    let Event {
-        kind,
-        paths,
-        attrs: _,
-    } = event;
+    let Event { kind, paths, attrs } = event;
+
+    println!("{:?}", attrs);
 
     match kind {
         Create(ce) => match ce {
@@ -68,14 +70,14 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
         },
         Modify(me) => match me {
             ModifyKind::Data(e) => match e {
-                DataChange::Any => gen(&config, paths, memo)?,
-                DataChange::Content => gen(&config, paths, memo)?,
+                DataChange::Any => gen(&config, PathList::default(), memo)?,
+                DataChange::Content => gen(&config, PathList::default(), memo)?,
                 _ => {}
             },
             ModifyKind::Name(mode) => match mode {
                 RenameMode::Both => {
                     if !paths.is_empty() {
-                        file::rename_output(paths[0].clone(), paths[1].clone())?;
+                        file::rename_output(&paths[0], &paths[1])?;
                     }
                 }
                 _ => {}
@@ -175,7 +177,7 @@ pub fn watch(config: Opts) -> Result<()> {
     gen(&config, PathList::default(), &mut memo)?;
 
     loop {
-        let event = rx.recv().expect("Watch event");
+        let event = rx.recv()?;
 
         // if owd does not exist when watch is called, generate it
         if owd.metadata().is_err() {
@@ -192,10 +194,10 @@ pub fn watch(config: Opts) -> Result<()> {
 
 /// Starts development server
 pub fn serve(_config: ServeOpts) -> Result<()> {
-    todo!()
+    unimplemented!()
 }
 
 /// Lint source files
 pub fn lint(_config: LintOpts) -> Result<()> {
-    todo!()
+    unimplemented!()
 }
