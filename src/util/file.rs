@@ -194,11 +194,23 @@ fn source_check_up(source: String) -> String {
         let trimmed = line.trim();
 
         let comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
-        let component_link = trimmed.find("rel=\"component\"");
+        let component_link = trimmed.contains("rel=\"component\"");
+        // any other link but components link
+        let any_link = trimmed.contains("<link") && trimmed.contains("href=") && !component_link;
+        // any script with a src
+        let any_src_script = trimmed.contains("<script") && trimmed.contains("src=");
 
         // remove linked components
-        if !comment && component_link.is_some() {
+        if !comment && component_link {
             continue;
+        }
+
+        if !comment && any_link {
+            println!("{}", trimmed);
+        }
+
+        if !comment && any_src_script {
+            println!("{}", trimmed);
         }
 
         // notify and remove unprocessed static component
@@ -208,15 +220,15 @@ fn source_check_up(source: String) -> String {
             continue;
         }
 
+        let space = trimmed.contains(" ");
         let dash = trimmed.find("-");
-        let space = trimmed.find(" ");
         let tag_end_token = trimmed.find(">");
 
         // notify usage of possible web component
         if trimmed.starts_with("<")
             && !trimmed.starts_with("</") // ignore end tags
             && dash.is_some()
-            && space.is_none() // ignore meta tags duh!
+            && !space // ignore meta tags duh!
             && tag_end_token.is_some()
             && (dash.unwrap() < tag_end_token.unwrap())
         {
