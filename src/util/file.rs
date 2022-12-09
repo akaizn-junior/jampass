@@ -327,7 +327,6 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
                 let script_checksum = checksum(&script_code).as_hex;
 
                 let scoped_code = evaluate_component_script_code(script_code, &component_scope);
-
                 memo.components.script.insert(script_checksum, scoped_code);
 
                 t_code = t_code
@@ -359,14 +358,10 @@ fn evaluate_component_script_code(source: String, scope: &str) -> String {
 
     if result.contains(USE_ELEMENT_TOKEN) {
         result = result.replace(USE_ELEMENT_TOKEN, &scoped_use_element_name);
+        result = format!("{}\n{}", scoped_use_element_fn, result.trim());
     }
 
-    result = format!(
-        "\n ({} {{\n{}\n{}\n}})();",
-        scoped_fn_definition,
-        scoped_use_element_fn,
-        result.trim()
-    );
+    result = format!("\n ({} {{{}}})();", scoped_fn_definition, result);
 
     result
 }
