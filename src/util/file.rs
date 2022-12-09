@@ -24,6 +24,8 @@ struct Checksum {
 
 /// Just the UNIX line separator
 const LINE_SEPARATOR: &str = "\n";
+// static useElement function token
+const USE_ELEMENT_TOKEN: &str = "$useElement";
 
 pub fn read_code(file: &PathBuf) -> Result<String> {
     let content = read_to_string(file)?;
@@ -304,27 +306,10 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
             if style_tag.is_some() {
                 let tag = style_tag.unwrap();
                 let css_code = tag.inner_html();
-                let mut scoped_css = String::new();
 
                 let style_checksum = checksum(&css_code).as_hex;
 
-                for line in css_code.lines() {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() {
-                        continue;
-                    }
-
-                    let open_token = "{";
-                    if trimmed.contains(open_token) {
-                        let scoped_selector =
-                            format!("\n[data-scope={:?}] {}\n", component_scope, trimmed);
-                        scoped_css.push_str(&scoped_selector);
-                        continue;
-                    }
-
-                    scoped_css.push_str(line);
-                    scoped_css.push_str(LINE_SEPARATOR);
-                }
+                let scoped_css = evaluate_component_style(css_code, &component_scope);
 
                 memo.components.style.insert(style_checksum, scoped_css);
 
@@ -338,24 +323,10 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
 
             if script_tag.is_some() {
                 let tag = script_tag.unwrap();
-                let mut script_code = tag.inner_html();
+                let script_code = tag.inner_html();
                 let script_checksum = checksum(&script_code).as_hex;
 
-                let scoped_fn_definition = format!("function x_{}()", component_scope);
-                let scoped_use_element_name = format!("useElement_{}", component_scope);
-                let scoped_use_element_fn = format!(
-                    "function {}(sel) {{ return useElementFactory(sel, {:?}); }}",
-                    scoped_use_element_name, component_scope
-                );
-
-                script_code = script_code.replace("useElement", &scoped_use_element_name);
-
-                let scoped_code = format!(
-                    "\n ({} {{\n{}\n{}\n}})();",
-                    scoped_fn_definition,
-                    scoped_use_element_fn,
-                    script_code.trim()
-                );
+                let scoped_code = evaluate_component_script_code(script_code, &component_scope);
 
                 memo.components.script.insert(script_checksum, scoped_code);
 
@@ -374,6 +345,53 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
     }
 
     Ok("".to_string())
+}
+
+fn evaluate_component_script_code(source: String, scope: &str) -> String {
+    let scoped_fn_definition = format!("function x_{}()", scope);
+    let scoped_use_element_name = format!("useElement_{}", scope);
+    let scoped_use_element_fn = format!(
+        "function {}(sel) {{ return useElementFactory(sel, {:?}); }}",
+        scoped_use_element_name, scope
+    );
+
+    let mut result = source;
+
+    if result.contains(USE_ELEMENT_TOKEN) {
+        result = result.replace(USE_ELEMENT_TOKEN, &scoped_use_element_name);
+    }
+
+    result = format!(
+        "\n ({} {{\n{}\n{}\n}})();",
+        scoped_fn_definition,
+        scoped_use_element_fn,
+        result.trim()
+    );
+
+    result
+}
+
+fn evaluate_component_style(source: String, scope: &str) -> String {
+    let mut result = String::new();
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let open_token = "{";
+        if trimmed.contains(open_token) {
+            let scoped_selector = format!("\n[data-scope={:?}] {}\n", scope, trimmed);
+            result.push_str(&scoped_selector);
+            continue;
+        }
+
+        result.push_str(line);
+        result.push_str(LINE_SEPARATOR);
+    }
+
+    result
 }
 
 fn construct_components_style(memo: &mut Memory) -> String {
