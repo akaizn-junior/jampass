@@ -24,9 +24,15 @@ struct Checksum {
 
 /// Just the UNIX line separator
 const LINE_SEPARATOR: &str = "\n";
-// static query function token
 const STATIC_QUERY_FN_TOKEN: &str = "$query";
 const QUERY_FN_NAME: &str = "query";
+const QUERY_FACTORY_TOKEN: &str = "queryFactory";
+const DATA_SCOPE_TOKEN: &str = "data-scope";
+const HTML_COMMENT_START_TOKEN: &str = "<!--";
+const STATIC_COMPONENT_TAG_START_TOKEN: &str = "<x-";
+const CSS_SELECTOR_OPEN_TOKEN: &str = "{";
+const HEAD_TAG_CLOSE: &str = "</head>";
+const BODY_TAG_CLOSE: &str = "</body>";
 
 pub fn read_code(file: &PathBuf) -> Result<String> {
     let content = read_to_string(file)?;
@@ -175,9 +181,6 @@ fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String>
 }
 
 fn source_check_up(source: String) -> String {
-    const HTML_COMMENT_START_TOKEN: &str = "<!--";
-    const STATIC_COMPONENT_TAG_START_TOKEN: &str = "<x-";
-
     let lines = source.lines();
     let mut result = String::new();
 
@@ -283,8 +286,8 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
         let c_template = component.select(&selector).next();
 
         // if an element is not found
-        // lets assume
-        // 1 - tag is not "template" tag
+        // lets safely assume by previous logic
+        // 1 - tag is not a "template" tag
         // 2 - the id is not a valid id
         if c_template.is_none() {
             println!("Components must be defined as a template tag and have a valid id");
@@ -338,7 +341,8 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
                     .to_string();
             }
 
-            let out_tag = format!("\t<div data-scope=\"{component_scope}\">\n\t{t_code}\n\t</div>");
+            let out_tag =
+                format!("\t<div {DATA_SCOPE_TOKEN}=\"{component_scope}\">\n\t{t_code}\n\t</div>");
 
             return Ok(out_tag);
         }
@@ -351,8 +355,8 @@ fn evaluate_component_script_code(source: String, scope: &str) -> String {
     let scoped_fn_definition = format!("function x_{}()", scope);
     let scoped_query_fn_name = format!("{}_{}", QUERY_FN_NAME, scope);
     let scoped_query_fn = format!(
-        "function {}(sel) {{ return useElementFactory(sel, {:?}); }}",
-        scoped_query_fn_name, scope
+        "function {}(sel) {{ return {}(sel, {:?}); }}",
+        QUERY_FACTORY_TOKEN, scoped_query_fn_name, scope
     );
 
     let mut result = source;
@@ -376,9 +380,8 @@ fn evaluate_component_style(source: String, scope: &str) -> String {
             continue;
         }
 
-        let open_token = "{";
-        if trimmed.contains(open_token) {
-            let scoped_selector = format!("\n[data-scope={:?}] {}\n", scope, trimmed);
+        if trimmed.contains(CSS_SELECTOR_OPEN_TOKEN) {
+            let scoped_selector = format!("\n[{}={:?}] {}\n", DATA_SCOPE_TOKEN, scope, trimmed);
             result.push_str(&scoped_selector);
             continue;
         }
@@ -428,14 +431,12 @@ fn add_components_style(mut source: String, slice: String) -> String {
     }
 
     if !source.contains("id=\"x-style\"") {
-        let head_tag_close = "</head>";
-
         let mut style_tag = slice;
         style_tag.push_str(LINE_SEPARATOR);
-        style_tag.push_str(head_tag_close);
+        style_tag.push_str(HEAD_TAG_CLOSE);
 
         source = source
-            .split(head_tag_close)
+            .split(HEAD_TAG_CLOSE)
             .collect::<Vec<&str>>()
             .join(&style_tag)
             .trim()
@@ -451,14 +452,12 @@ fn add_components_script(mut source: String, slice: String) -> String {
     }
 
     if !source.contains("id=\"x-script\"") {
-        let body_tag_close = "</body>";
-
         let mut script_tag = slice;
         script_tag.push_str(LINE_SEPARATOR);
-        script_tag.push_str(body_tag_close);
+        script_tag.push_str(BODY_TAG_CLOSE);
 
         source = source
-            .split(body_tag_close)
+            .split(BODY_TAG_CLOSE)
             .collect::<Vec<&str>>()
             .join(&script_tag)
             .trim()
