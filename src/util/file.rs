@@ -24,8 +24,9 @@ struct Checksum {
 
 /// Just the UNIX line separator
 const LINE_SEPARATOR: &str = "\n";
-// static useElement function token
-const USE_ELEMENT_TOKEN: &str = "$useElement";
+// static query function token
+const STATIC_QUERY_FN_TOKEN: &str = "$query";
+const QUERY_FN_NAME: &str = "query";
 
 pub fn read_code(file: &PathBuf) -> Result<String> {
     let content = read_to_string(file)?;
@@ -348,17 +349,17 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
 
 fn evaluate_component_script_code(source: String, scope: &str) -> String {
     let scoped_fn_definition = format!("function x_{}()", scope);
-    let scoped_use_element_name = format!("useElement_{}", scope);
-    let scoped_use_element_fn = format!(
+    let scoped_query_fn_name = format!("{}_{}", QUERY_FN_NAME, scope);
+    let scoped_query_fn = format!(
         "function {}(sel) {{ return useElementFactory(sel, {:?}); }}",
-        scoped_use_element_name, scope
+        scoped_query_fn_name, scope
     );
 
     let mut result = source;
 
-    if result.contains(USE_ELEMENT_TOKEN) {
-        result = result.replace(USE_ELEMENT_TOKEN, &scoped_use_element_name);
-        result = format!("{}\n{}", scoped_use_element_fn, result.trim());
+    if result.contains(STATIC_QUERY_FN_TOKEN) {
+        result = result.replace(STATIC_QUERY_FN_TOKEN, &scoped_query_fn_name);
+        result = format!("{}\n{}", scoped_query_fn, result.trim());
     }
 
     result = format!("\n ({} {{{}}})();", scoped_fn_definition, result);
