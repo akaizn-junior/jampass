@@ -24,8 +24,8 @@ struct Checksum {
     as_u32: u32,
 }
 
-/// Just the UNIX line separator
-const NEW_LINE_BREAK: &str = "\n";
+/// Just the UNIX line separator aka newline (NL)
+const NL: &str = "\n";
 const STATIC_QUERY_FN_TOKEN: &str = "$query";
 const STATIC_UPDATE_FN_TOKEN: &str = "$update";
 
@@ -44,6 +44,15 @@ const HEAD_TAG_CLOSE: &str = "</head>";
 const BODY_TAG_CLOSE: &str = "</body>";
 const COMPONENT_PREFIX_TOKEN: &str = "x-";
 const SPACE: &str = " ";
+
+/// Takes a string splits it two and joins it with a new slice thus replacing a chunk
+fn replace_chunk(text: String, cut_slice: &str, add_slice: &str) -> String {
+    text.split(cut_slice)
+        .collect::<Vec<&str>>()
+        .join(add_slice)
+        .trim()
+        .to_string()
+}
 
 pub fn read_code(file: &PathBuf) -> Result<String> {
     let content = read_to_string(file)?;
@@ -253,7 +262,7 @@ fn source_check_up(source: String) -> String {
         }
 
         result.push_str(line);
-        result.push_str(NEW_LINE_BREAK);
+        result.push_str(NL);
     }
 
     return result;
@@ -317,10 +326,11 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
                 return Ok("".to_string());
             }
 
-            let component_scope = if !is_fragment {
-                checksum(&t_code).as_hex
-            } else {
+            // fragments should not be scoped
+            let component_scope = if is_fragment {
                 "".to_string()
+            } else {
+                checksum(&t_code).as_hex
             };
 
             let style_selector = str_to_selector("style").unwrap();
@@ -332,19 +342,12 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
             if style_tag.is_some() {
                 let tag = style_tag.unwrap();
                 let css_code = tag.inner_html();
-
                 let style_checksum = checksum(&css_code).as_hex;
 
                 let evaled_css = evaluate_component_style(css_code, &component_scope);
-
                 memo.components.style.insert(style_checksum, evaled_css);
 
-                t_code = t_code
-                    .split(&tag.html())
-                    .collect::<Vec<&str>>()
-                    .join("")
-                    .trim()
-                    .to_string();
+                t_code = replace_chunk(t_code, &tag.html(), "");
             }
 
             if script_tag.is_some() {
@@ -355,29 +358,31 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
                 let evaled_code = evaluate_component_script(script_code, &component_scope);
                 memo.components.script.insert(script_checksum, evaled_code);
 
-                t_code = t_code
-                    .split(&tag.html())
-                    .collect::<Vec<&str>>()
-                    .join("")
-                    .trim()
-                    .to_string();
+                t_code = replace_chunk(t_code, &tag.html(), "");
             }
 
             // if the component is a fragment, simply ship the html
             if is_fragment {
-                return Ok(t_code);
+                return Ok(t_code.trim().to_string());
             }
 
             let component_html = Html::parse_fragment(&t_code.trim());
             let first_elem = component_html.root_element().first_child();
 
             if first_elem.is_some() {
-                let first_node = first_elem.unwrap();
-                let is_root_node = !first_node.has_siblings();
+                let node = first_elem.unwrap();
+                let is_root_node = !node.has_siblings();
+
+                if !is_root_node {
+                    // if not a root node and not a fragment, wrap it with a div and ship it
+                    return Ok(format!(
+                        "<div {DATA_SCOPE_TOKEN}=\"{component_scope}\">{t_code}</div>"
+                    ));
+                }
 
                 // if is a root node and not a fragment add the scope to it
                 if is_root_node {
-                    let elem = first_node.value().as_element();
+                    let elem = node.value().as_element();
                     if elem.is_some() {
                         let elem_name = elem.unwrap().name();
                         let tag_start = format!("<{elem_name}");
@@ -386,20 +391,9 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
                         );
 
                         // now this!
-                        let scoped_code = t_code
-                            .split(&tag_start)
-                            .collect::<Vec<&str>>()
-                            .join(&scope_attr)
-                            .trim()
-                            .to_string();
-
+                        let scoped_code = replace_chunk(t_code, &tag_start, &scope_attr);
                         return Ok(scoped_code);
                     }
-                } else {
-                    // if not a root node and not a fragment, wrap it with a div
-                    return Ok(format!(
-                        "<div {DATA_SCOPE_TOKEN}=\"{component_scope}\">{t_code}</div>"
-                    ));
                 }
             }
         }
@@ -440,13 +434,13 @@ fn evaluate_component_script(source: String, scope: &str) -> String {
         for tuple in static_fns {
             if result.contains(tuple.0) {
                 result = result.replace(tuple.0, &tuple.1);
-                scoped_fns.push_str(NEW_LINE_BREAK);
+                scoped_fns.push_str(NL);
                 scoped_fns.push_str(&tuple.2);
             }
         }
 
         result = format!(
-            "\n({} {{{}\n{}}})();",
+            "{NL}({} {{{}{NL}{}}})();",
             scoped_fn_definition,
             scoped_fns,
             result.trim()
@@ -455,9 +449,7 @@ fn evaluate_component_script(source: String, scope: &str) -> String {
         return result;
     }
 
-    result = format!("\n{{\n{}\n}}", result.trim());
-
-    result
+    return format!("{NL}{{{NL}{}{NL}}}", result.trim());
 }
 
 fn evaluate_component_style(source: String, scope: &str) -> String {
@@ -473,13 +465,13 @@ fn evaluate_component_style(source: String, scope: &str) -> String {
             !trimmed.starts_with(CSS_AT_TOKEN) && trimmed.contains(CSS_SELECTOR_OPEN_TOKEN);
 
         if css_selector && !scope.is_empty() {
-            let scoped_selector = format!("\n[{}={:?}] {}\n", DATA_SCOPE_TOKEN, scope, trimmed);
+            let scoped_selector = format!("{NL}[{}={:?}] {}{NL}", DATA_SCOPE_TOKEN, scope, trimmed);
             result.push_str(&scoped_selector);
             continue;
         }
 
         result.push_str(line);
-        result.push_str(NEW_LINE_BREAK);
+        result.push_str(NL);
     }
 
     result
@@ -491,7 +483,7 @@ fn construct_components_style(memo: &mut Memory) -> String {
 
     for code in style {
         result.push_str(code);
-        result.push_str(NEW_LINE_BREAK);
+        result.push_str(NL);
     }
 
     if !result.is_empty() {
@@ -507,7 +499,7 @@ fn construct_components_script(memo: &mut Memory) -> String {
 
     for code in script {
         result.push_str(code);
-        result.push_str(NEW_LINE_BREAK);
+        result.push_str(NL);
     }
 
     if !result.is_empty() {
@@ -524,15 +516,10 @@ fn add_components_style(mut source: String, slice: String) -> String {
 
     if !source.contains("id=\"x-style\"") {
         let mut style_tag = slice;
-        style_tag.push_str(NEW_LINE_BREAK);
+        style_tag.push_str(NL);
         style_tag.push_str(HEAD_TAG_CLOSE);
 
-        source = source
-            .split(HEAD_TAG_CLOSE)
-            .collect::<Vec<&str>>()
-            .join(&style_tag)
-            .trim()
-            .to_string();
+        source = replace_chunk(source, HEAD_TAG_CLOSE, &style_tag);
     }
 
     source
@@ -545,15 +532,10 @@ fn add_components_script(mut source: String, slice: String) -> String {
 
     if !source.contains("id=\"x-script\"") {
         let mut script_tag = slice;
-        script_tag.push_str(NEW_LINE_BREAK);
+        script_tag.push_str(NL);
         script_tag.push_str(BODY_TAG_CLOSE);
 
-        source = source
-            .split(BODY_TAG_CLOSE)
-            .collect::<Vec<&str>>()
-            .join(&script_tag)
-            .trim()
-            .to_string();
+        source = replace_chunk(source, BODY_TAG_CLOSE, &script_tag);
     }
 
     source
@@ -568,17 +550,12 @@ fn add_core_script(mut source: String) -> String {
         if source.contains("id=\"x-script\"") {
             let x_script_tag = "<script id=\"x-script\">";
             let ccode = format!(
-                "<script id=\"x-core-script\">\n{}</script>\n{}",
+                "<script id=\"x-core-script\">{NL}{}</script>{NL}{}",
                 code.unwrap(),
                 x_script_tag
             );
 
-            source = source
-                .split(x_script_tag)
-                .collect::<Vec<&str>>()
-                .join(&ccode)
-                .trim()
-                .to_string()
+            source = replace_chunk(source, x_script_tag, &ccode);
         }
     }
 
