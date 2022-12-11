@@ -11,10 +11,9 @@
     </header>
 
     <script>
-        let h1 = update$('h1')
-        h1(function (content) {
-            content = ' static BOOOM!! '
-            return content
+        let h1 = $query('h1')
+        h1(function (el) {
+            el.innerHTML += ' static BOOOM!! ';
         })
     </script>
 </template>

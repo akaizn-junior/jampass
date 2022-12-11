@@ -1,8 +1,3 @@
-extern crate adler;
-extern crate js_sandbox;
-extern crate scraper;
-extern crate swc;
-
 use adler::adler32_slice;
 use scraper::{Html, Selector};
 
@@ -24,15 +19,14 @@ struct Checksum {
     as_u32: u32,
 }
 
+// **** CONSTANTS
+
 /// Just the UNIX line separator aka newline (NL)
 const NL: &str = "\n";
 const STATIC_QUERY_FN_TOKEN: &str = "$query";
-// const STATIC_UPDATE_FN_TOKEN: &str = "update$";
 const QUERY_FACTORY_TOKEN: &str = "queryByScope";
 
 const QUERY_FN_NAME: &str = "query";
-// const UPDATE_FN_NAME: &str = "update";
-// const UPDATE_FACTORY_TOKEN: &str = "staticUpdate";
 
 const DATA_SCOPE_TOKEN: &str = "data-scope";
 const HTML_COMMENT_START_TOKEN: &str = "<!--";
@@ -43,6 +37,9 @@ const HEAD_TAG_CLOSE: &str = "</head>";
 const BODY_TAG_CLOSE: &str = "</body>";
 const COMPONENT_PREFIX_TOKEN: &str = "x-";
 const SPACE: &str = " ";
+const JS_CLIENT_CORE_PATH: &str = "src/util/js/client_core.js";
+
+// **** end CONSTANTS
 
 /// Takes a string splits it two and joins it with a new slice thus replacing a chunk
 fn replace_chunk(text: String, cut_slice: &str, add_slice: &str) -> String {
@@ -402,8 +399,8 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
     Ok("".to_string())
 }
 
-/// Handle client bound static functions
-fn handle_static_functions(source: String, scope: &str) -> (String, String) {
+/// Handles client bound static functions
+fn handle_static_fns(source: String, scope: &str) -> (String, String) {
     let mut src_code = source;
     let mut scoped_fns = String::new();
 
@@ -432,12 +429,12 @@ fn handle_static_functions(source: String, scope: &str) -> (String, String) {
     return (scoped_fns, src_code);
 }
 
-fn evaluate_component_script(source: String, component_scope: &str) -> String {
-    if !component_scope.is_empty() {
+fn evaluate_component_script(source: String, c_scope: &str) -> String {
+    if !c_scope.is_empty() {
         // define the component's scoped function
-        let scoped_fn_definition = format!("function x_{}()", component_scope);
+        let scoped_fn_definition = format!("function x_{}()", c_scope);
         // evaluate all static functions
-        let (scoped_fns, src_code) = handle_static_functions(source, component_scope);
+        let (scoped_fns, src_code) = handle_static_fns(source, c_scope);
 
         return format!(
             "{NL}({}{SPACE}{{{}{NL}{}}})();",
@@ -541,7 +538,7 @@ fn add_components_script(mut source: String, slice: String) -> String {
 
 fn add_core_script(mut source: String) -> String {
     let pkg_cwd = env::package_cwd();
-    let file = pkg_cwd.join("src/util/js_core.js");
+    let file = pkg_cwd.join(JS_CLIENT_CORE_PATH);
     let code = read_code(&file);
 
     if code.is_ok() {
