@@ -552,6 +552,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "deno_core"
+version = "0.84.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a81744c235008230ef27de7b071f576dbb7a13cd144445b5596c954ea5d8330"
+dependencies = [
+ "anyhow",
+ "futures",
+ "indexmap",
+ "lazy_static",
+ "libc",
+ "log",
+ "pin-project",
+ "rusty_v8",
+ "serde",
+ "serde_json",
+ "serde_v8",
+ "url",
+]
+
+[[package]]
 name = "derive_more"
 version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -671,6 +691,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76ee7a02da4d231650c7cea31349b889be2f45ddb3ef3032d2ec8185f6313fd2"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "fslock"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57eafdd0c16f57161105ae1b98a1238f97645f2f588438b2949c99a2af9616bf"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -991,10 +1021,22 @@ dependencies = [
  "clap",
  "dotenv",
  "futures",
+ "js-sandbox",
  "lightningcss",
  "notify",
  "scraper",
  "swc",
+]
+
+[[package]]
+name = "js-sandbox"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54c22ab172f1f51d21877035a8ca493165f7bb642c77e14aaa758f7d47075128"
+dependencies = [
+ "deno_core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1600,6 +1642,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "pin-project"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad29a609b6bcd67fee905812e544992d216af9d755757c05ed2d0e15a74c6ecc"
+dependencies = [
+ "pin-project-internal",
+]
+
+[[package]]
+name = "pin-project-internal"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "069bdb1e05adc7a8990dce9cc75370895fbe4e3d58b9b73bf1aee56359344a55"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1922,6 +1984,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusty_v8"
+version = "0.22.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa03778bb7866d8320fc3dd5e6be52929dc10f729ae5e61ea2fbce385a4595d2"
+dependencies = [
+ "bitflags",
+ "fslock",
+ "lazy_static",
+ "libc",
+ "which",
+]
+
+[[package]]
 name = "ryu"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2057,8 +2132,19 @@ version = "1.0.87"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce777b7b150d76b9cf60d28b55f5847135a003f7d7350c6be7a773508ce7d45"
 dependencies = [
+ "indexmap",
  "itoa 1.0.4",
  "ryu",
+ "serde",
+]
+
+[[package]]
+name = "serde_v8"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e6669e0b20b450bceffdcc000eb51a7b9c528a828a6baabfa8e738935dccdc1"
+dependencies = [
+ "rusty_v8",
  "serde",
 ]
 
@@ -3118,6 +3204,7 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+ "serde",
 ]
 
 [[package]]
@@ -3228,6 +3315,17 @@ name = "wasm-bindgen-shared"
 version = "0.2.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c38c045535d93ec4f0b4defec448e4291638ee608530863b1e2ba115d4fff7f"
+
+[[package]]
+name = "which"
+version = "4.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c831fbbee9e129a8cf93e7747a82da9d95ba8e16621cae60ec2cdc849bacb7b"
+dependencies = [
+ "either",
+ "libc",
+ "once_cell",
+]
 
 [[package]]
 name = "winapi"

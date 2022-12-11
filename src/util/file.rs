@@ -1,10 +1,10 @@
 extern crate adler;
+extern crate js_sandbox;
 extern crate scraper;
 extern crate swc;
 
 use adler::adler32_slice;
 use scraper::{Html, Selector};
-// use swc::Compiler;
 
 use std::{
     fs::{create_dir_all, read_to_string, remove_file, rename, write},
@@ -27,13 +27,12 @@ struct Checksum {
 /// Just the UNIX line separator aka newline (NL)
 const NL: &str = "\n";
 const STATIC_QUERY_FN_TOKEN: &str = "$query";
-const STATIC_UPDATE_FN_TOKEN: &str = "$update";
+// const STATIC_UPDATE_FN_TOKEN: &str = "update$";
+const QUERY_FACTORY_TOKEN: &str = "queryByScope";
 
 const QUERY_FN_NAME: &str = "query";
-const UPDATE_FN_NAME: &str = "update";
-
-const QUERY_FACTORY_TOKEN: &str = "queryByScope";
-const UPDATE_FACTORY_TOKEN: &str = "staticUpdate";
+// const UPDATE_FN_NAME: &str = "update";
+// const UPDATE_FACTORY_TOKEN: &str = "staticUpdate";
 
 const DATA_SCOPE_TOKEN: &str = "data-scope";
 const HTML_COMMENT_START_TOKEN: &str = "<!--";
@@ -199,7 +198,8 @@ fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String>
     Ok(result)
 }
 
-fn source_check_up(source: String) -> String {
+/// Evaluates the generated source code line by line
+fn generated_code_eval(source: String) -> String {
     let lines = source.lines();
     let mut result = String::new();
 
@@ -402,54 +402,52 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
     Ok("".to_string())
 }
 
-fn evaluate_component_script(source: String, scope: &str) -> String {
-    let mut result = source;
+/// Handle client bound static functions
+fn handle_static_functions(source: String, scope: &str) -> (String, String) {
+    let mut src_code = source;
+    let mut scoped_fns = String::new();
 
-    if !scope.is_empty() {
-        let mut scoped_fns = String::new();
+    // **** Define scoped functions
 
-        let scoped_fn_definition = format!("function x_{}()", scope);
-        let scoped_query_fn_name = format!("{}_{}", QUERY_FN_NAME, scope);
-        let scoped_update_fn_name = format!("{}_{}", UPDATE_FN_NAME, scope);
+    let scoped_query_fn_name = format!("{}_{}", QUERY_FN_NAME, scope);
+    let scoped_query_fn = format!(
+        "function {}(sel) {{ return {}(sel, {:?}); }}",
+        scoped_query_fn_name, QUERY_FACTORY_TOKEN, scope
+    );
 
-        let scoped_query_fn = format!(
-            "function {}(sel) {{ return {}(sel, {:?}); }}",
-            scoped_query_fn_name, QUERY_FACTORY_TOKEN, scope
-        );
+    // **** Register scoped functions
 
-        let scoped_update_fn = format!(
-            "let {} = {}({:?});",
-            scoped_update_fn_name, UPDATE_FACTORY_TOKEN, scope
-        );
+    let static_fns = vec![(STATIC_QUERY_FN_TOKEN, scoped_query_fn_name, scoped_query_fn)];
 
-        let static_fns = vec![
-            (STATIC_QUERY_FN_TOKEN, scoped_query_fn_name, scoped_query_fn),
-            (
-                STATIC_UPDATE_FN_TOKEN,
-                scoped_update_fn_name,
-                scoped_update_fn,
-            ),
-        ];
+    // **** Replace static functions with their scoped counterparts
 
-        for tuple in static_fns {
-            if result.contains(tuple.0) {
-                result = result.replace(tuple.0, &tuple.1);
-                scoped_fns.push_str(NL);
-                scoped_fns.push_str(&tuple.2);
-            }
+    for fns in static_fns {
+        if src_code.contains(fns.0) {
+            src_code = src_code.replace(fns.0, &fns.1);
+            scoped_fns.push_str(NL);
+            scoped_fns.push_str(&fns.2);
         }
-
-        result = format!(
-            "{NL}({} {{{}{NL}{}}})();",
-            scoped_fn_definition,
-            scoped_fns,
-            result.trim()
-        );
-
-        return result;
     }
 
-    return format!("{NL}{{{NL}{}{NL}}}", result.trim());
+    return (scoped_fns, src_code);
+}
+
+fn evaluate_component_script(source: String, component_scope: &str) -> String {
+    if !component_scope.is_empty() {
+        // define the component's scoped function
+        let scoped_fn_definition = format!("function x_{}()", component_scope);
+        // evaluate all static functions
+        let (scoped_fns, src_code) = handle_static_functions(source, component_scope);
+
+        return format!(
+            "{NL}({}{SPACE}{{{}{NL}{}}})();",
+            scoped_fn_definition,
+            scoped_fns,
+            src_code.trim()
+        );
+    }
+
+    return format!("{NL}{{{NL}{}{NL}}}", source.trim());
 }
 
 fn evaluate_component_style(source: String, scope: &str) -> String {
@@ -566,7 +564,7 @@ fn process_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<()> {
     println!("process {:?}", file);
 
     let mut parsed_code = parse_html(file, code, memo)?;
-    parsed_code = source_check_up(parsed_code);
+    parsed_code = generated_code_eval(parsed_code);
 
     let global_script_tag = construct_components_script(memo);
     let global_style_tag = construct_components_style(memo);
