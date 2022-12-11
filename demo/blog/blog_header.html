@@ -1,16 +1,20 @@
-<template id="x-blog-header">
+<template id="x-blog-header" data-fragment="false">
     <style>
         h1 {
             color: rgb(181, 221, 3);
         }
     </style>
+
     <header>
         <h1>Blog uio</h1>
+        <i>Blog uio</i>
     </header>
+
     <script>
-        let h1 = $query('h1')
-        h1(function (el) {
-            el.innerHTML += ' HEADER BOOOM!! '
+        let h1 = $update('h1')
+        h1(function (content) {
+            content = ' static BOOOM!! '
+            return content
         })
     </script>
 </template>

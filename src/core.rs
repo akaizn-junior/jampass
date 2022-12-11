@@ -194,10 +194,10 @@ pub fn watch(config: Opts) -> Result<()> {
 
 /// Starts development server
 pub fn serve(_config: ServeOpts) -> Result<()> {
-    unimplemented!()
+    unimplemented!("serve output files with a dev server")
 }
 
 /// Lint source files
 pub fn lint(_config: LintOpts) -> Result<()> {
-    unimplemented!()
+    unimplemented!("lint user codebase")
 }

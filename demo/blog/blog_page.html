@@ -1,4 +1,4 @@
-<template id="x-blog-page">
+<template id="x-blog-page" data-fragment="true">
     <style>
         p {
             color: red;
@@ -15,11 +15,14 @@
     </style>
     <article>
         <h1 id="hiphip">Hip! Hip!</h1>
+        <p>HELLO STATIC</p>
         <slot name="title"></slot>
         <slot name="description"></slot>
     </article>
     <script>
         let h1 = $query('h1')
+        let p = $update('p')
+
         h1(function (el) {
             el.innerHTML += ' Oppssiiieee!! '
         })

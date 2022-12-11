@@ -1,8 +1,10 @@
 extern crate adler;
 extern crate scraper;
+extern crate swc;
 
 use adler::adler32_slice;
 use scraper::{Html, Selector};
+// use swc::Compiler;
 
 use std::{
     fs::{create_dir_all, read_to_string, remove_file, rename, write},
@@ -23,16 +25,25 @@ struct Checksum {
 }
 
 /// Just the UNIX line separator
-const LINE_SEPARATOR: &str = "\n";
+const NEW_LINE_BREAK: &str = "\n";
 const STATIC_QUERY_FN_TOKEN: &str = "$query";
+const STATIC_UPDATE_FN_TOKEN: &str = "$update";
+
 const QUERY_FN_NAME: &str = "query";
-const QUERY_FACTORY_TOKEN: &str = "queryFactory";
+const UPDATE_FN_NAME: &str = "update";
+
+const QUERY_FACTORY_TOKEN: &str = "queryByScope";
+const UPDATE_FACTORY_TOKEN: &str = "staticUpdate";
+
 const DATA_SCOPE_TOKEN: &str = "data-scope";
 const HTML_COMMENT_START_TOKEN: &str = "<!--";
-const STATIC_COMPONENT_TAG_START_TOKEN: &str = "<x-";
+const COMPONENT_TAG_START_TOKEN: &str = "<x-";
 const CSS_SELECTOR_OPEN_TOKEN: &str = "{";
+const CSS_AT_TOKEN: &str = "@";
 const HEAD_TAG_CLOSE: &str = "</head>";
 const BODY_TAG_CLOSE: &str = "</body>";
+const COMPONENT_PREFIX_TOKEN: &str = "x-";
+const SPACE: &str = " ";
 
 pub fn read_code(file: &PathBuf) -> Result<String> {
     let content = read_to_string(file)?;
@@ -108,8 +119,7 @@ fn checksum(slice: &str) -> Checksum {
 }
 
 fn valid_component_id(c_id: &str) -> bool {
-    const STATIC_COMPONENT_NAME_TOKEN: &str = "x-";
-    c_id.starts_with(STATIC_COMPONENT_NAME_TOKEN)
+    c_id.starts_with(COMPONENT_PREFIX_TOKEN)
 }
 
 fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String> {
@@ -220,13 +230,13 @@ fn source_check_up(source: String) -> String {
         }
 
         // notify and remove unprocessed static component
-        if trimmed.starts_with(STATIC_COMPONENT_TAG_START_TOKEN) {
+        if trimmed.starts_with(COMPONENT_TAG_START_TOKEN) {
             let unknown_name = custom_tag_name(trimmed).unwrap();
             println!("Undefined static component {:?} removed", unknown_name);
             continue;
         }
 
-        let space = trimmed.contains(" ");
+        let space = trimmed.contains(SPACE);
         let dash = trimmed.find("-");
         let tag_end_token = trimmed.find(">");
 
@@ -243,7 +253,7 @@ fn source_check_up(source: String) -> String {
         }
 
         result.push_str(line);
-        result.push_str(LINE_SEPARATOR);
+        result.push_str(NEW_LINE_BREAK);
     }
 
     return result;
@@ -296,10 +306,22 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
 
         if c_template.is_some() {
             let template = c_template.unwrap();
+            let fragment_attr = template.value().attr("data-fragment").unwrap_or("false");
+            let is_fragment = fragment_attr == "true";
 
             // and the t is for template
             let mut t_code = template.inner_html();
-            let component_scope = checksum(&t_code).as_hex;
+
+            // ship it if its empty
+            if t_code.is_empty() {
+                return Ok("".to_string());
+            }
+
+            let component_scope = if !is_fragment {
+                checksum(&t_code).as_hex
+            } else {
+                "".to_string()
+            };
 
             let style_selector = str_to_selector("style").unwrap();
             let script_selector = str_to_selector("script").unwrap();
@@ -313,9 +335,9 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
 
                 let style_checksum = checksum(&css_code).as_hex;
 
-                let scoped_css = evaluate_component_style(css_code, &component_scope);
+                let evaled_css = evaluate_component_style(css_code, &component_scope);
 
-                memo.components.style.insert(style_checksum, scoped_css);
+                memo.components.style.insert(style_checksum, evaled_css);
 
                 t_code = t_code
                     .split(&tag.html())
@@ -330,8 +352,8 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
                 let script_code = tag.inner_html();
                 let script_checksum = checksum(&script_code).as_hex;
 
-                let scoped_code = evaluate_component_script_code(script_code, &component_scope);
-                memo.components.script.insert(script_checksum, scoped_code);
+                let evaled_code = evaluate_component_script(script_code, &component_scope);
+                memo.components.script.insert(script_checksum, evaled_code);
 
                 t_code = t_code
                     .split(&tag.html())
@@ -341,32 +363,99 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
                     .to_string();
             }
 
-            let out_tag =
-                format!("\t<div {DATA_SCOPE_TOKEN}=\"{component_scope}\">\n\t{t_code}\n\t</div>");
+            // if the component is a fragment, simply ship the html
+            if is_fragment {
+                return Ok(t_code);
+            }
 
-            return Ok(out_tag);
+            let component_html = Html::parse_fragment(&t_code.trim());
+            let first_elem = component_html.root_element().first_child();
+
+            if first_elem.is_some() {
+                let first_node = first_elem.unwrap();
+                let is_root_node = !first_node.has_siblings();
+
+                // if is a root node and not a fragment add the scope to it
+                if is_root_node {
+                    let elem = first_node.value().as_element();
+                    if elem.is_some() {
+                        let elem_name = elem.unwrap().name();
+                        let tag_start = format!("<{elem_name}");
+                        let scope_attr = format!(
+                            "{tag_start}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\"{SPACE}"
+                        );
+
+                        // now this!
+                        let scoped_code = t_code
+                            .split(&tag_start)
+                            .collect::<Vec<&str>>()
+                            .join(&scope_attr)
+                            .trim()
+                            .to_string();
+
+                        return Ok(scoped_code);
+                    }
+                } else {
+                    // if not a root node and not a fragment, wrap it with a div
+                    return Ok(format!(
+                        "<div {DATA_SCOPE_TOKEN}=\"{component_scope}\">{t_code}</div>"
+                    ));
+                }
+            }
         }
     }
 
     Ok("".to_string())
 }
 
-fn evaluate_component_script_code(source: String, scope: &str) -> String {
-    let scoped_fn_definition = format!("function x_{}()", scope);
-    let scoped_query_fn_name = format!("{}_{}", QUERY_FN_NAME, scope);
-    let scoped_query_fn = format!(
-        "function {}(sel) {{ return {}(sel, {:?}); }}",
-        QUERY_FACTORY_TOKEN, scoped_query_fn_name, scope
-    );
-
+fn evaluate_component_script(source: String, scope: &str) -> String {
     let mut result = source;
 
-    if result.contains(STATIC_QUERY_FN_TOKEN) {
-        result = result.replace(STATIC_QUERY_FN_TOKEN, &scoped_query_fn_name);
-        result = format!("{}\n{}", scoped_query_fn, result.trim());
+    if !scope.is_empty() {
+        let mut scoped_fns = String::new();
+
+        let scoped_fn_definition = format!("function x_{}()", scope);
+        let scoped_query_fn_name = format!("{}_{}", QUERY_FN_NAME, scope);
+        let scoped_update_fn_name = format!("{}_{}", UPDATE_FN_NAME, scope);
+
+        let scoped_query_fn = format!(
+            "function {}(sel) {{ return {}(sel, {:?}); }}",
+            scoped_query_fn_name, QUERY_FACTORY_TOKEN, scope
+        );
+
+        let scoped_update_fn = format!(
+            "let {} = {}({:?});",
+            scoped_update_fn_name, UPDATE_FACTORY_TOKEN, scope
+        );
+
+        let static_fns = vec![
+            (STATIC_QUERY_FN_TOKEN, scoped_query_fn_name, scoped_query_fn),
+            (
+                STATIC_UPDATE_FN_TOKEN,
+                scoped_update_fn_name,
+                scoped_update_fn,
+            ),
+        ];
+
+        for tuple in static_fns {
+            if result.contains(tuple.0) {
+                result = result.replace(tuple.0, &tuple.1);
+                scoped_fns.push_str(NEW_LINE_BREAK);
+                scoped_fns.push_str(&tuple.2);
+            }
+        }
+
+        result = format!(
+            "\n({} {{{}\n{}}})();",
+            scoped_fn_definition,
+            scoped_fns,
+            result.trim()
+        );
+
+        return result;
     }
 
-    result = format!("\n ({} {{{}}})();", scoped_fn_definition, result);
+    result = format!("\n{{\n{}\n}}", result.trim());
 
     result
 }
@@ -380,14 +469,17 @@ fn evaluate_component_style(source: String, scope: &str) -> String {
             continue;
         }
 
-        if trimmed.contains(CSS_SELECTOR_OPEN_TOKEN) {
+        let css_selector =
+            !trimmed.starts_with(CSS_AT_TOKEN) && trimmed.contains(CSS_SELECTOR_OPEN_TOKEN);
+
+        if css_selector && !scope.is_empty() {
             let scoped_selector = format!("\n[{}={:?}] {}\n", DATA_SCOPE_TOKEN, scope, trimmed);
             result.push_str(&scoped_selector);
             continue;
         }
 
         result.push_str(line);
-        result.push_str(LINE_SEPARATOR);
+        result.push_str(NEW_LINE_BREAK);
     }
 
     result
@@ -399,7 +491,7 @@ fn construct_components_style(memo: &mut Memory) -> String {
 
     for code in style {
         result.push_str(code);
-        result.push_str(LINE_SEPARATOR);
+        result.push_str(NEW_LINE_BREAK);
     }
 
     if !result.is_empty() {
@@ -415,7 +507,7 @@ fn construct_components_script(memo: &mut Memory) -> String {
 
     for code in script {
         result.push_str(code);
-        result.push_str(LINE_SEPARATOR);
+        result.push_str(NEW_LINE_BREAK);
     }
 
     if !result.is_empty() {
@@ -432,7 +524,7 @@ fn add_components_style(mut source: String, slice: String) -> String {
 
     if !source.contains("id=\"x-style\"") {
         let mut style_tag = slice;
-        style_tag.push_str(LINE_SEPARATOR);
+        style_tag.push_str(NEW_LINE_BREAK);
         style_tag.push_str(HEAD_TAG_CLOSE);
 
         source = source
@@ -453,7 +545,7 @@ fn add_components_script(mut source: String, slice: String) -> String {
 
     if !source.contains("id=\"x-script\"") {
         let mut script_tag = slice;
-        script_tag.push_str(LINE_SEPARATOR);
+        script_tag.push_str(NEW_LINE_BREAK);
         script_tag.push_str(BODY_TAG_CLOSE);
 
         source = source
