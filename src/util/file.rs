@@ -265,28 +265,125 @@ fn generated_code_eval(source: String) -> String {
     return result;
 }
 
-fn replace_component_with_static(source: String, component_id: &str, slice: String) -> String {
-    let tag_start = format!("<{}", component_id);
-    let tag_end = format!("</{}>", component_id);
+fn handle_component_placements(slice: &str, to_place: &str) -> String {
+    let mut result = slice.to_string();
+    let slice_doc = Html::parse_fragment(slice);
+    let to_place_doc = Html::parse_fragment(to_place);
 
-    let mut result = source;
+    // a selector for all [slots] aka placements
+    let sel = str_to_selector("[slot]").unwrap();
+    let place_items = to_place_doc.select(&sel);
 
-    // and the i is for index
+    for place_item in place_items {
+        let slot_name = place_item.value().attr("slot").unwrap_or("");
+        // attribute containing the slot name
+        let slot_name_as_attr = format!("[name={slot_name}]");
+        // a selector for the specific named slot
+        let sel = str_to_selector(&slot_name_as_attr).unwrap();
+        let slot_ref = slice_doc.select(&sel).next();
 
-    let mut tag_start_i = result.find(&tag_start);
-    let mut tag_end_i = result.find(&tag_end);
+        if slot_ref.is_some() {
+            // the element of the slot
+            let slot = slot_ref.unwrap();
+            // the html of the tag to place
+            let mut to_place_html = place_item.html();
 
-    while tag_start_i.is_some() && tag_end_i.is_some() {
-        // and the t is for tag
-        let t_start_i = tag_start_i.unwrap();
-        // get the end index of the tag_end
-        let t_end_i = tag_end_i.unwrap() + tag_end.len();
+            // specific slot attribute
+            let name_attr = format!("slot=\"{slot_name}\"");
+            // replace the slot attribute
+            to_place_html = to_place_html.replace(&name_attr, "");
 
-        result.replace_range(t_start_i..t_end_i, &slice);
+            // finally replace the slot with the placement
+            result = replace_chunk(result, &slot.html(), &to_place_html);
+        }
+    }
 
-        // find more occurences
-        tag_start_i = result.find(&tag_start);
-        tag_end_i = result.find(&tag_end);
+    return result;
+}
+
+fn replace_component_with_static(source: String, c_id: &str, slice: String) -> String {
+    let tag_open_token = format!("<{}", c_id);
+    let tag_close_token = format!("</{}>", c_id);
+    let unpaired_close_token = "/>";
+
+    let src_code = source;
+    let mut lines = src_code.lines();
+    let mut line = lines.next();
+
+    let mut result = String::new();
+
+    while line.is_some() {
+        // trim this line of code
+        let trimmed = line.unwrap().trim();
+        // does this line contain a tag openning
+        let tag_open = trimmed.contains(&tag_open_token);
+        // should indicate the closing of an open tag
+        let tag_close = trimmed.contains(&tag_close_token);
+        // for when a component is declared as an unpaired tag
+        let unpaired_close = trimmed.contains(&unpaired_close_token);
+        // do not statically replace comments
+        let comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
+
+        // something line <tag />
+        let unpaired = tag_open && unpaired_close;
+        // something like <tag></tag> in the same line
+        let one_liner_paired = tag_open && tag_close;
+        // will contain placement tags inside a component
+        let mut placements = String::new();
+
+        if !comment && unpaired {
+            result.push_str(&slice);
+            result.push_str(NL);
+            // done! move on
+            line = lines.next();
+            continue;
+        }
+
+        if !comment && one_liner_paired {
+            // one liner paired tags may contain placements
+            // capture them
+            let close_i = trimmed.find(&tag_close_token).unwrap();
+            // fint the index of the closing token ">" for the open token
+            let closing_tok_i = trimmed.find(">").unwrap();
+            // component placements
+            let inner_html = trimmed.get(closing_tok_i + 1..close_i).unwrap();
+
+            if !inner_html.is_empty() {
+                placements.push_str(&inner_html);
+            }
+
+            result.push_str(&slice);
+            result.push_str(NL);
+
+            // done! move on
+            line = lines.next();
+            continue;
+        }
+
+        // if found a open tag, try to capture of its placements until tag close
+        if !comment && !unpaired && tag_open {
+            let mut next_line = lines.next().unwrap();
+
+            // **** Capture all component placements
+            // A placement is a tag that will replace a slot
+            while !next_line.contains(&tag_close_token) {
+                placements.push_str(next_line);
+                next_line = lines.next().unwrap();
+            }
+
+            let with_filled_slots = handle_component_placements(&slice, &placements);
+
+            result.push_str(&with_filled_slots);
+            result.push_str(NL);
+            // done! move on
+            line = lines.next();
+            continue;
+        }
+
+        result.push_str(trimmed);
+        result.push_str(NL);
+        // done! move on
+        line = lines.next();
     }
 
     return result;

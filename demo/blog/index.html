@@ -2,8 +2,10 @@
 <html lang="en">
 
     <head>
-        <x-meta-tags></x-meta-tags>
-        <title>Jampass Blog</title>
+        <x-meta-tags>
+            <title slot="page-title">Home - Blog</title>
+            <p slot="page-para">Home - Blog</p>
+        </x-meta-tags>
         <link rel="component" href="blog_page.html" id="x-blog-page">
         <link href="blog_header.html" rel="component" id="x-blog-header">
         <link href="meta_tags.html" rel="component" id="x-meta-tags">
@@ -16,10 +18,12 @@
         <p>concur</p>
         <i>foo barr 9999 343445//00</i>
 
-        <x-blog-header></x-blog-header>
-        <x-blog-header></x-blog-header>
-        <x-blog-header></x-blog-header>
-        <x-blog-page></x-blog-page>
+        <x-blog-header />
+
+        <x-blog-header />
+
+        <x-blog-page> <p slot="item">BOOM!</p> </x-blog-page>
+
         <x-blog-page></x-blog-page>
     </body>
 
