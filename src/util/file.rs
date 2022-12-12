@@ -352,7 +352,8 @@ fn replace_component_with_static(source: String, c_id: &str, slice: String) -> S
                 placements.push_str(&inner_html);
             }
 
-            result.push_str(&slice);
+            let with_filled_slots = handle_component_placements(&slice, &placements);
+            result.push_str(&with_filled_slots);
             result.push_str(NL);
 
             // done! move on
