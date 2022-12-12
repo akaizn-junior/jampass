@@ -6,6 +6,7 @@ pub struct Memory {
     pub linked: HashMap<String, Vec<u32>>,
     pub components: Components,
     pub watch_mode: bool,
+    pub edited_env: bool,
 }
 
 #[derive(Debug, Default)]

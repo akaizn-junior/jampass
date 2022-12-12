@@ -5,7 +5,6 @@ extern crate notify;
 use notify::event::{CreateKind, DataChange, EventKind::*, ModifyKind, RenameMode};
 use notify::{Config, Event, RecursiveMode, Watcher};
 
-use std::ffi::OsStr;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
@@ -28,13 +27,18 @@ fn read_src_path(config: &Opts, root: &str) -> Result<PathList> {
 
 fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result<()> {
     for pb in files {
-        // eval .env file with no extension
-        // env files should have .env extension or be named ".env"
-        if pb.file_name() == Some(OsStr::new(".env")) {
-            file::env(config, pb, memo)?;
+        println!("file {:?}", pb);
+
+        // skip components
+        if file::is_component(&pb)? {
+            continue;
         }
 
-        if file::is_component(&pb)? {
+        if file::is_env_file(pb) {
+            if !memo.watch_mode || (memo.watch_mode && memo.edited_env) {
+                println!("eval env");
+                file::env(config, pb, memo)?;
+            }
             continue;
         }
 
@@ -59,9 +63,13 @@ fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result
 }
 
 fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<()> {
-    let Event { kind, paths, attrs } = event;
+    let Event {
+        kind,
+        paths,
+        attrs: _,
+    } = event;
 
-    println!("{:?}", attrs);
+    println!("--- WATCHING --- ");
 
     match kind {
         Create(ce) => match ce {
@@ -70,8 +78,20 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
         },
         Modify(me) => match me {
             ModifyKind::Data(e) => match e {
-                DataChange::Any => gen(&config, PathList::default(), memo)?,
-                DataChange::Content => gen(&config, PathList::default(), memo)?,
+                DataChange::Any => {
+                    if file::is_env_file(&paths[0]) {
+                        memo.edited_env = true;
+                    }
+
+                    gen(&config, PathList::default(), memo)?
+                }
+                DataChange::Content => {
+                    if file::is_env_file(&paths[0]) {
+                        memo.edited_env = true;
+                    }
+
+                    gen(&config, PathList::default(), memo)?
+                }
                 _ => {}
             },
             ModifyKind::Name(mode) => match mode {

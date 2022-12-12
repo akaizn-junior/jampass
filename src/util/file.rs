@@ -2,6 +2,7 @@ use adler::adler32_slice;
 use scraper::{Html, Selector};
 
 use std::{
+    ffi::OsStr,
     fs::{create_dir_all, read_to_string, remove_file, rename, write},
     path::{Path, PathBuf},
 };
@@ -710,8 +711,12 @@ pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
     Ok(())
 }
 
-pub fn env(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
-    let _code = read_code(&file)?;
+/// env files should have .env extension or be named ".env"
+pub fn is_env_file(file: &PathBuf) -> bool {
+    file.file_name() == Some(OsStr::new(".env")) || file.ends_with(".env")
+}
+
+pub fn env(_config: &Opts, _file: &PathBuf, memo: &mut Memory) -> Result<()> {
     // reload env vars at this point
     env::eval_dotenv();
 
