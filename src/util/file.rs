@@ -25,11 +25,9 @@ struct Checksum {
 /// Just the UNIX line separator aka newline (NL)
 const NL: &str = "\n";
 const STATIC_QUERY_FN_TOKEN: &str = "$query";
-const QUERY_FACTORY_TOKEN: &str = "queryByScope";
-
+const QUERY_FACTORY_TOKEN: &str = "__xQueryByScope";
 const QUERY_FN_NAME: &str = "query";
-
-const DATA_SCOPE_TOKEN: &str = "data-scope";
+const DATA_SCOPE_TOKEN: &str = "data-X-SCOPE";
 const HTML_COMMENT_START_TOKEN: &str = "<!--";
 const COMPONENT_TAG_START_TOKEN: &str = "<x-";
 const CSS_SELECTOR_OPEN_TOKEN: &str = "{";
@@ -39,6 +37,9 @@ const BODY_TAG_CLOSE: &str = "</body>";
 const COMPONENT_PREFIX_TOKEN: &str = "x-";
 const SPACE: &str = " ";
 const JS_CLIENT_CORE_PATH: &str = "src/util/js/client_core.js";
+const GLOBAL_STYLE_ID: &str = "__X-STYLE__";
+const GLOBAL_SCRIPT_ID: &str = "__X-SCRIPT__";
+const GLOBAL_CORE_SCRIPT_ID: &str = "__X-CORE-SCRIPT__";
 
 // **** end CONSTANTS
 
@@ -128,11 +129,11 @@ fn valid_component_id(c_id: &str) -> bool {
     c_id.starts_with(COMPONENT_PREFIX_TOKEN)
 }
 
-fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String> {
+fn parse_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String> {
     let doc = Html::parse_document(&code);
     let o_link = str_to_selector("link");
 
-    let mut result = code;
+    let mut result = code.clone();
 
     if o_link.is_some() {
         let link = o_link.unwrap();
@@ -186,7 +187,7 @@ fn parse_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<String>
                     }
 
                     let parsed_code = parse_component(linked_code, c_id, memo)?;
-                    let static_code = replace_component_with_static(result, c_id, parsed_code);
+                    let static_code = replace_component_with_static(&result, c_id, parsed_code);
                     result = static_code;
                 }
             }
@@ -215,18 +216,13 @@ fn generated_code_eval(source: String) -> String {
 
     for line in lines {
         let trimmed = line.trim();
-
         let comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
-        let component_link = trimmed.contains("rel=\"component\"");
+
         // any other link but components link
+        let component_link = trimmed.contains("rel=\"component\"");
         let any_link = trimmed.contains("<link") && trimmed.contains("href=") && !component_link;
         // any script with a src
         let any_src_script = trimmed.contains("<script") && trimmed.contains("src=");
-
-        // remove linked components
-        if !comment && component_link {
-            continue;
-        }
 
         if !comment && any_link {
             println!("{}", trimmed);
@@ -243,7 +239,7 @@ fn generated_code_eval(source: String) -> String {
             continue;
         }
 
-        let space = trimmed.contains(SPACE);
+        let space_token = trimmed.find(SPACE);
         let dash = trimmed.find("-");
         let tag_end_token = trimmed.find(">");
 
@@ -251,7 +247,7 @@ fn generated_code_eval(source: String) -> String {
         if trimmed.starts_with("<")
             && !trimmed.starts_with("</") // ignore end tags
             && dash.is_some()
-            && !space // ignore meta tags duh!
+            && (dash.unwrap() < space_token.unwrap()) // ignore meta tags duh!
             && tag_end_token.is_some()
             && (dash.unwrap() < tag_end_token.unwrap())
         {
@@ -266,6 +262,7 @@ fn generated_code_eval(source: String) -> String {
     return result;
 }
 
+/// Replaces slot in a component with its placements
 fn handle_component_placements(slice: &str, to_place: &str) -> String {
     let mut result = slice.to_string();
     let slice_doc = Html::parse_fragment(slice);
@@ -302,28 +299,38 @@ fn handle_component_placements(slice: &str, to_place: &str) -> String {
     return result;
 }
 
-fn replace_component_with_static(source: String, c_id: &str, slice: String) -> String {
+fn replace_component_with_static(source: &String, c_id: &str, slice: String) -> String {
     let tag_open_token = format!("<{}", c_id);
     let tag_close_token = format!("</{}>", c_id);
     let unpaired_close_token = "/>";
 
+    let mut result = String::new();
     let src_code = source;
     let mut lines = src_code.lines();
     let mut line = lines.next();
 
-    let mut result = String::new();
-
     while line.is_some() {
         // trim this line of code
         let trimmed = line.unwrap().trim();
+        // do not statically replace comments
+        let comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
+
+        // immediately remove the link declaration to this component
+        let c_id_attr = format!("id=\"{c_id}\"");
+        let this_component_link =
+            trimmed.contains("rel=\"component\"") && trimmed.contains(&c_id_attr);
+        if !comment && this_component_link {
+            // done! move on
+            line = lines.next();
+            continue;
+        }
+
         // does this line contain a tag openning
         let tag_open = trimmed.contains(&tag_open_token);
         // should indicate the closing of an open tag
         let tag_close = trimmed.contains(&tag_close_token);
         // for when a component is declared as an unpaired tag
         let unpaired_close = trimmed.contains(&unpaired_close_token);
-        // do not statically replace comments
-        let comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
 
         // something line <tag />
         let unpaired = tag_open && unpaired_close;
@@ -438,10 +445,9 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
             if style_tag.is_some() {
                 let tag = style_tag.unwrap();
                 let css_code = tag.inner_html();
-                let style_checksum = checksum(&css_code).as_hex;
 
                 let evaled_css = evaluate_component_style(css_code, &component_scope);
-                memo.components.style.insert(style_checksum, evaled_css);
+                memo.component.style.push(evaled_css);
 
                 t_code = replace_chunk(t_code, &tag.html(), "");
             }
@@ -449,10 +455,9 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
             if script_tag.is_some() {
                 let tag = script_tag.unwrap();
                 let script_code = tag.inner_html();
-                let script_checksum = checksum(&script_code).as_hex;
 
                 let evaled_code = evaluate_component_script(script_code, &component_scope);
-                memo.components.script.insert(script_checksum, evaled_code);
+                memo.component.script.push(evaled_code);
 
                 t_code = replace_chunk(t_code, &tag.html(), "");
             }
@@ -572,94 +577,102 @@ fn evaluate_component_style(source: String, scope: &str) -> String {
 }
 
 fn construct_components_style(memo: &mut Memory) -> String {
-    let style = memo.components.style.values();
     let mut result = String::new();
 
-    for code in style {
+    for code in memo.component.style.iter() {
         result.push_str(code);
         result.push_str(NL);
     }
 
     if !result.is_empty() {
-        result = format!("<style id=\"x-style\">{result}</style>");
+        result = format!("<style id=\"{GLOBAL_STYLE_ID}\">{result}</style>");
     }
+
+    // clear the code for this session
+    memo.component.style.clear();
 
     return result;
 }
 
 fn construct_components_script(memo: &mut Memory) -> String {
-    let script = memo.components.script.values();
     let mut result = String::new();
 
-    for code in script {
+    for code in memo.component.script.iter() {
         result.push_str(code);
         result.push_str(NL);
     }
 
     if !result.is_empty() {
-        result = format!("<script id=\"x-script\">{result}</script>");
+        result = format!("<script id=\"{GLOBAL_SCRIPT_ID}\">{result}</script>");
     }
+
+    // clear the code for this session
+    memo.component.script.clear();
 
     return result;
 }
 
-fn add_components_style(mut source: String, slice: String) -> String {
+fn add_components_style(source: String, slice: String) -> String {
     if slice.is_empty() {
         return source;
     }
 
-    if !source.contains("id=\"x-style\"") {
+    let style_id = format!("id=\"{GLOBAL_STYLE_ID}\"");
+
+    if !source.contains(&style_id) {
         let mut style_tag = slice;
         style_tag.push_str(NL);
         style_tag.push_str(HEAD_TAG_CLOSE);
 
-        source = replace_chunk(source, HEAD_TAG_CLOSE, &style_tag);
+        return replace_chunk(source, HEAD_TAG_CLOSE, &style_tag);
     }
 
     source
 }
 
-fn add_components_script(mut source: String, slice: String) -> String {
+fn add_components_script(source: String, slice: String) -> String {
     if slice.is_empty() {
         return source;
     }
 
-    if !source.contains("id=\"x-script\"") {
+    let script_id = format!("id=\"{GLOBAL_SCRIPT_ID}\"");
+
+    if !source.contains(&script_id) {
         let mut script_tag = slice;
         script_tag.push_str(NL);
         script_tag.push_str(BODY_TAG_CLOSE);
 
-        source = replace_chunk(source, BODY_TAG_CLOSE, &script_tag);
+        return replace_chunk(source, BODY_TAG_CLOSE, &script_tag);
     }
 
     source
 }
 
-fn add_core_script(mut source: String) -> String {
+fn add_core_script(source: String) -> Result<String> {
     let pkg_cwd = env::package_cwd();
     let file = pkg_cwd.join(JS_CLIENT_CORE_PATH);
     let code = read_code(&file);
 
-    if code.is_ok() {
-        if source.contains("id=\"x-script\"") {
-            let x_script_tag = "<script id=\"x-script\">";
-            let ccode = format!(
-                "<script id=\"x-core-script\">{NL}{}</script>{NL}{}",
-                code.unwrap(),
-                x_script_tag
-            );
+    let script_id = format!("id=\"{GLOBAL_SCRIPT_ID}\"");
 
-            source = replace_chunk(source, x_script_tag, &ccode);
-        }
+    if source.contains(&script_id) {
+        let x_script_tag = format!("<script {script_id}>");
+        let ccode = format!(
+            "<script id=\"{GLOBAL_CORE_SCRIPT_ID}\">{NL}{}</script>{NL}{}",
+            code.unwrap(),
+            x_script_tag
+        );
+
+        return Ok(replace_chunk(source, &x_script_tag, &ccode));
     }
 
-    source
+    Ok(source)
 }
 
-fn process_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<()> {
+fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> {
     println!("process {:?}", file);
 
-    let mut parsed_code = parse_html(file, code, memo)?;
+    let mut parsed_code = parse_html(file, &code, memo)?;
     parsed_code = generated_code_eval(parsed_code);
 
     let global_script_tag = construct_components_script(memo);
@@ -667,7 +680,7 @@ fn process_html(file: &PathBuf, code: String, memo: &mut Memory) -> Result<()> {
 
     parsed_code = add_components_style(parsed_code, global_style_tag);
     parsed_code = add_components_script(parsed_code, global_script_tag);
-    parsed_code = add_core_script(parsed_code);
+    parsed_code = add_core_script(parsed_code)?;
 
     recursive_output(&file, parsed_code)?;
 
@@ -693,19 +706,22 @@ pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
         return Ok(());
     }
 
-    let was_evaluated_before = memo.files.contains_key(&checksum.as_u32);
+    let file_as_str = file.to_str().unwrap();
+    let processed = memo.files.entry(file_as_str.to_string()).or_default();
+    let has_processed = processed.checksum.eq(&checksum.as_u32);
 
     // verify if the path has already been evaluated
     // or if the output does not exist
-    if !was_evaluated_before {
+    if !has_processed {
         memo.files.insert(
-            checksum.as_u32,
+            file_as_str.to_string(),
             File {
                 checksum: checksum.as_u32,
+                path: file.to_owned(),
             },
         );
 
-        process_html(file, code, memo)?;
+        process_html(file, &code, memo)?;
     }
 
     Ok(())

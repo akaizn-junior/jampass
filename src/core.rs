@@ -68,14 +68,12 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
 
     match kind {
         Create(ce) => match ce {
-            CreateKind::File => {
-                gen(&config, paths, memo)?
-            }
+            CreateKind::File => gen(&config, paths, memo)?,
             _ => {}
         },
         Modify(me) => match me {
             ModifyKind::Data(e) => match e {
-                DataChange::Content => {
+                DataChange::Any => {
                     if file::is_env_file(&paths[0]) {
                         memo.edited_env = true;
                     }
@@ -194,6 +192,8 @@ pub fn watch(config: Opts) -> Result<()> {
             memo.clear();
             gen(&config, PathList::default(), &mut memo)?;
         }
+
+        println!("watching ");
 
         match event {
             Ok(event) => handle_watch_event(&config, event, &mut memo)?,
