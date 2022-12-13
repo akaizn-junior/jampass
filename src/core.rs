@@ -27,8 +27,6 @@ fn read_src_path(config: &Opts, root: &str) -> Result<PathList> {
 
 fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result<()> {
     for pb in files {
-        println!("file {:?}", pb);
-
         // skip components
         if file::is_component(&pb)? {
             continue;
@@ -36,7 +34,6 @@ fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result
 
         if file::is_env_file(pb) {
             if !memo.watch_mode || (memo.watch_mode && memo.edited_env) {
-                println!("eval env");
                 file::env(config, pb, memo)?;
             }
             continue;
@@ -69,22 +66,15 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
         attrs: _,
     } = event;
 
-    println!("--- WATCHING --- ");
-
     match kind {
         Create(ce) => match ce {
-            CreateKind::File => gen(&config, paths, memo)?,
+            CreateKind::File => {
+                gen(&config, paths, memo)?
+            }
             _ => {}
         },
         Modify(me) => match me {
             ModifyKind::Data(e) => match e {
-                DataChange::Any => {
-                    if file::is_env_file(&paths[0]) {
-                        memo.edited_env = true;
-                    }
-
-                    gen(&config, PathList::default(), memo)?
-                }
                 DataChange::Content => {
                     if file::is_env_file(&paths[0]) {
                         memo.edited_env = true;
@@ -148,7 +138,7 @@ pub fn gen(config: &Opts, paths: PathList, memo: &mut Memory) -> Result<()> {
                 return Ok(());
             }
 
-            let with_cwd_str = with_cwd.to_str().expect("Valid string");
+            let with_cwd_str = with_cwd.to_str().unwrap_or(".");
             let src_paths = read_src_path(config, with_cwd_str)?;
             eval_files_loop(config, &src_paths, memo)?;
         }
