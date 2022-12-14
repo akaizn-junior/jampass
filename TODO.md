@@ -1,3 +1,3 @@
-- [] fix editing a component outputs an empty file on watch. Editing a component should affect the files that link the component not the component file itself
-- [] revise component script logic, a component's script only applies to one usage of the component
-- [] revise watch logic, when watch happens the source is generated but there are still bugs
+- [x] fix editing a component outputs an empty file on watch. Editing a component should affect the files that link the component not the component file itself
+- [x] revise component script logic, a component's script only applies to one usage of the component
+- [x] revise watch logic, when watch happens the source is generated but there are still bugs
