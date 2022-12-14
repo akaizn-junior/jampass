@@ -522,25 +522,24 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
                 if is_root_node {
                     let elem = node.value().as_element();
                     if elem.is_some() {
-                        let elem_name = elem.unwrap().name();
+                        let el = elem.unwrap();
+                        let elem_name = el.name();
                         // tag-open-token of the root element
                         let tag_open = format!("<{elem_name}");
-                        // the index of the tag open token
-                        let tag_open_i = t_code.find(&tag_open).unwrap_or(0);
-                        // get the closing token of the tag openning
-                        let tag_open_close_i = t_code
-                            .get(tag_open_i..)
-                            .unwrap_or("")
-                            .find(">")
-                            .unwrap_or(1)
-                            + tag_open_i;
 
                         // collect any previous set attributes
-                        let attrs = t_code.get(tag_open.len()..tag_open_close_i).unwrap_or("");
-                        let tag_with_attrs = format!("{tag_open}{attrs}");
+                        let attrs = el
+                            .attrs
+                            .iter()
+                            .map(|a| format!("{}=\"{}\"", a.0.local, a.1))
+                            .collect::<Vec<String>>()
+                            .join(SPACE);
+
+                        let tag_with_attrs = format!("{tag_open}{SPACE}{attrs}");
+
                         // add the scope attribute
                         let scope_attr = format!(
-                            "{tag_open}{attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\""
+                            "{tag_with_attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\""
                         );
 
                         // now this!
