@@ -193,8 +193,6 @@ pub fn watch(config: Opts) -> Result<()> {
             gen(&config, PathList::default(), &mut memo)?;
         }
 
-        println!("watching ");
-
         match event {
             Ok(event) => handle_watch_event(&config, event, &mut memo)?,
             Err(e) => println!("Watch error {}", e.to_string()),
