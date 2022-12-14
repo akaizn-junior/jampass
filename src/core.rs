@@ -25,17 +25,30 @@ fn read_src_path(root: &str) -> Result<PathList> {
     Ok(paths)
 }
 
+fn eval_linked_component_edit(config: &Opts, pb: &PathBuf, memo: &mut Memory) -> Result<()> {
+    let _default = HashMap::default();
+    let paths = memo.linked.get(pb).unwrap_or(&_default);
+
+    for p in paths.to_owned() {
+        // the path here may still be a component because of nested components, so evaluate it
+        let f = p.0;
+        // if this files exists in linked
+        if memo.linked.contains_key(&f) {
+            eval_linked_component_edit(config, &f, memo)?;
+        } else {
+            file::html(config, &f, memo)?;
+        }
+    }
+
+    Ok(())
+}
+
 fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result<()> {
     for pb in files {
         // skip components
         if file::is_component(&pb)? {
             if memo.watch_mode && memo.edited_component.1.eq(pb) {
-                let _default = HashMap::default();
-                let paths = memo.linked.get(pb).unwrap_or(&_default);
-
-                for p in paths.to_owned() {
-                    file::html(config, &p.0, memo)?;
-                }
+                eval_linked_component_edit(config, pb, memo)?;
                 // done
                 memo.edited_component = (false, PathBuf::new());
             }

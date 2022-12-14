@@ -20,6 +20,12 @@ struct Checksum {
     as_u32: u32,
 }
 
+/// Indicates methods to output data
+enum OutputAction {
+    Write(String),
+    Copy(PathBuf),
+}
+
 // **** CONSTANTS
 
 /// Just the UNIX line separator aka newline (NL)
@@ -57,28 +63,45 @@ pub fn read_code(file: &PathBuf) -> Result<String> {
     Ok(content)
 }
 
+fn write_file(owd: &PathBuf, contents: &String) -> Result<()> {
+    write(owd, contents)?;
+    Ok(())
+}
+
+fn copy_file(from: &PathBuf, to: &PathBuf) -> Result<()> {
+    // copy returns the total number of bytes copied
+    copy(from, to)?;
+    Ok(())
+}
+
 /// Recursively create the full output path then write to it
-fn recursive_output(file: &PathBuf, contents: String) -> Result<()> {
+fn recursive_output(file: &PathBuf, action: OutputAction) -> Result<()> {
     // consider using write! for format strings
 
-    fn write_file(owd: &PathBuf, contents: &String) -> Result<()> {
-        write(owd, contents)?;
-        Ok(())
+    fn get_valid_owd(p: &PathBuf) -> Result<PathBuf> {
+        let owd = path::prefix_with_owd(&p);
+
+        // if file does not exist
+        // create and write to it
+        if owd.metadata().is_err() {
+            let parent = owd.parent().unwrap_or(Path::new("."));
+
+            if parent.metadata().is_err() {
+                create_dir_all(parent)?;
+            }
+        }
+
+        Ok(owd)
     }
 
-    let owd = path::prefix_with_owd(&file);
-
-    // if file does not exist
-    // create and write to it
-    if owd.metadata().is_err() {
-        let parent = owd.parent().unwrap_or(Path::new("."));
-
-        if parent.metadata().is_err() {
-            create_dir_all(parent)?;
+    match action {
+        OutputAction::Write(content) => {
+            write_file(&get_valid_owd(file)?, &content)?;
+        }
+        OutputAction::Copy(to) => {
+            copy_file(&file, &get_valid_owd(&to)?)?;
         }
     }
-
-    write_file(&owd, &contents)?;
 
     Ok(())
 }
@@ -129,7 +152,7 @@ fn valid_component_id(c_id: &str) -> bool {
     c_id.starts_with(COMPONENT_PREFIX_TOKEN)
 }
 
-fn parse_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String> {
+fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String> {
     let doc = Html::parse_document(&code);
     let o_link = str_to_selector("link");
 
@@ -205,12 +228,6 @@ fn parse_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String
     Ok(result)
 }
 
-fn copy_file(from: &PathBuf, to: &PathBuf) -> Result<()> {
-    // return the total number of bytes copied
-    copy(from, to)?;
-    Ok(())
-}
-
 fn evaluate_non_component_link_line(
     file: &PathBuf,
     line: &str,
@@ -225,8 +242,7 @@ fn evaluate_non_component_link_line(
     let full_path = evaluate_href(file, attr_value).unwrap();
 
     if full_path.metadata().is_ok() {
-        let owd = path::prefix_with_owd(&full_path);
-        copy_file(&full_path, &owd)?;
+        recursive_output(&full_path, OutputAction::Copy(full_path.clone()))?;
         return Ok(Some(()));
     }
 
@@ -464,7 +480,7 @@ fn parse_component(file: &PathBuf, c_id: &str, memo: &mut Memory) -> Result<Stri
 
     if c_selector.is_some() {
         // parse the component's html, allows for nested components
-        let parsed_code = parse_html(file, &c_code, memo)?;
+        let parsed_code = parse_document(file, &c_code, memo)?;
         let component = Html::parse_fragment(&parsed_code);
 
         let selector = c_selector.unwrap();
@@ -749,7 +765,7 @@ fn add_core_script(source: String) -> Result<String> {
 fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> {
     println!("File {:?}", file);
 
-    let mut parsed_code = parse_html(file, &code, memo)?;
+    let mut parsed_code = parse_document(file, &code, memo)?;
     parsed_code = generated_code_eval(file, parsed_code)?;
 
     let global_script_tag = construct_components_script(memo);
@@ -759,7 +775,7 @@ fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> 
     parsed_code = add_components_script(parsed_code, global_script_tag);
     parsed_code = add_core_script(parsed_code)?;
 
-    recursive_output(&file, parsed_code)?;
+    recursive_output(&file, OutputAction::Write(parsed_code))?;
     Ok(())
 }
 
