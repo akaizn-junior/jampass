@@ -31,6 +31,7 @@ pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
 
         dir_entries.for_each(|res| {
             let de = res.unwrap();
+            // **** should implement a ignore rc file
             const IGNORE: [&str; 3] = [".git", "node_modules", "public"];
 
             let filename = de.file_name();
@@ -38,18 +39,20 @@ pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
             let fnm_str = filename.to_str().unwrap_or("");
             let de_path = de.path();
 
-            // Ignore files/dirs starting with "." except ".env"
-            if !de_path.starts_with("env") && de_path.starts_with(".") {
-                return;
-            }
+            // println!("{:?} - name - {}", de_path, fnm_str);
 
-            // Ignore processed files
-            if de_path.starts_with(&owd) {
+            // Ignore files/dirs starting with "." except ".env"
+            if fnm_str.ne(".env") && fnm_str.starts_with(".") {
                 return;
             }
 
             // Ignore specific files/dirs
             if IGNORE.contains(&fnm_str) {
+                return;
+            }
+
+            // Ignore processed files
+            if de_path.starts_with(&owd) {
                 return;
             }
 
@@ -63,6 +66,8 @@ pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
     }
 
     inner(&root, &mut list);
+
+    println!("{:?}", list);
 
     Ok(list)
 }
