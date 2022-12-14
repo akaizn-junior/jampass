@@ -7,7 +7,6 @@
             <p slot="page-para">Home - Blog</p>
         </x-meta-tags>
         <link rel="component" href="blog_page.html" id="x-blog-page">
-        <link href="blog_header.html" rel="component" id="x-blog-header">
         <link href="meta_tags.html" rel="component" id="x-meta-tags">
         <script defer src="/js-core.js"></script>
     </head>
@@ -18,11 +17,9 @@
         <p>concur</p>
         <i>foo barr 456</i>
 
-        <x-blog-header />
-
-        <x-blog-header />
-
-        <x-blog-page> <p slot="item">BOOM!</p> </x-blog-page>
+        <x-blog-page>
+            <p slot="item">BOOM!</p>
+        </x-blog-page>
 
         <x-blog-page></x-blog-page>
     </body>

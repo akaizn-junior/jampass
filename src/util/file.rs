@@ -234,15 +234,30 @@ fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
     let mut result = String::new();
 
     /// Reads the name of a possible custom tag under special conditions
-    fn custom_tag_name(html_line: &str) -> Option<&str> {
+    fn read_custom_tag_name(html_line: &str) -> Option<&str> {
         let start_token = html_line.find("<");
+        let space_token = html_line.find(SPACE);
         let end_token = html_line.find(">");
 
         if start_token.is_none() || end_token.is_none() {
             return Some("");
         }
 
-        html_line.get(start_token.unwrap() + 1..end_token.unwrap())
+        let start_token_i = start_token.unwrap();
+        let end_token_i = end_token.unwrap();
+
+        if space_token.is_some() {
+            let space_token_i = space_token.unwrap();
+            let token_i = if space_token_i < end_token_i {
+                space_token_i
+            } else {
+                end_token_i
+            };
+
+            html_line.get(start_token_i + 1..token_i)
+        } else {
+            html_line.get(start_token_i + 1..end_token_i)
+        }
     }
 
     for line in lines {
@@ -273,7 +288,7 @@ fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
 
         // notify and remove unprocessed static component
         if trimmed.starts_with(COMPONENT_TAG_START_TOKEN) {
-            let unknown_name = custom_tag_name(trimmed).unwrap();
+            let unknown_name = read_custom_tag_name(trimmed).unwrap();
             println!("Undefined static component {:?} removed", unknown_name);
             continue;
         }
@@ -290,7 +305,7 @@ fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
             && tag_end_token.is_some()
             && (dash.unwrap() < tag_end_token.unwrap())
         {
-            let name = custom_tag_name(trimmed).unwrap();
+            let name = read_custom_tag_name(trimmed).unwrap();
             println!("Web component used here {:?} ignored", name);
         }
 
@@ -541,9 +556,8 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
                         let with_attrs = tag_with_attrs.trim();
 
                         // add the scope attribute
-                        let scope_attr = format!(
-                            "{with_attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\""
-                        );
+                        let scope_attr =
+                            format!("{with_attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\"");
 
                         // now this!
                         let scoped_code = replace_chunk(t_code, &with_attrs, &scope_attr);
