@@ -152,17 +152,21 @@ fn parse_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String
 
             // evaluate all linked
             let linked_code = read_code(&link_path)?;
-            // calculates the checksum of the linked content
-            let linked_checksum = checksum(&linked_code).as_hex;
-            // calculate the checksum of the main file's content
-            let code_checksum = checksum(&result).as_u32;
-
-            let linked_entries = memo.linked.entry(linked_checksum).or_default();
-            linked_entries.push(code_checksum);
+            // capture all files that use this linked item
+            let linked_entry = memo.linked.entry(link_path).or_default();
+            linked_entry.insert(file.to_owned(), file.to_owned());
 
             // and the c is for component
 
             if link_rel == "component" {
+                if link_id.is_none() {
+                    println!(
+                        "Linked component {:?} does not have an id. ignored",
+                        link_rel
+                    );
+                    continue;
+                }
+
                 if link_id.is_some() {
                     let c_id = link_id.unwrap();
                     // generate a selector for the linked component
@@ -721,6 +725,8 @@ fn add_core_script(source: String) -> Result<String> {
 }
 
 fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> {
+    println!("File {:?}", file);
+
     let mut parsed_code = parse_html(file, &code, memo)?;
     parsed_code = generated_code_eval(file, parsed_code)?;
 
@@ -749,8 +755,6 @@ pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
     let code = read_code(&file)?;
     let checksum = checksum(&code);
 
-    println!("File {:?}", file);
-
     // ignore empty code and components
     if code.is_empty() {
         return Ok(());
@@ -762,7 +766,7 @@ pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
 
     // verify if the path has already been evaluated
     // or if the output does not exist
-    if !has_processed {
+    if !has_processed || memo.edited_component.0 {
         memo.files.insert(
             file_as_str.to_string(),
             File {

@@ -2,7 +2,7 @@ use std::fs::read_dir;
 
 use std::path::{Path, PathBuf};
 
-use crate::core_t::{Opts, Result};
+use crate::core_t::Result;
 use crate::env;
 
 pub type PathList = Vec<PathBuf>;
@@ -22,11 +22,11 @@ pub fn canonical(p: &str) -> Result<PathBuf> {
 }
 
 /// Recursively reads paths from a directory
-pub fn recursive_read_paths(config: &Opts, root: PathBuf) -> Result<PathList> {
-    let custom_dist_dir = &config.opts.dist;
+pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
     let mut list = PathList::new();
 
-    fn inner(root: &PathBuf, custom_dist_dir: &String, list: &mut PathList) {
+    fn inner(root: &PathBuf, list: &mut PathList) {
+        let owd = env::output_dir();
         let dir_entries = read_dir(root).unwrap();
 
         dir_entries.for_each(|res| {
@@ -36,16 +36,15 @@ pub fn recursive_read_paths(config: &Opts, root: PathBuf) -> Result<PathList> {
             let filename = de.file_name();
             let filetype = de.file_type().unwrap();
             let fnm_str = filename.to_str().unwrap_or("");
-            let fnm_string = filename.to_string_lossy();
             let de_path = de.path();
 
             // Ignore files/dirs starting with "." except ".env"
-            if fnm_string.starts_with("env") && fnm_string.starts_with(".") {
+            if !de_path.starts_with("env") && de_path.starts_with(".") {
                 return;
             }
 
-            // Ignore a custom output directory
-            if fnm_string.eq(custom_dist_dir) {
+            // Ignore processed files
+            if de_path.starts_with(&owd) {
                 return;
             }
 
@@ -56,14 +55,14 @@ pub fn recursive_read_paths(config: &Opts, root: PathBuf) -> Result<PathList> {
 
             // Parse subdirectories
             if filetype.is_dir() {
-                return inner(&de_path, custom_dist_dir, list);
+                return inner(&de_path, list);
             }
 
             list.push(de_path);
         });
     }
 
-    inner(&root, custom_dist_dir, &mut list);
+    inner(&root, &mut list);
 
     Ok(list)
 }

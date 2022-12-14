@@ -5,8 +5,8 @@ extern crate notify;
 use notify::event::{CreateKind, DataChange, EventKind::*, ModifyKind, RenameMode};
 use notify::{Config, Event, RecursiveMode, Watcher};
 
-use std::sync::mpsc::channel;
-use std::time::Duration;
+use std::{collections::HashMap, sync::mpsc::channel};
+use std::{path::PathBuf, time::Duration};
 
 // modules
 use crate::env;
@@ -19,9 +19,9 @@ use crate::{
 // Helpers
 
 /// Read file paths from the source folder
-fn read_src_path(config: &Opts, root: &str) -> Result<PathList> {
+fn read_src_path(root: &str) -> Result<PathList> {
     let custom_src = path::canonical(root)?;
-    let paths = path::recursive_read_paths(config, custom_src)?;
+    let paths = path::recursive_read_paths(custom_src)?;
     Ok(paths)
 }
 
@@ -29,6 +29,17 @@ fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result
     for pb in files {
         // skip components
         if file::is_component(&pb)? {
+            if memo.watch_mode && memo.edited_component.1.eq(pb) {
+                let _default = HashMap::default();
+                let paths = memo.linked.get(pb).unwrap_or(&_default);
+
+                for p in paths.to_owned() {
+                    file::html(config, &p.0, memo)?;
+                }
+                // done
+                memo.edited_component = (false, PathBuf::new());
+            }
+
             continue;
         }
 
@@ -36,6 +47,8 @@ fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result
             if !memo.watch_mode || (memo.watch_mode && memo.edited_env) {
                 file::env(config, pb, memo)?;
             }
+
+            memo.edited_env = false;
             continue;
         }
 
@@ -68,17 +81,28 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
 
     match kind {
         Create(ce) => match ce {
-            CreateKind::File => gen(&config, paths, memo)?,
+            CreateKind::File => gen(&config, &paths, memo)?,
             _ => {}
         },
         Modify(me) => match me {
             ModifyKind::Data(e) => match e {
                 DataChange::Any => {
-                    if file::is_env_file(&paths[0]) {
+                    let pb = &paths[0];
+
+                    // ignore files already processed
+                    if pb.starts_with(env::output_dir()) {
+                        return Ok(());
+                    }
+
+                    if file::is_env_file(pb) {
                         memo.edited_env = true;
                     }
 
-                    gen(&config, PathList::default(), memo)?
+                    if file::is_component(pb)? {
+                        memo.edited_component = (true, pb.to_owned());
+                    }
+
+                    gen(&config, &paths, memo)?
                 }
                 _ => {}
             },
@@ -109,17 +133,17 @@ pub fn setup(init: Init) {
 }
 
 /// Generates static assets
-pub fn gen(config: &Opts, paths: PathList, memo: &mut Memory) -> Result<()> {
+pub fn gen(config: &Opts, paths: &PathList, memo: &mut Memory) -> Result<()> {
     let strategy = path::evaluate_cwd();
 
     match strategy {
         path::Strategy::Index => {
             if !paths.is_empty() {
-                eval_files_loop(config, &paths, memo)?;
+                eval_files_loop(config, paths, memo)?;
                 return Ok(());
             }
 
-            let src_paths = read_src_path(config, ".")?;
+            let src_paths = read_src_path(".")?;
             eval_files_loop(config, &src_paths, memo)?;
         }
         path::Strategy::Src => {
@@ -128,6 +152,7 @@ pub fn gen(config: &Opts, paths: PathList, memo: &mut Memory) -> Result<()> {
 
             if !paths.is_empty() {
                 let inside_src = paths
+                    .to_vec()
                     .into_iter()
                     .filter(|p| p.starts_with(&with_cwd))
                     .collect::<PathList>();
@@ -137,7 +162,7 @@ pub fn gen(config: &Opts, paths: PathList, memo: &mut Memory) -> Result<()> {
             }
 
             let with_cwd_str = with_cwd.to_str().unwrap_or(".");
-            let src_paths = read_src_path(config, with_cwd_str)?;
+            let src_paths = read_src_path(with_cwd_str)?;
             eval_files_loop(config, &src_paths, memo)?;
         }
         path::Strategy::Nil => {
@@ -182,7 +207,7 @@ pub fn watch(config: Opts) -> Result<()> {
     let mut memo = Memory::default();
     memo.watch_mode = true;
 
-    gen(&config, PathList::default(), &mut memo)?;
+    gen(&config, &PathList::default(), &mut memo)?;
 
     loop {
         let event = rx.recv()?;
@@ -190,7 +215,7 @@ pub fn watch(config: Opts) -> Result<()> {
         // if owd does not exist when watch is called, generate it
         if owd.metadata().is_err() {
             memo.clear();
-            gen(&config, PathList::default(), &mut memo)?;
+            gen(&config, &PathList::default(), &mut memo)?;
         }
 
         match event {

@@ -22,7 +22,7 @@ pub fn parse() -> Result<()> {
 
     match &app.action {
         Some(Action::Gen {}) => {
-            core::gen(&Opts { opts: app }, PathList::default(), &mut memo)?;
+            core::gen(&Opts { opts: app }, &PathList::default(), &mut memo)?;
         }
         Some(Action::Watch {}) => {
             core::watch(Opts { opts: app })?;
@@ -43,7 +43,7 @@ pub fn parse() -> Result<()> {
             })?;
         }
         None => {
-            core::gen(&Opts { opts: app }, PathList::default(), &mut memo)?;
+            core::gen(&Opts { opts: app }, &PathList::default(), &mut memo)?;
         }
     }
 
