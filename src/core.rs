@@ -89,7 +89,7 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
                 DataChange::Any => {
                     let pb = &paths[0];
 
-                    // ignore files already processed
+                    // ignore files already processed. duh!
                     if pb.starts_with(env::output_dir()) {
                         return Ok(());
                     }

@@ -5,7 +5,7 @@ const __xSafeFun = f => typeof f === "function" ? f : function() {};
  */
 function __xQueryByScope(selector, scope) {
     let sel = typeof selector === "string" ? selector : '';
-    let all  = document.querySelectorAll(`[data-scope=\"${scope}\"] ${sel}`);
+    let all  = document.querySelectorAll(`[data-x-scope=\"${scope}\"] ${sel}`);
 
     return cb => {
         if (all) {

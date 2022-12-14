@@ -27,7 +27,7 @@ const NL: &str = "\n";
 const STATIC_QUERY_FN_TOKEN: &str = "$query";
 const QUERY_FACTORY_TOKEN: &str = "__xQueryByScope";
 const QUERY_FN_NAME: &str = "query";
-const DATA_SCOPE_TOKEN: &str = "data-X-SCOPE";
+const DATA_SCOPE_TOKEN: &str = "data-x-scope";
 const HTML_COMMENT_START_TOKEN: &str = "<!--";
 const COMPONENT_TAG_START_TOKEN: &str = "<x-";
 const CSS_SELECTOR_OPEN_TOKEN: &str = "{";
@@ -167,33 +167,31 @@ fn parse_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String
                     continue;
                 }
 
-                if link_id.is_some() {
-                    let c_id = link_id.unwrap();
-                    // generate a selector for the linked component
-                    let c_selector = str_to_selector(c_id);
+                let c_id = link_id.unwrap();
+                // generate a selector for the linked component
+                let c_selector = str_to_selector(c_id);
 
-                    // if the selector is valid
-                    if c_selector.is_some() {
-                        let selector = c_selector.unwrap();
-                        // verify if the linked component is actually used
-                        let component = doc.select(&selector).next();
+                // if the selector is valid
+                if c_selector.is_some() {
+                    let selector = c_selector.unwrap();
+                    // verify if the linked component is actually used
+                    let component = doc.select(&selector).next();
 
-                        // skipped undeclared linked component
-                        if component.is_none() {
-                            println!("Linked component {:?} not used, ignored", c_id);
-                            continue;
-                        }
-                    }
-
-                    if !valid_component_id(c_id) {
-                        println!("Invalid component id \"{c_id}\"");
+                    // skipped undeclared linked component
+                    if component.is_none() {
+                        println!("Linked component {:?} not used, ignored", c_id);
                         continue;
                     }
-
-                    let parsed_code = parse_component(linked_code, c_id, memo)?;
-                    let static_code = replace_component_with_static(&result, c_id, parsed_code);
-                    result = static_code;
                 }
+
+                if !valid_component_id(c_id) {
+                    println!("Invalid component id \"{c_id}\"");
+                    continue;
+                }
+
+                let parsed_code = parse_component(linked_code, c_id, memo)?;
+                let static_code = replace_component_with_static(&result, c_id, parsed_code);
+                result = static_code;
             }
         }
     }
@@ -540,14 +538,17 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
                             .join(SPACE);
 
                         let tag_with_attrs = format!("{tag_open}{SPACE}{attrs}");
+                        let with_attrs = tag_with_attrs.trim();
 
                         // add the scope attribute
                         let scope_attr = format!(
-                            "{tag_with_attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\""
+                            "{with_attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\""
                         );
 
+                        println!("{with_attrs} - {scope_attr}");
+
                         // now this!
-                        let scoped_code = replace_chunk(t_code, &tag_with_attrs, &scope_attr);
+                        let scoped_code = replace_chunk(t_code, &with_attrs, &scope_attr);
                         return Ok(scoped_code);
                     }
                 }
