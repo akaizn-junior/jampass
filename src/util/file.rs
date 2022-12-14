@@ -3,7 +3,7 @@ use scraper::{Html, Selector};
 
 use std::{
     ffi::OsStr,
-    fs::{create_dir_all, read_to_string, remove_file, rename, write},
+    fs::{copy, create_dir_all, read_to_string, remove_file, rename, write},
     path::{Path, PathBuf},
 };
 
@@ -197,8 +197,37 @@ fn parse_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String
     Ok(result)
 }
 
+fn copy_file(from: &PathBuf, to: &PathBuf) -> Result<()> {
+    // return the total number of bytes copied
+    copy(from, to)?;
+    Ok(())
+}
+
+fn evaluate_non_component_link_line(
+    file: &PathBuf,
+    line: &str,
+    link_path_attr: &str,
+) -> Result<Option<()>> {
+    let frag = Html::parse_fragment(line);
+    let attr = format!("[{link_path_attr}]");
+
+    let sel = str_to_selector(&attr).unwrap();
+    let tag = frag.select(&sel).next().unwrap();
+    let attr_value = tag.value().attr(link_path_attr).unwrap();
+    let full_path = evaluate_href(file, attr_value).unwrap();
+
+    if full_path.metadata().is_ok() {
+        let owd = path::prefix_with_owd(&full_path);
+        copy_file(&full_path, &owd)?;
+        return Ok(Some(()));
+    }
+
+    println!("{:?} does not exist. ignored", attr_value);
+    Ok(None)
+}
+
 /// Evaluates the generated source code line by line
-fn generated_code_eval(source: String) -> String {
+fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
     let lines = source.lines();
     let mut result = String::new();
 
@@ -225,11 +254,19 @@ fn generated_code_eval(source: String) -> String {
         let any_src_script = trimmed.contains("<script") && trimmed.contains("src=");
 
         if !comment && any_link {
-            println!("{}", trimmed);
+            let result = evaluate_non_component_link_line(file, trimmed, "href")?;
+
+            if result.is_none() {
+                continue;
+            }
         }
 
         if !comment && any_src_script {
-            println!("{}", trimmed);
+            let result = evaluate_non_component_link_line(file, trimmed, "src")?;
+
+            if result.is_none() {
+                continue;
+            }
         }
 
         // notify and remove unprocessed static component
@@ -259,7 +296,7 @@ fn generated_code_eval(source: String) -> String {
         result.push_str(NL);
     }
 
-    return result;
+    return Ok(result);
 }
 
 /// Replaces slot in a component with its placements
@@ -685,10 +722,8 @@ fn add_core_script(source: String) -> Result<String> {
 }
 
 fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> {
-    println!("process {:?}", file);
-
     let mut parsed_code = parse_html(file, &code, memo)?;
-    parsed_code = generated_code_eval(parsed_code);
+    parsed_code = generated_code_eval(file, parsed_code)?;
 
     let global_script_tag = construct_components_script(memo);
     let global_style_tag = construct_components_style(memo);
@@ -698,7 +733,6 @@ fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> 
     parsed_code = add_core_script(parsed_code)?;
 
     recursive_output(&file, parsed_code)?;
-
     Ok(())
 }
 
@@ -715,6 +749,8 @@ pub fn is_component(file: &PathBuf) -> Result<bool> {
 pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
     let code = read_code(&file)?;
     let checksum = checksum(&code);
+
+    println!("File {:?}", file);
 
     // ignore empty code and components
     if code.is_empty() {
