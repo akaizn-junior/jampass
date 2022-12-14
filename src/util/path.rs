@@ -39,8 +39,6 @@ pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
             let fnm_str = filename.to_str().unwrap_or("");
             let de_path = de.path();
 
-            // println!("{:?} - name - {}", de_path, fnm_str);
-
             // Ignore files/dirs starting with "." except ".env"
             if fnm_str.ne(".env") && fnm_str.starts_with(".") {
                 return;
@@ -66,8 +64,6 @@ pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
     }
 
     inner(&root, &mut list);
-
-    println!("{:?}", list);
 
     Ok(list)
 }
