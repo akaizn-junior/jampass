@@ -545,8 +545,6 @@ fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<Stri
                             "{with_attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\""
                         );
 
-                        println!("{with_attrs} - {scope_attr}");
-
                         // now this!
                         let scoped_code = replace_chunk(t_code, &with_attrs, &scope_attr);
                         return Ok(scoped_code);
