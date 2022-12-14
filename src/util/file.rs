@@ -150,10 +150,8 @@ fn parse_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String
                 continue;
             }
 
-            // evaluate all linked
-            let linked_code = read_code(&link_path)?;
             // capture all files that use this linked item
-            let linked_entry = memo.linked.entry(link_path).or_default();
+            let linked_entry = memo.linked.entry(link_path.clone()).or_default();
             linked_entry.insert(file.to_owned(), file.to_owned());
 
             // and the c is for component
@@ -168,6 +166,14 @@ fn parse_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String
                 }
 
                 let c_id = link_id.unwrap();
+
+                // avoid recursive nesting aka do not link the same component within itself
+                if file.eq(&link_path) {
+                    let nada = "".to_string();
+                    result = replace_component_with_static(&result, c_id, nada);
+                    continue;
+                }
+
                 // generate a selector for the linked component
                 let c_selector = str_to_selector(c_id);
 
@@ -189,7 +195,7 @@ fn parse_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String
                     continue;
                 }
 
-                let parsed_code = parse_component(linked_code, c_id, memo)?;
+                let parsed_code = parse_component(&link_path, c_id, memo)?;
                 let static_code = replace_component_with_static(&result, c_id, parsed_code);
                 result = static_code;
             }
@@ -272,7 +278,6 @@ fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
 
         if !comment && any_link {
             let result = evaluate_non_component_link_line(file, trimmed, "href")?;
-
             if result.is_none() {
                 continue;
             }
@@ -280,7 +285,6 @@ fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
 
         if !comment && any_src_script {
             let result = evaluate_non_component_link_line(file, trimmed, "src")?;
-
             if result.is_none() {
                 continue;
             }
@@ -452,12 +456,17 @@ fn replace_component_with_static(source: &String, c_id: &str, slice: String) -> 
     return result;
 }
 
-fn parse_component(c_code: String, c_id: &str, memo: &mut Memory) -> Result<String> {
+fn parse_component(file: &PathBuf, c_id: &str, memo: &mut Memory) -> Result<String> {
+    // evaluate all linked
+    let c_code = read_code(file)?;
     let c_sel_str = format!("template[id={}]", c_id);
     let c_selector = str_to_selector(&c_sel_str);
 
     if c_selector.is_some() {
-        let component = Html::parse_fragment(&c_code);
+        // parse the component's html, allows for nested components
+        let parsed_code = parse_html(file, &c_code, memo)?;
+        let component = Html::parse_fragment(&parsed_code);
+
         let selector = c_selector.unwrap();
         let c_template = component.select(&selector).next();
 
