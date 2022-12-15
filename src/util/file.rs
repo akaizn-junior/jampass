@@ -34,6 +34,7 @@ const STATIC_QUERY_FN_TOKEN: &str = "$query";
 const QUERY_FACTORY_TOKEN: &str = "__xQueryByScope";
 const QUERY_FN_NAME: &str = "query";
 const DATA_SCOPE_TOKEN: &str = "data-x-scope";
+const DATA_NESTED_TOKEN: &str = "data-x-nested";
 const HTML_COMMENT_START_TOKEN: &str = "<!--";
 const COMPONENT_TAG_START_TOKEN: &str = "<x-";
 const CSS_SELECTOR_OPEN_TOKEN: &str = "{";
@@ -478,7 +479,12 @@ fn parse_nested_components(file: &PathBuf, code: &String, memo: &mut Memory) -> 
     Ok(parsed)
 }
 
-fn parse_component(file: &PathBuf, c_id: &str, is_nested: bool, memo: &mut Memory) -> Result<String> {
+fn parse_component(
+    file: &PathBuf,
+    c_id: &str,
+    is_nested: bool,
+    memo: &mut Memory,
+) -> Result<String> {
     // evaluate all linked
     let c_code = read_code(file)?;
     let c_sel_str = format!("template[id={}]", c_id);
@@ -560,7 +566,7 @@ fn parse_component(file: &PathBuf, c_id: &str, is_nested: bool, memo: &mut Memor
                 let is_root_node = !node.has_siblings();
 
                 if !is_root_node {
-                    let scoped_code = format!("<div {DATA_SCOPE_TOKEN}=\"{component_scope}\"{SPACE}data-x-nested=\"{is_nested}\">{t_code}</div>");
+                    let scoped_code = format!("<div {DATA_SCOPE_TOKEN}=\"{component_scope}\"{SPACE}{DATA_NESTED_TOKEN}=\"{is_nested}\">{t_code}</div>");
                     return Ok(scoped_code);
                 }
 
@@ -585,7 +591,7 @@ fn parse_component(file: &PathBuf, c_id: &str, is_nested: bool, memo: &mut Memor
                         let with_attrs = tag_with_attrs.trim();
 
                         // add the scope attribute
-                        let scope_attr = format!("{with_attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\"  data-x-nested=\"{is_nested}\"");
+                        let scope_attr = format!("{with_attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\"{SPACE}{DATA_NESTED_TOKEN}=\"{is_nested}\"");
 
                         // now this!
                         let scoped_code = replace_chunk(t_code, &with_attrs, &scope_attr);
@@ -660,7 +666,12 @@ fn evaluate_component_style(source: String, scope: &str) -> String {
             !trimmed.starts_with(CSS_AT_TOKEN) && trimmed.contains(CSS_SELECTOR_OPEN_TOKEN);
 
         if css_selector && !scope.is_empty() {
-            let scoped_selector = format!("{NL}[{}={:?}] {}{NL}", DATA_SCOPE_TOKEN, scope, trimmed);
+            let actual_selector = trimmed
+                .get(..trimmed.find(CSS_SELECTOR_OPEN_TOKEN).unwrap())
+                .unwrap();
+            let not_selector = format!("[{DATA_SCOPE_TOKEN}=\"{scope}\"]>{SPACE}:not([{DATA_NESTED_TOKEN}=\"true\"]){SPACE}{actual_selector}");
+
+            let scoped_selector = format!("{NL}[{DATA_SCOPE_TOKEN}=\"{scope}\"]{SPACE}{actual_selector},{SPACE}{not_selector}{NL}{SPACE}{{");
             result.push_str(&scoped_selector);
             continue;
         }
