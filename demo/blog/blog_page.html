@@ -4,14 +4,13 @@
         h1 {
             font-style: italic;
             font-size: 2em;
-            color: yellow;
+            color: orange;
         }
     </style>
 
-    <x-blog-header />
-
     <article class="boo">
-        <h1 id="hiphip">ARTICLE ll</h1>
+        <x-blog-header />
+        <h1 id="hiphip">ARTICLE</h1>
         <slot name="item">HELLO CDWE</slot>
     </article>
 
@@ -19,7 +18,7 @@
         let h1 = $query('h1')
 
         h1(function (el) {
-            el.innerHTML += ' Oppssiiieee!! '
+            el.innerHTML += ' FROM_JS'
         })
     </script>
 </template>

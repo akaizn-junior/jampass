@@ -1,4 +1,5 @@
 <template id="x-blog-header">
+    <link rel="component" href="./tag.html" id="x-some-tag">
     <style>
         h1 {
             font-style: italic;
@@ -7,15 +8,17 @@
         }
     </style>
 
+    <x-some-tag />
+
     <header>
-        <h1>HEADER uui</h1>
+        <h1>HEADER COMPONENT</h1>
         <i>Blog boas Noticias!</i>
     </header>
 
     <script>
         let h1 = $query('h1')
         h1(function (el) {
-            el.innerHTML += ' static BOOOMAROO!! ';
+            el.innerHTML += ' STATIC!! ';
         })
     </script>
 </template>

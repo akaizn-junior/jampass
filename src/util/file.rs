@@ -218,7 +218,7 @@ fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<St
                     continue;
                 }
 
-                let parsed_code = parse_component(&link_path, c_id, memo)?;
+                let parsed_code = parse_component(&link_path, c_id, is_component(file)?, memo)?;
                 let static_code = replace_component_with_static(&result, c_id, parsed_code);
                 result = static_code;
             }
@@ -472,16 +472,21 @@ fn replace_component_with_static(source: &String, c_id: &str, slice: String) -> 
     return result;
 }
 
-fn parse_component(file: &PathBuf, c_id: &str, memo: &mut Memory) -> Result<String> {
+fn parse_nested_components(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String> {
+    // parse this component's nested components
+    let parsed = parse_document(file, &code, memo)?;
+    Ok(parsed)
+}
+
+fn parse_component(file: &PathBuf, c_id: &str, is_nested: bool, memo: &mut Memory) -> Result<String> {
     // evaluate all linked
     let c_code = read_code(file)?;
     let c_sel_str = format!("template[id={}]", c_id);
     let c_selector = str_to_selector(&c_sel_str);
 
     if c_selector.is_some() {
-        // parse the component's html, allows for nested components
-        let parsed_code = parse_document(file, &c_code, memo)?;
-        let component = Html::parse_fragment(&parsed_code);
+        let parsed = parse_nested_components(file, &c_code, memo)?;
+        let component = Html::parse_fragment(&parsed);
 
         let selector = c_selector.unwrap();
         let c_template = component.select(&selector).next();
@@ -543,7 +548,8 @@ fn parse_component(file: &PathBuf, c_id: &str, memo: &mut Memory) -> Result<Stri
 
             // if the component is a fragment, simply ship the html
             if is_fragment {
-                return Ok(t_code.trim().to_string());
+                let code = t_code.trim().to_string();
+                return Ok(code);
             }
 
             let component_html = Html::parse_fragment(&t_code.trim());
@@ -554,10 +560,8 @@ fn parse_component(file: &PathBuf, c_id: &str, memo: &mut Memory) -> Result<Stri
                 let is_root_node = !node.has_siblings();
 
                 if !is_root_node {
-                    // if not a root node and not a fragment, wrap it with a div and ship it
-                    return Ok(format!(
-                        "<div {DATA_SCOPE_TOKEN}=\"{component_scope}\">{t_code}</div>"
-                    ));
+                    let scoped_code = format!("<div {DATA_SCOPE_TOKEN}=\"{component_scope}\"{SPACE}data-x-nested=\"{is_nested}\">{t_code}</div>");
+                    return Ok(scoped_code);
                 }
 
                 // if is a root node and not a fragment add the scope to it
@@ -581,8 +585,7 @@ fn parse_component(file: &PathBuf, c_id: &str, memo: &mut Memory) -> Result<Stri
                         let with_attrs = tag_with_attrs.trim();
 
                         // add the scope attribute
-                        let scope_attr =
-                            format!("{with_attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\"");
+                        let scope_attr = format!("{with_attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\"  data-x-nested=\"{is_nested}\"");
 
                         // now this!
                         let scoped_code = replace_chunk(t_code, &with_attrs, &scope_attr);
