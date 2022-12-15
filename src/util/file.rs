@@ -671,7 +671,7 @@ fn evaluate_component_style(source: String, scope: &str) -> String {
                 .unwrap();
             let not_selector = format!("[{DATA_SCOPE_TOKEN}=\"{scope}\"]>{SPACE}:not([{DATA_NESTED_TOKEN}=\"true\"]){SPACE}{actual_selector}");
 
-            let scoped_selector = format!("{NL}[{DATA_SCOPE_TOKEN}=\"{scope}\"]{SPACE}{actual_selector},{SPACE}{not_selector}{NL}{SPACE}{{");
+            let scoped_selector = format!("{NL}[{DATA_SCOPE_TOKEN}=\"{scope}\"]>{SPACE}{actual_selector},{SPACE}{not_selector}{NL}{SPACE}{{");
             result.push_str(&scoped_selector);
             continue;
         }
