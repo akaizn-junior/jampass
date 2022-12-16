@@ -44,7 +44,7 @@ fn eval_linked_component_edit(config: &Opts, pb: &PathBuf, memo: &mut Memory) ->
 fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result<()> {
     for pb in files {
         // skip components
-        if file::is_component(&pb)? {
+        if file::is_component(&pb) {
             if memo.watch_mode && memo.edited_component.1.eq(pb) {
                 eval_linked_component_edit(config, pb, memo)?;
                 // done
@@ -86,47 +86,48 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
         attrs: _,
     } = event;
 
+    // filter out already processed files
+    let ps: PathList = paths
+        .into_iter()
+        .filter(|p| path::evaluate_path_rules(&p))
+        .collect();
+
+    println!("watch kind -- {:?}", kind);
+    println!("paths -- {:?}", ps);
+
     match kind {
         Create(ce) => match ce {
-            CreateKind::File => gen(&config, &paths, memo)?,
+            CreateKind::File => gen(&config, &ps, memo)?,
             _ => {}
         },
         Modify(me) => match me {
             ModifyKind::Data(e) => match e {
                 DataChange::Any => {
-                    let pb = &paths[0];
-
-                    // ignore files already processed. duh!
-                    if pb.starts_with(env::output_dir()) {
-                        return Ok(());
-                    }
-
-                    if file::is_env_file(pb) {
+                    if ps.iter().any(|p| file::is_env_file(p)) {
                         memo.edited_env = true;
                     }
 
-                    if file::is_component(pb)? {
-                        memo.edited_component = (true, pb.to_owned());
+                    let component = ps.iter().find(|&p| file::is_component(&p));
+                    if component.is_some() {
+                        memo.edited_component = (true, component.unwrap().to_owned());
                     }
 
-                    gen(&config, &paths, memo)?
+                    gen(&config, &ps, memo)?
                 }
                 _ => {}
             },
             ModifyKind::Name(mode) => match mode {
                 RenameMode::Both => {
-                    if !paths.is_empty() {
-                        file::rename_output(&paths[0], &paths[1])?;
+                    if !ps.is_empty() {
+                        file::rename_output(&ps[0], &ps[1])?;
                     }
                 }
                 _ => {}
             },
             _ => {}
         },
-        Access(_e) => {}
-        Remove(_e) => file::remove(paths)?,
-        Other => {}
-        Any => {}
+        Remove(_e) => file::remove(ps)?,
+        _ => {}
     }
 
     Ok(())
@@ -151,9 +152,6 @@ pub fn gen(config: &Opts, paths: &PathList, memo: &mut Memory) -> Result<()> {
             }
 
             let src_paths = read_src_path(".")?;
-
-            println!("{:?}", src_paths);
-
             eval_files_loop(config, &src_paths, memo)?;
         }
         path::Strategy::Src => {
@@ -188,6 +186,9 @@ pub fn watch(config: Opts) -> Result<()> {
     let cwd = env::current_dir();
     let owd = env::output_dir();
 
+    let mut memo = Memory::default();
+    memo.watch_mode = true;
+
     let watcher_config = Config::default()
         .with_poll_interval(Duration::from_secs(5))
         .with_compare_contents(true);
@@ -206,21 +207,21 @@ pub fn watch(config: Opts) -> Result<()> {
     let recursive_watcher = watcher.watch(&cwd, RecursiveMode::Recursive);
 
     match recursive_watcher {
+        Ok(()) => {
+            // start by generating files
+            gen(&config, &PathList::default(), &mut memo)?;
+        }
         Err(e) => println!(
             "Watch error: {}, \"{}\"",
             e.to_string(),
             cwd.to_string_lossy()
         ),
-        _ => {}
     }
-
-    let mut memo = Memory::default();
-    memo.watch_mode = true;
-
-    gen(&config, &PathList::default(), &mut memo)?;
 
     loop {
         let event = rx.recv()?;
+
+        println!("{:?}", event);
 
         // if owd does not exist when watch is called, generate it
         if owd.metadata().is_err() {

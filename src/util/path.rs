@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::core_t::Result;
 use crate::env;
+use crate::util::path;
 
 pub type PathList = Vec<PathBuf>;
 
@@ -14,6 +15,9 @@ pub enum Strategy {
     Nil,
 }
 
+/// **** should implement a ignore rc file
+const IGNORE: [&str; 3] = [".git", "node_modules", "public"];
+
 /// Canonicalize a string path
 pub fn canonical(p: &str) -> Result<PathBuf> {
     let path = PathBuf::from(p);
@@ -21,18 +25,38 @@ pub fn canonical(p: &str) -> Result<PathBuf> {
     Ok(canonical_path)
 }
 
+/// Rules for path evaluation
+pub fn evaluate_path_rules(path: &PathBuf) -> bool {
+    let filename = path.file_name().unwrap_or_default();
+    let fnm_str = filename.to_str().unwrap_or("");
+
+    // Ignore files/dirs starting with "." except ".env"
+    if fnm_str.ne(".env") && fnm_str.starts_with(".") {
+        return false;
+    }
+
+    // Ignore specific files/dirs
+    if IGNORE.contains(&fnm_str) {
+        return false;
+    }
+
+    // skip already processed files
+    if path::starts_with_owd(&path) {
+        return false;
+    }
+
+    return true;
+}
+
 /// Recursively reads paths from a directory
 pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
     let mut list = PathList::new();
 
     fn inner(root: &PathBuf, list: &mut PathList) {
-        let owd = env::output_dir();
         let dir_entries = read_dir(root).unwrap();
 
         dir_entries.for_each(|res| {
             let de = res.unwrap();
-            // **** should implement a ignore rc file
-            const IGNORE: [&str; 3] = [".git", "node_modules", "public"];
 
             let filename = de.file_name();
             let filetype = de.file_type().unwrap();
@@ -49,8 +73,8 @@ pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
                 return;
             }
 
-            // Ignore processed files
-            if de_path.starts_with(&owd) {
+            // skip already processed files
+            if path::starts_with_owd(&de_path) {
                 return;
             }
 
@@ -117,4 +141,9 @@ pub fn strip_cwd(file: &PathBuf) -> PathBuf {
     // get the file base, aka everything else but the cwd
     let file_base = file.strip_prefix(cwd_as_str).unwrap_or(Path::new("."));
     return file_base.to_path_buf();
+}
+
+pub fn starts_with_owd(file: &PathBuf) -> bool {
+    let owd = env::output_dir();
+    file.starts_with(owd)
 }

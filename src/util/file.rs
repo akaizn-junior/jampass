@@ -77,8 +77,6 @@ fn copy_file(from: &PathBuf, to: &PathBuf) -> Result<()> {
 
 /// Recursively create the full output path then write to it
 fn recursive_output(file: &PathBuf, action: OutputAction) -> Result<()> {
-    // consider using write! for format strings
-
     fn get_valid_owd(p: &PathBuf) -> Result<PathBuf> {
         let owd = path::prefix_with_owd(&p);
 
@@ -219,7 +217,7 @@ fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<St
                     continue;
                 }
 
-                let parsed_code = parse_component(&link_path, c_id, is_component(file)?, memo)?;
+                let parsed_code = parse_component(&link_path, c_id, is_component(file), memo)?;
                 let static_code = replace_component_with_static(&result, c_id, parsed_code);
                 result = static_code;
             }
@@ -795,19 +793,24 @@ fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> 
 
 // Interface
 
-pub fn is_component(file: &PathBuf) -> Result<bool> {
-    let code = read_code(file)?;
-    let template_tag_token = "<template";
-    let ccode = code.trim();
+pub fn is_component(file: &PathBuf) -> bool {
+    let code = read_code(file);
 
-    Ok(ccode.starts_with(template_tag_token))
+    if code.is_ok() {
+        let template_tag_token = "<template";
+        let ccode = code.unwrap();
+
+        return ccode.trim().starts_with(template_tag_token);
+    }
+
+    return false;
 }
 
 pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
     let code = read_code(&file)?;
     let checksum = checksum(&code);
 
-    // ignore empty code and components
+    // ignore empty code
     if code.is_empty() {
         return Ok(());
     }
