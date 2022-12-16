@@ -72,10 +72,6 @@ fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result
             Some("htm") => {
                 file::html(config, pb, memo)?;
             }
-            Some("env") => {
-                file::env(config, pb, memo)?;
-            }
-            None => {}
             _ => {}
         }
     }
@@ -155,6 +151,9 @@ pub fn gen(config: &Opts, paths: &PathList, memo: &mut Memory) -> Result<()> {
             }
 
             let src_paths = read_src_path(".")?;
+
+            println!("{:?}", src_paths);
+
             eval_files_loop(config, &src_paths, memo)?;
         }
         path::Strategy::Src => {

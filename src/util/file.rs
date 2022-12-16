@@ -675,7 +675,7 @@ fn evaluate_component_style(source: String, scope: &str) -> String {
             result.push_str(&scoped_selector);
             continue;
         }
- 
+
         result.push_str(line);
         result.push_str(NL);
     }
@@ -835,7 +835,7 @@ pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
 
 /// env files should have .env extension or be named ".env"
 pub fn is_env_file(file: &PathBuf) -> bool {
-    file.file_name() == Some(OsStr::new(".env")) || file.ends_with(".env")
+    file.file_name() == Some(OsStr::new(".env")) || file.extension() == Some(OsStr::new("env"))
 }
 
 pub fn env(_config: &Opts, _file: &PathBuf, memo: &mut Memory) -> Result<()> {
