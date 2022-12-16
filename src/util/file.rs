@@ -675,7 +675,7 @@ fn evaluate_component_style(source: String, scope: &str) -> String {
             result.push_str(&scoped_selector);
             continue;
         }
-
+ 
         result.push_str(line);
         result.push_str(NL);
     }

@@ -1,7 +1,5 @@
 //! Jampass core API
 
-extern crate notify;
-
 use notify::event::{CreateKind, DataChange, EventKind::*, ModifyKind, RenameMode};
 use notify::{Config, Event, RecursiveMode, Watcher};
 

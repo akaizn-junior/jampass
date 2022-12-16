@@ -1,4 +1,3 @@
-extern crate clap;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug, Default)]

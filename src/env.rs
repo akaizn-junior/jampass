@@ -1,6 +1,3 @@
-// extern crates
-extern crate dotenv;
-
 // module
 use crate::util;
 
