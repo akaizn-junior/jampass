@@ -36,14 +36,16 @@ const QUERY_FACTORY_TOKEN: &str = "__xQueryByScope";
 const QUERY_FN_NAME: &str = "query";
 const DATA_SCOPE_TOKEN: &str = "data-x-scope";
 const DATA_NESTED_TOKEN: &str = "data-x-nested";
+const DATA_COMPONENT_NAME: &str = "data-x-name";
 const HTML_COMMENT_START_TOKEN: &str = "<!--";
 const COMPONENT_TAG_START_TOKEN: &str = "<x-";
-const CSS_SELECTOR_OPEN_TOKEN: &str = "{";
+const CSS_OPEN_RULE_TOKEN: &str = "{";
 const CSS_AT_TOKEN: &str = "@";
 const HEAD_TAG_CLOSE: &str = "</head>";
 const BODY_TAG_CLOSE: &str = "</body>";
 const COMPONENT_PREFIX_TOKEN: &str = "x-";
-const SPACE: &str = " ";
+/// Space token
+const SP: &str = " ";
 const JS_CLIENT_CORE_PATH: &str = "src/util/js/client_core.js";
 const GLOBAL_STYLE_ID: &str = "__X-STYLE__";
 const GLOBAL_SCRIPT_ID: &str = "__X-SCRIPT__";
@@ -259,7 +261,7 @@ fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
     /// Reads the name of a possible custom tag under special conditions
     fn read_custom_tag_name(html_line: &str) -> Option<&str> {
         let start_token = html_line.find("<");
-        let space_token = html_line.find(SPACE);
+        let space_token = html_line.find(SP);
         let end_token = html_line.find(">");
 
         if start_token.is_none() || end_token.is_none() {
@@ -314,7 +316,7 @@ fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
             continue;
         }
 
-        let space_token = trimmed.find(SPACE);
+        let space_token = trimmed.find(SP);
         let dash = trimmed.find("-");
         let tag_end_token = trimmed.find(">");
 
@@ -508,6 +510,7 @@ fn parse_component(
 
         if c_template.is_some() {
             let template = c_template.unwrap();
+            // components are not fragments by default
             let fragment_attr = template.value().attr("data-fragment").unwrap_or("false");
             let is_fragment = fragment_attr == "true";
 
@@ -566,7 +569,13 @@ fn parse_component(
                 let is_root_node = !node.has_siblings();
 
                 if !is_root_node {
-                    let scoped_code = format!("<div {DATA_SCOPE_TOKEN}=\"{component_scope}\"{SPACE}{DATA_NESTED_TOKEN}=\"{is_nested}\">{t_code}</div>");
+                    let scoped_code = format!(
+                        "<div{SP}{DATA_SCOPE_TOKEN}=\"{component_scope}\"{SP}
+                    {DATA_NESTED_TOKEN}=\"{is_nested}\"{SP}
+                    {DATA_COMPONENT_NAME}=\"{c_id}\"
+                    >{t_code}</div>"
+                    );
+
                     return Ok(scoped_code);
                 }
 
@@ -585,13 +594,18 @@ fn parse_component(
                             .iter()
                             .map(|a| format!("{}=\"{}\"", a.0.local, a.1))
                             .collect::<Vec<String>>()
-                            .join(SPACE);
+                            .join(SP);
 
-                        let tag_with_attrs = format!("{tag_open}{SPACE}{attrs}");
+                        let tag_with_attrs = format!("{tag_open}{SP}{attrs}");
                         let with_attrs = tag_with_attrs.trim();
 
                         // add the scope attribute
-                        let scope_attr = format!("{with_attrs}{SPACE}{DATA_SCOPE_TOKEN}=\"{component_scope}\"{SPACE}{DATA_NESTED_TOKEN}=\"{is_nested}\"");
+                        let scope_attr = format!(
+                            "{with_attrs}{SP}
+                        {DATA_SCOPE_TOKEN}=\"{component_scope}\"{SP}
+                        {DATA_NESTED_TOKEN}=\"{is_nested}\"{SP}
+                        {DATA_COMPONENT_NAME}=\"{c_id}\""
+                        );
 
                         // now this!
                         let scoped_code = replace_chunk(t_code, &with_attrs, &scope_attr);
@@ -643,7 +657,7 @@ fn evaluate_component_script(source: String, c_scope: &str) -> String {
         let (scoped_fns, src_code) = handle_static_fns(source, c_scope);
 
         return format!(
-            "{NL}({}{SPACE}{{{}{NL}{}}})();",
+            "{NL}({}{SP}{{{}{NL}{}}})();",
             scoped_fn_definition,
             scoped_fns,
             src_code.trim()
@@ -662,22 +676,37 @@ fn evaluate_component_style(source: String, scope: &str) -> String {
             continue;
         }
 
-        let css_selector =
-            !trimmed.starts_with(CSS_AT_TOKEN) && trimmed.contains(CSS_SELECTOR_OPEN_TOKEN);
+        let at_selector = trimmed.starts_with(CSS_AT_TOKEN);
+        let has_open_token = trimmed.contains(CSS_OPEN_RULE_TOKEN);
 
-        if css_selector && !scope.is_empty() {
-            let actual_selector = trimmed
-                .get(..trimmed.find(CSS_SELECTOR_OPEN_TOKEN).unwrap())
-                .unwrap();
-            let not_selector = format!("[{DATA_SCOPE_TOKEN}=\"{scope}\"]>{SPACE}:not([{DATA_NESTED_TOKEN}=\"true\"]){SPACE}{actual_selector}");
+        // if this line does not contain the open selector token
+        // use the end of the line as the cap to read the selector from
+        let selector_end_i = trimmed.find(CSS_OPEN_RULE_TOKEN).unwrap_or(trimmed.len());
+        let selector = trimmed.get(..selector_end_i).unwrap_or("");
 
-            let scoped_selector = format!("{NL}[{DATA_SCOPE_TOKEN}=\"{scope}\"]>{SPACE}{actual_selector},{SPACE}{not_selector}{NL}{SPACE}{{");
+        // verify the selector validity
+        let is_valid_selector = !at_selector
+            && !selector.contains(":")
+            && !selector.contains("}")
+            && !selector.contains(";")
+            && !selector.contains(CSS_OPEN_RULE_TOKEN);
+
+        if is_valid_selector && !scope.is_empty() {
+            let open_token = if has_open_token {
+                CSS_OPEN_RULE_TOKEN
+            } else {
+                ""
+            };
+
+            let not_selector = format!("[{DATA_SCOPE_TOKEN}=\"{scope}\"]>{SP}:not([{DATA_NESTED_TOKEN}=\"true\"]){SP}{selector}");
+            let scoped_selector = format!("{NL}[{DATA_SCOPE_TOKEN}=\"{scope}\"]>{SP}{selector},{SP}{not_selector}{NL}{SP}{open_token}");
+
             result.push_str(&scoped_selector);
             continue;
         }
 
-        result.push_str(line);
         result.push_str(NL);
+        result.push_str(line);
     }
 
     result
