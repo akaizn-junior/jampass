@@ -89,11 +89,8 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
     // filter out already processed files
     let ps: PathList = paths
         .into_iter()
-        .filter(|p| path::evaluate_path_rules(&p))
+        .filter(|p| path::is_valid_path(&p))
         .collect();
-
-    println!("watch kind -- {:?}", kind);
-    println!("paths -- {:?}", ps);
 
     match kind {
         Create(ce) => match ce {
@@ -220,8 +217,6 @@ pub fn watch(config: Opts) -> Result<()> {
 
     loop {
         let event = rx.recv()?;
-
-        println!("{:?}", event);
 
         // if owd does not exist when watch is called, generate it
         if owd.metadata().is_err() {

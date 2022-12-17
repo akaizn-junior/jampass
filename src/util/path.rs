@@ -26,26 +26,24 @@ pub fn canonical(p: &str) -> Result<PathBuf> {
 }
 
 /// Rules for path evaluation
-pub fn evaluate_path_rules(path: &PathBuf) -> bool {
+pub fn is_valid_path(path: &PathBuf) -> bool {
     let filename = path.file_name().unwrap_or_default();
-    let fnm_str = filename.to_str().unwrap_or("");
+    let fnm_as_str = filename.to_str().unwrap_or("");
 
     // Ignore files/dirs starting with "." except ".env"
-    if fnm_str.ne(".env") && fnm_str.starts_with(".") {
-        return false;
-    }
-
+    let is_dot_file_not_env = filename.ne(".env") && fnm_as_str.starts_with(".");
     // Ignore specific files/dirs
-    if IGNORE.contains(&fnm_str) {
-        return false;
-    }
-
+    let is_ignored = IGNORE.contains(&fnm_as_str);
     // skip already processed files
-    if path::starts_with_owd(&path) {
-        return false;
+    let is_processed = path::starts_with_owd(&path);
+
+    // eval rules
+    if !is_dot_file_not_env && !is_ignored && !is_processed {
+        return true;
     }
 
-    return true;
+    // everything else is a no go!
+    return false;
 }
 
 /// Recursively reads paths from a directory
@@ -57,30 +55,18 @@ pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
 
         dir_entries.for_each(|res| {
             let de = res.unwrap();
-
-            let filename = de.file_name();
-            let filetype = de.file_type().unwrap();
-            let fnm_str = filename.to_str().unwrap_or("");
             let de_path = de.path();
 
-            // Ignore files/dirs starting with "." except ".env"
-            if fnm_str.ne(".env") && fnm_str.starts_with(".") {
-                return;
-            }
-
-            // Ignore specific files/dirs
-            if IGNORE.contains(&fnm_str) {
-                return;
-            }
-
-            // skip already processed files
-            if path::starts_with_owd(&de_path) {
+            if !is_valid_path(&de_path) {
                 return;
             }
 
             // Parse subdirectories
-            if filetype.is_dir() {
-                return inner(&de_path, list);
+            if de.file_type().is_ok() {
+                let filetype = de.file_type().unwrap();
+                if filetype.is_dir() {
+                    return inner(&de_path, list);
+                }
             }
 
             list.push(de_path);
