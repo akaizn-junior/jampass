@@ -3,12 +3,13 @@
 use notify::event::{CreateKind, DataChange, EventKind::*, ModifyKind, RenameMode};
 use notify::{Config, Event, RecursiveMode, Watcher};
 
-use std::{collections::HashMap, sync::mpsc::channel};
-use std::{path::PathBuf, time::Duration};
+use std::sync::mpsc::channel;
+use std::time::Duration;
 
 // modules
 use crate::env;
 use crate::util::{file, memory::Memory, path};
+
 use crate::{
     core_t::{Init, LintOpts, Opts, Result, ServeOpts},
     util::path::PathList,
@@ -23,42 +24,20 @@ fn read_src_path(root: &str) -> Result<PathList> {
     Ok(paths)
 }
 
-fn eval_linked_component_edit(config: &Opts, pb: &PathBuf, memo: &mut Memory) -> Result<()> {
-    let _default = HashMap::default();
-    let paths = memo.linked.get(pb).unwrap_or(&_default);
-
-    for p in paths.to_owned() {
-        // the path here may still be a component because of nested components, so evaluate it
-        let f = p.0;
-        // if this files exists in linked
-        if memo.linked.contains_key(&f) {
-            eval_linked_component_edit(config, &f, memo)?;
-        } else {
-            file::html(config, &f, memo)?;
-        }
-    }
-
-    Ok(())
-}
-
-fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result<()> {
+fn eval_files_loop(files: &PathList, memo: &mut Memory) -> Result<()> {
     for pb in files {
         // skip components
         if file::is_component(&pb) {
-            if memo.watch_mode && memo.edited_component.1.eq(pb) {
-                eval_linked_component_edit(config, pb, memo)?;
-                // done
-                memo.edited_component = (false, PathBuf::new());
+            if memo.watch_mode && memo.edited_component.path.eq(pb) {
+                file::eval_linked_component_edit(pb, memo)?;
             }
-
             continue;
         }
 
         if file::is_env_file(pb) {
             if !memo.watch_mode || (memo.watch_mode && memo.edited_env) {
-                file::env(config, pb, memo)?;
+                file::env(pb, memo)?;
             }
-
             memo.edited_env = false;
             continue;
         }
@@ -67,10 +46,10 @@ fn eval_files_loop(config: &Opts, files: &PathList, memo: &mut Memory) -> Result
 
         match pb_ext {
             Some("html") => {
-                file::html(config, pb, memo)?;
+                file::html(pb, memo)?;
             }
             Some("htm") => {
-                file::html(config, pb, memo)?;
+                file::html(pb, memo)?;
             }
             _ => {}
         }
@@ -106,17 +85,26 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
 
                     let component = ps.iter().find(|&p| file::is_component(&p));
                     if component.is_some() {
-                        memo.edited_component = (true, component.unwrap().to_owned());
+                        memo.edited_component
+                            .set(true, component.unwrap().to_owned());
                     }
 
-                    gen(&config, &ps, memo)?
+                    gen(&config, &ps, memo)?;
                 }
                 _ => {}
             },
             ModifyKind::Name(mode) => match mode {
                 RenameMode::Both => {
                     if !ps.is_empty() {
-                        file::rename_output(&ps[0], &ps[1])?;
+                        let from = &ps[0];
+                        let to = &ps[1];
+
+                        if file::is_component(to) {
+                            return file::handle_component_rename(from, to, memo);
+                        }
+
+                        // in other cases just the renaming is enough
+                        file::rename_output(from, to)?;
                     }
                 }
                 _ => {}
@@ -144,12 +132,12 @@ pub fn gen(config: &Opts, paths: &PathList, memo: &mut Memory) -> Result<()> {
     match strategy {
         path::Strategy::Index => {
             if !paths.is_empty() {
-                eval_files_loop(config, paths, memo)?;
+                eval_files_loop(paths, memo)?;
                 return Ok(());
             }
 
             let src_paths = read_src_path(".")?;
-            eval_files_loop(config, &src_paths, memo)?;
+            eval_files_loop(&src_paths, memo)?;
         }
         path::Strategy::Src => {
             let cwd = env::current_dir();
@@ -162,13 +150,13 @@ pub fn gen(config: &Opts, paths: &PathList, memo: &mut Memory) -> Result<()> {
                     .filter(|p| p.starts_with(&with_cwd))
                     .collect::<PathList>();
 
-                eval_files_loop(config, &inside_src, memo)?;
+                eval_files_loop(&inside_src, memo)?;
                 return Ok(());
             }
 
             let with_cwd_str = with_cwd.to_str().unwrap_or(".");
             let src_paths = read_src_path(with_cwd_str)?;
-            eval_files_loop(config, &src_paths, memo)?;
+            eval_files_loop(&src_paths, memo)?;
         }
         path::Strategy::Nil => {
             println!("Empty project!");

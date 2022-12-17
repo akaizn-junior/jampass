@@ -2,13 +2,14 @@ use adler::adler32_slice;
 use scraper::{Html, Selector};
 
 use std::{
+    collections::HashMap,
     ffi::OsStr,
     fs::{copy, create_dir_all, read_to_string, remove_file, rename, write},
     path::{Path, PathBuf},
 };
 
 use crate::{
-    core_t::{Opts, Result},
+    core_t::Result,
     env,
     util::memory::{File, Memory},
     util::path,
@@ -47,6 +48,7 @@ const JS_CLIENT_CORE_PATH: &str = "src/util/js/client_core.js";
 const GLOBAL_STYLE_ID: &str = "__X-STYLE__";
 const GLOBAL_SCRIPT_ID: &str = "__X-SCRIPT__";
 const GLOBAL_CORE_SCRIPT_ID: &str = "__X-CORE-SCRIPT__";
+const TEMPLATE_TAG_TOKEN: &str = "<template";
 
 // **** end CONSTANTS
 
@@ -793,25 +795,64 @@ fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> 
 
 // Interface
 
-pub fn is_component(file: &PathBuf) -> bool {
-    let code = read_code(file);
+pub fn handle_component_rename(from: &PathBuf, to: &PathBuf, memo: &mut Memory) -> Result<()> {
+    // capture the path of the component being edited
+    memo.edited_component.set(true, to.to_path_buf());
 
-    if code.is_ok() {
-        let template_tag_token = "<template";
-        let ccode = code.unwrap();
-
-        return ccode.trim().starts_with(template_tag_token);
+    // if the filename of a component is edited, capture the original name
+    if memo.edited_component.original_path.is_none() {
+        memo.edited_component
+            .set_original_path(Some(from.to_path_buf()));
     }
 
-    return false;
+    // get the original_path for cases where a component's name is changed back
+    // to its original name, that is certainly have been already evaluated as a linked asset
+    if memo.edited_component.original_path.is_some() {
+        let original_path = memo.edited_component.original_path.as_ref().unwrap();
+        // check if the new name matches the known original path
+        // evaluate it, otherwise the newly renamed file, is just a new asset
+        if to.eq(original_path) {
+            return eval_linked_component_edit(to, memo);
+        }
+    }
+
+    return eval_linked_component_edit(from, memo);
 }
 
-pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
+pub fn eval_linked_component_edit(pb: &PathBuf, memo: &mut Memory) -> Result<()> {
+    let _default = HashMap::default();
+    let paths = memo.linked.get(pb).unwrap_or(&_default);
+
+    for p in paths.to_owned() {
+        // the path here may still be a component because of nested components, so evaluate it
+        let f = p.0;
+        // if this files exists in linked
+        if memo.linked.contains_key(&f) {
+            eval_linked_component_edit(&f, memo)?;
+        }
+
+        html(&f, memo)?;
+    }
+
+    // done
+    memo.edited_component.reset();
+    Ok(())
+}
+
+pub fn is_component(file: &PathBuf) -> bool {
+    let code = read_code(file);
+    let ccode = code.ok().unwrap_or_default();
+    return ccode.trim().starts_with(TEMPLATE_TAG_TOKEN);
+}
+
+pub fn html(file: &PathBuf, memo: &mut Memory) -> Result<()> {
     let code = read_code(&file)?;
     let checksum = checksum(&code);
+    // skip components
+    let is_component = is_component(&file);
 
-    // ignore empty code
-    if code.is_empty() {
+    // ignore empty code and components
+    if is_component || code.is_empty() {
         return Ok(());
     }
 
@@ -821,7 +862,7 @@ pub fn html(_config: &Opts, file: &PathBuf, memo: &mut Memory) -> Result<()> {
 
     // verify if the path has already been evaluated
     // or if the output does not exist
-    if !has_processed || memo.edited_component.0 {
+    if !has_processed || memo.edited_component.was_edited {
         memo.files.insert(
             file_as_str.to_string(),
             File {
@@ -841,7 +882,7 @@ pub fn is_env_file(file: &PathBuf) -> bool {
     file.file_name() == Some(OsStr::new(".env")) || file.extension() == Some(OsStr::new("env"))
 }
 
-pub fn env(_config: &Opts, _file: &PathBuf, memo: &mut Memory) -> Result<()> {
+pub fn env(_file: &PathBuf, memo: &mut Memory) -> Result<()> {
     // reload env vars at this point
     env::eval_dotenv();
 
@@ -872,8 +913,14 @@ pub fn rename_output(from: &PathBuf, to: &PathBuf) -> Result<()> {
     let ffrom = path::prefix_with_owd(from);
     let tto = path::prefix_with_owd(to);
 
+    // if file exists
     if ffrom.metadata().is_ok() {
-        rename(ffrom, tto)?;
+        // check if the newly renamed file is a component, skip it
+        let is_component = is_component(&tto);
+
+        if !is_component {
+            rename(ffrom, tto)?
+        }
     }
 
     Ok(())
