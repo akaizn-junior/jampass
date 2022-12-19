@@ -7,7 +7,7 @@ pub struct Memory {
     pub component: Component,
     pub watch_mode: bool,
     pub edited_env: bool,
-    pub edited_component: EditedAsset,
+    pub edited_asset: EditedAsset,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -33,7 +33,7 @@ pub struct EditedAsset {
 impl Memory {
     pub fn clear(&mut self) {
         self.files.clear();
-        self.edited_component.reset();
+        self.edited_asset.reset();
     }
 }
 

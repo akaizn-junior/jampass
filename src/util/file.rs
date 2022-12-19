@@ -838,47 +838,47 @@ fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> 
 
 // Interface
 
-pub fn handle_component_rename(from: &PathBuf, to: &PathBuf, memo: &mut Memory) -> Result<()> {
+pub fn handle_linked_rename(from: &PathBuf, to: &PathBuf, memo: &mut Memory) -> Result<()> {
     // capture the path of the component being edited
-    memo.edited_component.set(true, to.to_path_buf());
+    memo.edited_asset.set(true, to.to_path_buf());
 
     // if the filename of a component is edited, capture the original name
-    if memo.edited_component.original_path.is_none() {
-        memo.edited_component
+    if memo.edited_asset.original_path.is_none() {
+        memo.edited_asset
             .set_original_path(Some(from.to_path_buf()));
     }
 
     // get the original_path for cases where a component's name is changed back
     // to its original name, that is certainly have been already evaluated as a linked asset
-    if memo.edited_component.original_path.is_some() {
-        let original_path = memo.edited_component.original_path.as_ref().unwrap();
+    if memo.edited_asset.original_path.is_some() {
+        let original_path = memo.edited_asset.original_path.as_ref().unwrap();
         // check if the new name matches the known original path
         // evaluate it, otherwise the newly renamed file, is just a new asset
         if to.eq(original_path) {
-            return eval_linked_component_edit(to, memo);
+            return eval_linked_asset_edit(to, memo);
         }
     }
 
-    return eval_linked_component_edit(from, memo);
+    return eval_linked_asset_edit(from, memo);
 }
 
-pub fn eval_linked_component_edit(pb: &PathBuf, memo: &mut Memory) -> Result<()> {
-    let _default = HashMap::default();
-    let paths = memo.linked.get(pb).unwrap_or(&_default);
+pub fn eval_linked_asset_edit(pb: &PathBuf, memo: &mut Memory) -> Result<()> {
+    let default = HashMap::default();
+    let paths = memo.linked.get(pb).unwrap_or(&default);
 
     for p in paths.to_owned() {
         // the path here may still be a component because of nested components, so evaluate it
         let f = p.0;
         // if this files exists in linked
         if memo.linked.contains_key(&f) {
-            eval_linked_component_edit(&f, memo)?;
+            eval_linked_asset_edit(&f, memo)?;
         }
 
         html(&f, memo)?;
     }
 
     // done
-    memo.edited_component.reset();
+    memo.edited_asset.reset();
     Ok(())
 }
 
@@ -886,6 +886,18 @@ pub fn is_component(file: &PathBuf) -> bool {
     let code = read_code(file);
     let ccode = code.ok().unwrap_or_default();
     return ccode.trim().starts_with(TEMPLATE_TAG_TOKEN);
+}
+
+/// Naively checks for file extension to decide if a file is linked
+/// proper checks happen latter
+pub fn is_linked_naive(file: &PathBuf) -> bool {
+    let ext = file.extension().and_then(|s| s.to_str());
+
+    match ext {
+        Some("js") => true,
+        Some("css") => true,
+        _ => is_component(file),
+    }
 }
 
 pub fn html(file: &PathBuf, memo: &mut Memory) -> Result<()> {
@@ -905,7 +917,7 @@ pub fn html(file: &PathBuf, memo: &mut Memory) -> Result<()> {
 
     // verify if the path has already been evaluated
     // or if the output does not exist
-    if !has_processed || memo.edited_component.was_edited {
+    if !has_processed || memo.edited_asset.was_edited {
         memo.files.insert(
             file_as_str.to_string(),
             File {

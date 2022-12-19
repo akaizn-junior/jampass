@@ -27,9 +27,9 @@ fn read_src_path(root: &str) -> Result<PathList> {
 fn eval_files_loop(files: &PathList, memo: &mut Memory) -> Result<()> {
     for pb in files {
         // skip components
-        if file::is_component(&pb) {
-            if memo.watch_mode && memo.edited_component.path.eq(pb) {
-                file::eval_linked_component_edit(pb, memo)?;
+        if file::is_linked_naive(&pb) {
+            if memo.watch_mode && memo.edited_asset.path.eq(pb) {
+                file::eval_linked_asset_edit(pb, memo)?;
             }
             continue;
         }
@@ -83,10 +83,9 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
                         memo.edited_env = true;
                     }
 
-                    let component = ps.iter().find(|&p| file::is_component(&p));
-                    if component.is_some() {
-                        memo.edited_component
-                            .set(true, component.unwrap().to_owned());
+                    let linked = ps.iter().find(|&p| file::is_linked_naive(&p));
+                    if linked.is_some() {
+                        memo.edited_asset.set(true, linked.unwrap().to_owned());
                     }
 
                     gen(&config, &ps, memo)?;
@@ -99,8 +98,8 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
                         let from = &ps[0];
                         let to = &ps[1];
 
-                        if file::is_component(to) {
-                            return file::handle_component_rename(from, to, memo);
+                        if file::is_linked_naive(to) {
+                            return file::handle_linked_rename(from, to, memo);
                         }
 
                         // in other cases just the renaming is enough
