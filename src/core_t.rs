@@ -9,6 +9,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct Init {
     pub cwd: String,
     pub owd: String,
+    pub src: String,
 }
 
 #[derive(Debug)]
@@ -29,4 +30,15 @@ pub struct ServeOpts {
     pub port: u16,
     pub list: bool,
     pub global: Opts,
+}
+
+pub struct Emoji {}
+
+impl Emoji {
+    pub const EMPTY: &'static str = "🪹";
+    pub const LINK: &'static str = "🔗";
+    pub const TREE: &'static str = "🌳";
+    pub const FILE: &'static str = "📃";
+    pub const FLAG: &'static str = "🚩";
+    pub const ERROR: &'static str = "💣";
 }

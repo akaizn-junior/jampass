@@ -11,7 +11,7 @@ use crate::env;
 use crate::util::{file, memory::Memory, path};
 
 use crate::{
-    core_t::{Init, LintOpts, Opts, Result, ServeOpts},
+    core_t::{Emoji, Init, LintOpts, Opts, Result, ServeOpts},
     util::path::PathList,
 };
 
@@ -120,13 +120,15 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
 
 // API
 
-pub fn setup(init: Init) {
-    env::config(&init.cwd);
+pub fn setup(init: Init) -> Result<()> {
+    env::config(&init.cwd)?;
     env::set_output_dir(&init.owd);
+    env::set_src_dir(&init.src);
+    Ok(())
 }
 
 /// Generates static assets
-pub fn gen(config: &Opts, paths: &PathList, memo: &mut Memory) -> Result<()> {
+pub fn gen(_config: &Opts, paths: &PathList, memo: &mut Memory) -> Result<()> {
     let strategy = path::evaluate_cwd();
 
     match strategy {
@@ -140,26 +142,25 @@ pub fn gen(config: &Opts, paths: &PathList, memo: &mut Memory) -> Result<()> {
             eval_files_loop(&src_paths, memo)?;
         }
         path::Strategy::Src => {
-            let cwd = env::current_dir();
-            let with_cwd = cwd.join(&config.opts.src);
+            let src_dir = env::src_dir();
 
             if !paths.is_empty() {
                 let inside_src = paths
                     .to_vec()
                     .into_iter()
-                    .filter(|p| p.starts_with(&with_cwd))
-                    .collect::<PathList>();
+                    .filter(|p| p.starts_with(&src_dir))
+                    .collect();
 
                 eval_files_loop(&inside_src, memo)?;
                 return Ok(());
             }
 
-            let with_cwd_str = with_cwd.to_str().unwrap_or(".");
-            let src_paths = read_src_path(with_cwd_str)?;
+            let src_str = src_dir.to_str().unwrap_or(".");
+            let src_paths = read_src_path(src_str)?;
             eval_files_loop(&src_paths, memo)?;
         }
         path::Strategy::Nil => {
-            println!("Empty project!");
+            println!("{} Empty project!", Emoji::EMPTY);
         }
     }
 
@@ -197,7 +198,8 @@ pub fn watch(config: Opts) -> Result<()> {
             gen(&config, &PathList::default(), &mut memo)?;
         }
         Err(e) => println!(
-            "Watch error: {}, \"{}\"",
+            "Watch error {} {}, \"{}\"",
+            Emoji::ERROR,
             e.to_string(),
             cwd.to_string_lossy()
         ),
@@ -206,7 +208,7 @@ pub fn watch(config: Opts) -> Result<()> {
     loop {
         let event = rx.recv()?;
 
-        // if owd does not exist when watch is called, generate it
+        // if owd does not exist when watching, generate it
         if owd.metadata().is_err() {
             memo.clear();
             gen(&config, &PathList::default(), &mut memo)?;
@@ -214,7 +216,7 @@ pub fn watch(config: Opts) -> Result<()> {
 
         match event {
             Ok(event) => handle_watch_event(&config, event, &mut memo)?,
-            Err(e) => println!("Watch error {}", e.to_string()),
+            Err(e) => println!("Watch error {} {}", Emoji::ERROR, e.to_string()),
         }
     }
 }

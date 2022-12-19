@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    core_t::Result,
+    core_t::{Emoji, Result},
     env,
     util::memory::{File, Memory},
     util::path,
@@ -115,9 +115,11 @@ fn evaluate_href(entry_file: &PathBuf, linked_file: &str) -> Option<PathBuf> {
     }
 
     let cwd = env::current_dir();
+    // path base
     let file_endpoint = path::strip_cwd(entry_file);
+    // get the parent folder of the main entry file
+    //  so linked items are fetched relative the right place
     let file_parent = file_endpoint.parent().unwrap();
-
     // consider all linked paths to be relative to the main entry
     let mut component_path = cwd.join(file_parent).join(&linked_file);
 
@@ -185,7 +187,8 @@ fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<St
             if link_rel == "component" {
                 if link_id.is_none() {
                     println!(
-                        "Linked component {:?} does not have an id. ignored",
+                        "Linked component {} {:?} does not have an id. ignored",
+                        Emoji::LINK,
                         link_rel
                     );
                     continue;
@@ -211,13 +214,17 @@ fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<St
 
                     // skipped undeclared linked component
                     if component.is_none() {
-                        println!("Linked component {:?} not used, ignored", c_id);
+                        println!(
+                            "Linked component {} {:?} not used, ignored",
+                            Emoji::LINK,
+                            c_id
+                        );
                         continue;
                     }
                 }
 
                 if !valid_component_id(c_id) {
-                    println!("Invalid component id \"{c_id}\"");
+                    println!("Invalid component id {} \"{c_id}\"", Emoji::FLAG);
                     continue;
                 }
 
@@ -249,7 +256,7 @@ fn evaluate_non_component_link_line(
         return Ok(Some(()));
     }
 
-    println!("{:?} does not exist. ignored", attr_value);
+    println!("{} {:?} does not exist. ignored", Emoji::FLAG, attr_value);
     Ok(None)
 }
 
@@ -312,7 +319,11 @@ fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
         // notify and remove unprocessed static component
         if trimmed.starts_with(COMPONENT_TAG_START_TOKEN) {
             let unknown_name = read_custom_tag_name(trimmed).unwrap();
-            println!("Undefined static component {:?} removed", unknown_name);
+            println!(
+                "Undefined static component {} {:?} removed",
+                Emoji::FLAG,
+                unknown_name
+            );
             continue;
         }
 
@@ -329,7 +340,7 @@ fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
             && (dash.unwrap() < tag_end_token.unwrap())
         {
             let name = read_custom_tag_name(trimmed).unwrap();
-            println!("Web component used here {:?} ignored", name);
+            println!("Web component used here {} {:?} ignored", Emoji::FLAG, name);
         }
 
         result.push_str(line);
@@ -504,7 +515,10 @@ fn parse_component(
         // 1 - tag is not a "template" tag
         // 2 - the id is not a valid id
         if c_template.is_none() {
-            println!("Components must be defined as a template tag and have a valid id");
+            println!(
+                "{} Components must be defined as a template tag and have a valid id",
+                Emoji::FLAG
+            );
             return Ok("".to_string());
         }
 
@@ -785,7 +799,7 @@ fn add_components_script(source: String, slice: String) -> String {
 }
 
 fn add_core_script(source: String) -> Result<String> {
-    let pkg_cwd = env::package_cwd();
+    let pkg_cwd = env::crate_cwd();
     let file = pkg_cwd.join(JS_CLIENT_CORE_PATH);
     let code = read_code(&file);
 
@@ -806,7 +820,7 @@ fn add_core_script(source: String) -> Result<String> {
 }
 
 fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> {
-    println!("File {:?}", file);
+    println!("File {} {:?}", Emoji::FILE, file);
 
     let mut parsed_code = parse_document(file, &code, memo)?;
     parsed_code = generated_code_eval(file, parsed_code)?;
@@ -920,7 +934,7 @@ pub fn env(_file: &PathBuf, memo: &mut Memory) -> Result<()> {
 
         // TODO: properly evaluate last edited env var, not just last added
         // TODO: check if dotenv throws an event from edited var
-        println!("Added env var \"{}\"", latest.0);
+        println!("Added env var {} \"{}\"", Emoji::TREE, latest.0);
     }
 
     Ok(())

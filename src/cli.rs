@@ -11,11 +11,13 @@ pub fn parse() -> Result<()> {
     let app = App::parse();
     let custom_cwd = &app.cwd.clone();
     let custom_owd = &app.dist.clone();
+    let custom_src = &app.src.clone();
 
     core::setup(Init {
         cwd: custom_cwd.to_string(),
         owd: custom_owd.to_string(),
-    });
+        src: custom_src.to_string(),
+    })?;
 
     let mut memo = Memory::default();
 

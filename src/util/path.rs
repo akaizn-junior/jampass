@@ -86,9 +86,11 @@ pub fn evaluate_cwd() -> Strategy {
         Strategy::Nil
     }
 
-    /// check if the cwd has an "src" directory
+    /// check if the cwd has a custom src directory
     fn src_strat() -> Strategy {
-        eval_path_strat("src", Strategy::Src, nil_strat)
+        let src_dir = env::src_dir();
+        let src_str = src_dir.to_str().unwrap_or("src");
+        eval_path_strat(src_str, Strategy::Src, nil_strat)
     }
 
     /// check if the cwd has an "index.htm" file
@@ -114,7 +116,7 @@ fn eval_path_strat(p: &str, strat: Strategy, f: fn() -> Strategy) -> Strategy {
 /// Returns the path with the cwd substituted with the owd
 pub fn prefix_with_owd(file: &PathBuf) -> PathBuf {
     let owd = env::output_dir();
-    let file_base = strip_cwd(file);
+    let file_base = strip_cwd_for_output(file);
     // setup the output path for this file
     let owd = owd.join(file_base);
     return owd;
@@ -127,6 +129,21 @@ pub fn strip_cwd(file: &PathBuf) -> PathBuf {
     // get the file base, aka everything else but the cwd
     let file_base = file.strip_prefix(cwd_as_str).unwrap_or(Path::new("."));
     return file_base.to_path_buf();
+}
+
+/// Strips the cwd or the known src path from the given path.
+/// Used specifically for when generating paths for output
+pub fn strip_cwd_for_output(file: &PathBuf) -> PathBuf {
+    let src_path = env::src_dir();
+
+    if file.starts_with(&src_path) {
+        // strip the known src path
+        let path_as_str = src_path.to_str().unwrap_or("");
+        let file_base = file.strip_prefix(path_as_str).unwrap_or(Path::new("."));
+        return file_base.to_path_buf();
+    }
+
+    return strip_cwd(file);
 }
 
 pub fn starts_with_owd(file: &PathBuf) -> bool {

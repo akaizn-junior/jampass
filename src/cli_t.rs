@@ -29,7 +29,7 @@ pub struct App {
     debug: bool,
 
     /// Output directory
-    #[arg(short, long, default_value = "public")]
+    #[arg(short, long, default_value = ".jampass")]
     pub dist: String,
 
     /// Output multiple entries in dist directory

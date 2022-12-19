@@ -7,7 +7,7 @@ mod env;
 mod util;
 
 fn handle_error(e: core_t::Error) {
-    println!("- {:?}", e);
+    println!("{} {:?}", core_t::Emoji::ERROR, e);
 }
 
 fn main() {
