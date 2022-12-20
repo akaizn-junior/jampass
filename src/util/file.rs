@@ -838,7 +838,7 @@ fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> 
 
 // Interface
 
-pub fn handle_linked_rename(from: &PathBuf, to: &PathBuf, memo: &mut Memory) -> Result<()> {
+pub fn handle_component_rename(from: &PathBuf, to: &PathBuf, memo: &mut Memory) -> Result<()> {
     // capture the path of the component being edited
     memo.edited_asset.set(true, to.to_path_buf());
 

@@ -98,8 +98,8 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
                         let from = &ps[0];
                         let to = &ps[1];
 
-                        if file::is_linked_naive(to) {
-                            return file::handle_linked_rename(from, to, memo);
+                        if file::is_component(to) {
+                            return file::handle_component_rename(from, to, memo);
                         }
 
                         // in other cases just the renaming is enough
