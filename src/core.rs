@@ -102,6 +102,8 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
                             return file::handle_component_rename(from, to, memo);
                         }
 
+                        println!("{:?} - {:?}", from, to);
+
                         // in other cases just the renaming is enough
                         file::rename_output(from, to)?;
                     }

@@ -83,7 +83,6 @@ fn copy_file(from: &PathBuf, to: &PathBuf) -> Result<()> {
 fn recursive_output(file: &PathBuf, action: OutputAction) -> Result<()> {
     fn get_valid_owd(p: &PathBuf) -> Result<PathBuf> {
         let owd = path::prefix_with_owd(&p);
-
         // if file does not exist
         // create and write to it
         if owd.metadata().is_err() {
@@ -99,10 +98,13 @@ fn recursive_output(file: &PathBuf, action: OutputAction) -> Result<()> {
 
     match action {
         OutputAction::Write(content) => {
-            write_file(&get_valid_owd(file)?, &content)?;
+            write_file(&get_valid_owd(file)?, content)?;
         }
         OutputAction::Copy(to) => {
-            copy_file(&file, &get_valid_owd(&to)?)?;
+            // make sure the file being copied exists
+            if file.metadata().is_ok() {
+                copy_file(&file, &get_valid_owd(to)?)?;
+            }
         }
     }
 
@@ -125,7 +127,7 @@ fn evaluate_href(entry_file: &PathBuf, linked_file: &str) -> Option<PathBuf> {
 
     // evaluate if linked starts with this symbol
     if linked_file.starts_with("./") {
-        // consider linked to be relative to  main
+        // consider linked to be relative to main
         let relative_href = linked_file.replacen("./", "", 1);
         component_path = cwd.join(file_parent).join(&relative_href);
     }
@@ -175,6 +177,12 @@ fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<St
     for src in linked_src {
         let src_asset = src.value().attr("src").unwrap_or("");
         let asset_path = evaluate_href(file, src_asset).unwrap_or(PathBuf::new());
+
+        // if asset does not exists, skip it
+        if asset_path.metadata().is_err() {
+            continue;
+        }
+
         capture_linked_asset(file, &asset_path, memo);
         recursive_output(&asset_path, OutputAction::Copy(&asset_path))?;
     }
@@ -814,8 +822,7 @@ pub fn handle_component_rename(from: &PathBuf, to: &PathBuf, memo: &mut Memory) 
 
     // if the filename of a component is edited, capture the original name
     if memo.edited_asset.original_path.is_none() {
-        memo.edited_asset
-            .set_original_path(Some(from.to_owned()));
+        memo.edited_asset.set_original_path(Some(from.to_owned()));
     }
 
     // get the original_path for cases where a component's name is changed back
