@@ -9,9 +9,9 @@ use crate::util::{memory::Memory, path::PathList};
 /// Parse command line arguments and subcommands
 pub fn parse() -> Result<()> {
     let app = App::parse();
-    let custom_cwd = &app.cwd.clone();
-    let custom_owd = &app.dist.clone();
-    let custom_src = &app.src.clone();
+    let custom_cwd = &app.cwd;
+    let custom_owd = &app.dist;
+    let custom_src = &app.src;
 
     core::setup(Init {
         cwd: custom_cwd.to_string(),

@@ -22,9 +22,9 @@ struct Checksum {
 }
 
 /// Indicates methods to output data
-enum OutputAction {
-    Write(String),
-    Copy(PathBuf),
+enum OutputAction<'a> {
+    Write(&'a String),
+    Copy(&'a PathBuf),
 }
 
 // **** CONSTANTS
@@ -160,15 +160,15 @@ fn valid_component_id(c_id: &str) -> bool {
 fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String> {
     let doc = Html::parse_document(&code);
     let link_sel = str_to_selector("link").unwrap();
-    let script_sel = str_to_selector("script").unwrap();
+    let src_attr_sel = str_to_selector("[src]").unwrap();
 
-    let mut result = code.clone();
+    let mut result = code.to_owned();
     let linked_href = doc.select(&link_sel);
-    let linked_src = doc.select(&script_sel);
+    let linked_src = doc.select(&src_attr_sel);
 
     /// Capture all files that use this linked item
     fn capture_linked_asset(file: &PathBuf, asset_path: &PathBuf, memo: &mut Memory) {
-        let entry = memo.linked.entry(asset_path.clone()).or_default();
+        let entry = memo.linked.entry(asset_path.to_owned()).or_default();
         entry.insert(file.to_owned(), file.to_owned());
     }
 
@@ -176,6 +176,7 @@ fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<St
         let src_asset = src.value().attr("src").unwrap_or("");
         let asset_path = evaluate_href(file, src_asset).unwrap_or(PathBuf::new());
         capture_linked_asset(file, &asset_path, memo);
+        recursive_output(&asset_path, OutputAction::Copy(&asset_path))?;
     }
 
     for link in linked_href {
@@ -190,6 +191,7 @@ fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<St
         }
 
         capture_linked_asset(file, &link_path, memo);
+        recursive_output(&link_path, OutputAction::Copy(&link_path))?;
 
         // and the c is for component
 
@@ -248,30 +250,8 @@ fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<St
     Ok(result)
 }
 
-fn evaluate_non_component_link_line(
-    file: &PathBuf,
-    line: &str,
-    link_path_attr: &str,
-) -> Result<Option<()>> {
-    let frag = Html::parse_fragment(line);
-    let attr = format!("[{link_path_attr}]");
-
-    let sel = str_to_selector(&attr).unwrap();
-    let tag = frag.select(&sel).next().unwrap();
-    let attr_value = tag.value().attr(link_path_attr).unwrap();
-    let full_path = evaluate_href(file, attr_value).unwrap();
-
-    if full_path.metadata().is_ok() {
-        recursive_output(&full_path, OutputAction::Copy(full_path.clone()))?;
-        return Ok(Some(()));
-    }
-
-    println!("{} {:?} does not exist. ignored", Emoji::FLAG, attr_value);
-    Ok(None)
-}
-
 /// Evaluates the generated source code line by line
-fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
+fn generated_code_eval(_file: &PathBuf, source: String) -> Result<String> {
     let lines = source.lines();
     let mut result = String::new();
 
@@ -306,28 +286,8 @@ fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
         let trimmed = line.trim();
         let comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
 
-        // any other link but components link
-        let component_link = trimmed.contains("rel=\"component\"");
-        let any_link = trimmed.contains("<link") && trimmed.contains("href=") && !component_link;
-        // any script with a src
-        let any_src_script = trimmed.contains("<script") && trimmed.contains("src=");
-
-        if !comment && any_link {
-            let result = evaluate_non_component_link_line(file, trimmed, "href")?;
-            if result.is_none() {
-                continue;
-            }
-        }
-
-        if !comment && any_src_script {
-            let result = evaluate_non_component_link_line(file, trimmed, "src")?;
-            if result.is_none() {
-                continue;
-            }
-        }
-
         // notify and remove unprocessed static component
-        if trimmed.starts_with(COMPONENT_TAG_START_TOKEN) {
+        if !comment && trimmed.starts_with(COMPONENT_TAG_START_TOKEN) {
             let unknown_name = read_custom_tag_name(trimmed).unwrap();
             println!(
                 "Undefined static component {} {:?} removed",
@@ -342,7 +302,7 @@ fn generated_code_eval(file: &PathBuf, source: String) -> Result<String> {
         let tag_end_token = trimmed.find(">");
 
         // notify usage of possible web component
-        if trimmed.starts_with("<")
+        if !comment && trimmed.starts_with("<")
             && !trimmed.starts_with("</") // ignore end tags
             && dash.is_some()
             && (dash.unwrap() < space_token.unwrap()) // ignore meta tags duh!
@@ -842,7 +802,7 @@ fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> 
     parsed_code = add_components_script(parsed_code, global_script_tag);
     parsed_code = add_core_script(parsed_code)?;
 
-    recursive_output(&file, OutputAction::Write(parsed_code))?;
+    recursive_output(&file, OutputAction::Write(&parsed_code))?;
     Ok(())
 }
 
@@ -850,12 +810,12 @@ fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> 
 
 pub fn handle_component_rename(from: &PathBuf, to: &PathBuf, memo: &mut Memory) -> Result<()> {
     // capture the path of the component being edited
-    memo.edited_asset.set(true, to.to_path_buf());
+    memo.edited_asset.set(true, to.to_owned());
 
     // if the filename of a component is edited, capture the original name
     if memo.edited_asset.original_path.is_none() {
         memo.edited_asset
-            .set_original_path(Some(from.to_path_buf()));
+            .set_original_path(Some(from.to_owned()));
     }
 
     // get the original_path for cases where a component's name is changed back

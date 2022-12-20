@@ -123,27 +123,27 @@ pub fn prefix_with_owd(file: &PathBuf) -> PathBuf {
 }
 
 /// Strips the cwd from the path
-pub fn strip_cwd(file: &PathBuf) -> PathBuf {
+pub fn strip_cwd(file: &PathBuf) -> &Path {
     let cwd = env::current_dir();
     let cwd_as_str = cwd.to_str().unwrap_or("");
     // get the file base, aka everything else but the cwd
     let file_base = file.strip_prefix(cwd_as_str).unwrap_or(Path::new("."));
-    return file_base.to_path_buf();
+    return file_base;
 }
 
 /// Strips the cwd or the known src path from the given path.
 /// Used specifically for when generating paths for output
-pub fn strip_cwd_for_output(file: &PathBuf) -> PathBuf {
+pub fn strip_cwd_for_output(file: &PathBuf) -> &Path {
     let src_path = env::src_dir();
 
     if file.starts_with(&src_path) {
         // strip the known src path
         let path_as_str = src_path.to_str().unwrap_or("");
         let file_base = file.strip_prefix(path_as_str).unwrap_or(Path::new("."));
-        return file_base.to_path_buf();
+        return file_base;
     }
 
-    return strip_cwd(file);
+    return strip_cwd(&file);
 }
 
 pub fn starts_with_owd(file: &PathBuf) -> bool {
