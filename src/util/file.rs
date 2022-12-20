@@ -159,79 +159,89 @@ fn valid_component_id(c_id: &str) -> bool {
 
 fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String> {
     let doc = Html::parse_document(&code);
-    let o_link = str_to_selector("link");
+    let link_sel = str_to_selector("link").unwrap();
+    let script_sel = str_to_selector("script").unwrap();
 
     let mut result = code.clone();
+    let linked_href = doc.select(&link_sel);
+    let linked_src = doc.select(&script_sel);
 
-    if o_link.is_some() {
-        let link = o_link.unwrap();
-        let linked = doc.select(&link);
+    /// Capture all files that use this linked item
+    fn capture_linked_asset(file: &PathBuf, asset_path: &PathBuf, memo: &mut Memory) {
+        let entry = memo.linked.entry(asset_path.clone()).or_default();
+        entry.insert(file.to_owned(), file.to_owned());
+    }
 
-        for link in linked {
-            let link_rel = link.value().attr("rel").unwrap_or("");
-            let link_href = link.value().attr("href").unwrap_or("");
-            let link_id = link.value().attr("id");
-            let link_path = evaluate_href(file, link_href).unwrap_or(PathBuf::new());
+    for src in linked_src {
+        let src_asset = src.value().attr("src").unwrap_or("");
+        let asset_path = evaluate_href(file, src_asset).unwrap_or(PathBuf::new());
+        capture_linked_asset(file, &asset_path, memo);
+    }
 
-            // if the linked asset does not exist, skip this
-            if link_path.metadata().is_err() {
+    for link in linked_href {
+        let link_rel = link.value().attr("rel").unwrap_or("");
+        let link_href = link.value().attr("href").unwrap_or("");
+        let link_id = link.value().attr("id");
+        let link_path = evaluate_href(file, link_href).unwrap_or(PathBuf::new());
+
+        // if the linked asset does not exist, skip this
+        if link_path.metadata().is_err() {
+            continue;
+        }
+
+        capture_linked_asset(file, &link_path, memo);
+
+        // and the c is for component
+
+        if link_rel.eq("component") {
+            if link_id.is_none() {
+                println!(
+                    "Linked component {} {:?} does not have an id. ignored",
+                    Emoji::LINK,
+                    link_rel
+                );
                 continue;
             }
 
-            // capture all files that use this linked item
-            let linked_entry = memo.linked.entry(link_path.clone()).or_default();
-            linked_entry.insert(file.to_owned(), file.to_owned());
+            let c_id = link_id.unwrap();
 
-            // and the c is for component
+            // avoid recursive nesting aka do not link the same component within itself
+            if file.eq(&link_path) {
+                let nada = "".to_string();
+                result = replace_component_with_static(&result, c_id, nada);
+                continue;
+            }
 
-            if link_rel == "component" {
-                if link_id.is_none() {
+            // generate a selector for the linked component
+            // the selector would work for something like
+            // <x-some-tag />
+            let c_selector = str_to_selector(c_id);
+
+            // if the selector is valid
+            if c_selector.is_some() {
+                let selector = c_selector.unwrap();
+                // verify if the linked component is actually used
+                let component = doc.select(&selector).next();
+
+                // skipped undeclared linked component
+                if component.is_none() {
                     println!(
-                        "Linked component {} {:?} does not have an id. ignored",
+                        "Linked component {} {:?} not used, ignored",
                         Emoji::LINK,
-                        link_rel
+                        c_id
                     );
                     continue;
                 }
-
-                let c_id = link_id.unwrap();
-
-                // avoid recursive nesting aka do not link the same component within itself
-                if file.eq(&link_path) {
-                    let nada = "".to_string();
-                    result = replace_component_with_static(&result, c_id, nada);
-                    continue;
-                }
-
-                // generate a selector for the linked component
-                let c_selector = str_to_selector(c_id);
-
-                // if the selector is valid
-                if c_selector.is_some() {
-                    let selector = c_selector.unwrap();
-                    // verify if the linked component is actually used
-                    let component = doc.select(&selector).next();
-
-                    // skipped undeclared linked component
-                    if component.is_none() {
-                        println!(
-                            "Linked component {} {:?} not used, ignored",
-                            Emoji::LINK,
-                            c_id
-                        );
-                        continue;
-                    }
-                }
-
-                if !valid_component_id(c_id) {
-                    println!("Invalid component id {} \"{c_id}\"", Emoji::FLAG);
-                    continue;
-                }
-
-                let parsed_code = parse_component(&link_path, c_id, is_component(file), memo)?;
-                let static_code = replace_component_with_static(&result, c_id, parsed_code);
-                result = static_code;
             }
+
+            if !valid_component_id(c_id) {
+                println!("Invalid component id {} \"{c_id}\"", Emoji::FLAG);
+                continue;
+            }
+
+            let parsed_code = parse_component(&link_path, c_id, is_component(file), memo)?;
+            let static_code = replace_component_with_static(&result, c_id, parsed_code);
+            result = static_code;
         }
     }
 
