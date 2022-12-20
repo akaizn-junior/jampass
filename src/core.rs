@@ -26,7 +26,7 @@ fn read_src_path(root: &str) -> Result<PathList> {
 
 fn eval_files_loop(files: &PathList, memo: &mut Memory) -> Result<()> {
     for pb in files {
-        // skip components
+        // skip components and other linked assets
         if file::is_linked_naive(&pb) {
             if memo.watch_mode && memo.edited_asset.path.eq(pb) {
                 file::eval_linked_asset_edit(pb, memo)?;
@@ -193,6 +193,7 @@ pub fn watch(config: Opts) -> Result<()> {
 
     match recursive_watcher {
         Ok(()) => {
+            println!("{} Watching...\n", Emoji::WATCH);
             // start by generating files
             gen(&config, &PathList::default(), &mut memo)?;
         }

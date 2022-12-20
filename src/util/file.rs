@@ -892,7 +892,6 @@ pub fn is_component(file: &PathBuf) -> bool {
 /// proper checks happen latter
 pub fn is_linked_naive(file: &PathBuf) -> bool {
     let ext = file.extension().and_then(|s| s.to_str());
-
     match ext {
         Some("js") => true,
         Some("css") => true,
