@@ -51,6 +51,7 @@ const GLOBAL_STYLE_ID: &str = "__X-STYLE__";
 const GLOBAL_SCRIPT_ID: &str = "__X-SCRIPT__";
 const GLOBAL_CORE_SCRIPT_ID: &str = "__X-CORE-SCRIPT__";
 const TEMPLATE_TAG_TOKEN: &str = "<template";
+const UNPAIRED_TAG_CLOSE_TOKEN: &str = "/>";
 
 // **** end CONSTANTS
 
@@ -259,70 +260,89 @@ fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<St
 }
 
 /// Evaluates the generated source code line by line
-fn generated_code_eval(_file: &PathBuf, source: String) -> Result<String> {
-    let lines = source.lines();
+fn remove_undefined_static(source: String) -> Result<String> {
     let mut result = String::new();
+    let mut lines = source.lines();
+    let mut line = lines.next();
 
-    /// Reads the name of a possible custom tag under special conditions
-    fn read_custom_tag_name(html_line: &str) -> Option<&str> {
-        let start_token = html_line.find("<");
-        let space_token = html_line.find(SP);
-        let end_token = html_line.find(">");
+    fn get_component_name(line: &str) -> &str {
+        let mut end_token_i = line.len();
+        // based on the tag start token, "<" exists in this line
+        let start_i = line.find(COMPONENT_TAG_START_TOKEN).unwrap();
+        // replace close tokens
+        let unpaired = line.find(UNPAIRED_TAG_CLOSE_TOKEN);
+        let close = line.find(">");
 
-        if start_token.is_none() || end_token.is_none() {
-            return Some("");
+        // end-token is either the end of the line of when it finds one of the tokens
+        // "/" and ">", the order of the if statements here matter
+        // because end_token_i is mutable
+        if close.is_some() {
+            end_token_i = close.unwrap();
         }
 
-        let start_token_i = start_token.unwrap();
-        let end_token_i = end_token.unwrap();
-
-        if space_token.is_some() {
-            let space_token_i = space_token.unwrap();
-            let token_i = if space_token_i < end_token_i {
-                space_token_i
-            } else {
-                end_token_i
-            };
-
-            html_line.get(start_token_i + 1..token_i)
-        } else {
-            html_line.get(start_token_i + 1..end_token_i)
+        if unpaired.is_some() {
+            end_token_i = unpaired.unwrap();
         }
+
+        line.get(start_i + 1..end_token_i).unwrap()
     }
 
-    for line in lines {
-        let trimmed = line.trim();
-        let comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
+    while line.is_some() {
+        let trimmed = line.unwrap().trim();
 
-        // notify and remove unprocessed static component
-        if !comment && trimmed.starts_with(COMPONENT_TAG_START_TOKEN) {
-            let unknown_name = read_custom_tag_name(trimmed).unwrap();
-            println!(
-                "Undefined static component {} {:?} removed",
-                Emoji::FLAG,
-                unknown_name
-            );
+        // println!("line - {}", line.unwrap());
+
+        // skip empty lines
+        if trimmed.is_empty() {
+            line = lines.next();
             continue;
         }
 
-        let space_token = trimmed.find(SP);
-        let dash = trimmed.find("-");
-        let tag_end_token = trimmed.find(">");
+        let comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
+        let unused_component = !comment && trimmed.contains(COMPONENT_TAG_START_TOKEN);
 
-        // notify usage of possible web component
-        if !comment && trimmed.starts_with("<")
-            && !trimmed.starts_with("</") // ignore end tags
-            && dash.is_some()
-            && (dash.unwrap() < space_token.unwrap()) // ignore meta tags duh!
-            && tag_end_token.is_some()
-            && (dash.unwrap() < tag_end_token.unwrap())
-        {
-            let name = read_custom_tag_name(trimmed).unwrap();
-            println!("Web component used here {} {:?} ignored", Emoji::FLAG, name);
+        // notify and remove unprocessed static component
+        if unused_component {
+            let unpaired_inline = trimmed.find(UNPAIRED_TAG_CLOSE_TOKEN);
+            let c_name = get_component_name(trimmed);
+            let end_tag = format!("</{c_name}");
+
+            let notify = || {
+                println!(
+                    "Undefined static component {} {:?} removed",
+                    Emoji::FLAG,
+                    c_name
+                );
+            };
+
+            if unpaired_inline.is_some() {
+                notify();
+                line = lines.next();
+                continue;
+            }
+
+            if unpaired_inline.is_none() {
+                // look for the closing token
+                // 1 - is unpaired but not inline, meaning the "/>" is on another line
+                // 2 - is a paired tag, meaning "<x-end-token" is on another line
+                let mut next_line = line.unwrap().trim();
+                while !next_line.contains(&end_tag) && !next_line.contains(UNPAIRED_TAG_CLOSE_TOKEN)
+                {
+                    // skip all lines in between the openning and the closing
+                    line = lines.next();
+                    next_line = line.unwrap().trim();
+                }
+
+                notify();
+                // found it, skip it
+                line = lines.next();
+                continue;
+            }
         }
 
-        result.push_str(line);
+        result.push_str(trimmed);
         result.push_str(NL);
+        line = lines.next();
     }
 
     return Ok(result);
@@ -367,8 +387,7 @@ fn handle_component_placements(slice: &str, to_place: &str) -> String {
 
 fn replace_component_with_static(source: &String, c_id: &str, slice: String) -> String {
     let tag_open_token = format!("<{}", c_id);
-    let tag_close_token = format!("</{}>", c_id);
-    let unpaired_close_token = "/>";
+    let tag_close_token = format!("</{}", c_id);
 
     let mut result = String::new();
     let src_code = source;
@@ -396,16 +415,16 @@ fn replace_component_with_static(source: &String, c_id: &str, slice: String) -> 
         // should indicate the closing of an open tag
         let tag_close = trimmed.contains(&tag_close_token);
         // for when a component is declared as an unpaired tag
-        let unpaired_close = trimmed.contains(&unpaired_close_token);
+        let unpaired_close = trimmed.contains(&UNPAIRED_TAG_CLOSE_TOKEN);
 
         // something line <tag />
-        let unpaired = tag_open && unpaired_close;
+        let is_unpaired = tag_open && unpaired_close;
         // something like <tag></tag> in the same line
         let one_liner_paired = tag_open && tag_close;
         // will contain placement tags inside a component
         let mut placements = String::new();
 
-        if !comment && unpaired {
+        if !comment && is_unpaired {
             result.push_str(&slice);
             result.push_str(NL);
             // done! move on
@@ -436,7 +455,7 @@ fn replace_component_with_static(source: &String, c_id: &str, slice: String) -> 
         }
 
         // if found a open tag, try to capture of its placements until tag close
-        if !comment && !unpaired && tag_open {
+        if !comment && !is_unpaired && tag_open {
             let mut next_line = lines.next().unwrap();
 
             // **** Capture all component placements
@@ -801,7 +820,7 @@ fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> 
     println!("File {} {:?}", Emoji::FILE, file);
 
     let mut parsed_code = parse_document(file, &code, memo)?;
-    parsed_code = generated_code_eval(file, parsed_code)?;
+    parsed_code = remove_undefined_static(parsed_code)?;
 
     let global_script_tag = construct_components_script(memo);
     let global_style_tag = construct_components_style(memo);
