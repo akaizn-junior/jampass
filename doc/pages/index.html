@@ -7,30 +7,36 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Jampass</title>
         <link rel="stylesheet" href="./app.css">
+        <link rel="component" href="parts/tag.html" id="x-some-tag">
         <script src="./index.js"></script>
     </head>
 
     <body>
+        <template id="boo">
+            <p>Boo man!</p>
+        </template>
+        <template id="x-in-file">
+            <link rel="component" href="./some.html" id="x-some-some">
+            <section>
+                <x-some-some />
+
+                <p>
+                    In file component!
+                </p>
+            </section>
+            <section>
+                <b>hello B!!</b>
+            </section>
+        </template>
         <h1>Hello World</h1>
-        <p>more data!</p>
+        <p>THE data!</p>
         <div>
             <img width="400" src="./images/banana.jpeg" alt="Bananas">
         </div>
 
-        <x-close-new-line
+        <x-some-tag />
+        <x-in-file />
 
-
-        />
-
-        <x-same-unpaired-inline />
-
-        <x-same-line-close>
-
-            boo man
-
-        </x-same-line-close>
-
-        <p>do not touch</p>
     </body>
 
 </html>

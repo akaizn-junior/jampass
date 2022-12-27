@@ -13,6 +13,7 @@ use crate::{
     env,
     util::memory::{File, Memory},
     util::path,
+    util::statica,
 };
 
 /// Type for content checkum
@@ -38,6 +39,7 @@ const DATA_SCOPE_TOKEN: &str = "data-x-scope";
 const DATA_NESTED_TOKEN: &str = "data-x-nested";
 const DATA_COMPONENT_NAME: &str = "data-x-name";
 const HTML_COMMENT_START_TOKEN: &str = "<!--";
+const HTML_COMMENT_END_TOKEN: &str = "-->";
 const COMPONENT_TAG_START_TOKEN: &str = "<x-";
 const CSS_OPEN_RULE_TOKEN: &str = "{";
 const CSS_AT_TOKEN: &str = "@";
@@ -158,6 +160,43 @@ fn checksum(slice: &str) -> Checksum {
 
 fn valid_component_id(c_id: &str) -> bool {
     c_id.starts_with(COMPONENT_PREFIX_TOKEN)
+}
+
+fn remove_top_level_html_comments(code: &String) -> String {
+    let mut result = String::new();
+    let mut lines = code.lines();
+    let mut line = lines.next();
+
+    while line.is_some() {
+        // trim this line of code
+        let trimmed = line.unwrap().trim();
+
+        // skip empty lines
+        if trimmed.is_empty() {
+            line = lines.next();
+            continue;
+        }
+
+        let found = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
+
+        if found {
+            let mut next_line = trimmed;
+
+            while !next_line.contains(HTML_COMMENT_END_TOKEN) {
+                line = lines.next();
+                next_line = line.unwrap().trim();
+            }
+            line = lines.next();
+            continue;
+        }
+
+        result.push_str(trimmed);
+        result.push_str(NL);
+        // done! move on
+        line = lines.next();
+    }
+
+    return result;
 }
 
 fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String> {
@@ -290,16 +329,13 @@ fn remove_undefined_static(source: String) -> Result<String> {
     while line.is_some() {
         let trimmed = line.unwrap().trim();
 
-        // println!("line - {}", line.unwrap());
-
         // skip empty lines
         if trimmed.is_empty() {
             line = lines.next();
             continue;
         }
 
-        let comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
-        let unused_component = !comment && trimmed.contains(COMPONENT_TAG_START_TOKEN);
+        let unused_component = trimmed.contains(COMPONENT_TAG_START_TOKEN);
 
         // notify and remove unprocessed static component
         if unused_component {
@@ -390,21 +426,29 @@ fn replace_component_with_static(source: &String, c_id: &str, slice: String) -> 
     let tag_close_token = format!("</{}", c_id);
 
     let mut result = String::new();
-    let src_code = source;
-    let mut lines = src_code.lines();
+    // will contain placement tags inside a component
+    let mut placements = String::new();
+
+    let no_top_comments = remove_top_level_html_comments(&source);
+
+    let mut lines = no_top_comments.lines();
     let mut line = lines.next();
 
     while line.is_some() {
         // trim this line of code
         let trimmed = line.unwrap().trim();
-        // do not statically replace comments
-        let comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
+
+        // skip empty lines
+        if trimmed.is_empty() {
+            line = lines.next();
+            continue;
+        }
 
         // immediately remove the link declaration to this component
         let c_id_attr = format!("id=\"{c_id}\"");
         let this_component_link =
             trimmed.contains("rel=\"component\"") && trimmed.contains(&c_id_attr);
-        if !comment && this_component_link {
+        if this_component_link {
             // done! move on
             line = lines.next();
             continue;
@@ -418,13 +462,42 @@ fn replace_component_with_static(source: &String, c_id: &str, slice: String) -> 
         let unpaired_close = trimmed.contains(&UNPAIRED_TAG_CLOSE_TOKEN);
 
         // something line <tag />
-        let is_unpaired = tag_open && unpaired_close;
+        let is_unpaired_inline = tag_open && unpaired_close;
         // something like <tag></tag> in the same line
-        let one_liner_paired = tag_open && tag_close;
-        // will contain placement tags inside a component
-        let mut placements = String::new();
+        let paired_inline = tag_open && tag_close;
 
-        if !comment && is_unpaired {
+        let is_unpaired_tag = tag_open
+            && !trimmed.contains(UNPAIRED_TAG_CLOSE_TOKEN)
+            && !trimmed.contains(&tag_close_token);
+
+        if is_unpaired_tag {
+            let mut next_line = lines.next().unwrap().trim();
+
+            // capture attributes
+            while !next_line.contains(&tag_close_token) {
+                next_line = lines.next().unwrap().trim();
+            }
+
+            // **** Capture all component placements
+            // A placement is a tag that will replace a slot
+            while !next_line.contains(&tag_close_token) {
+                if !next_line.is_empty() {
+                    placements.push_str(next_line);
+                }
+
+                next_line = lines.next().unwrap().trim();
+            }
+
+            let with_filled_slots = handle_component_placements(&slice, &placements);
+
+            result.push_str(&with_filled_slots);
+            result.push_str(NL);
+            // done! move on
+            line = lines.next();
+            continue;
+        }
+
+        if is_unpaired_inline {
             result.push_str(&slice);
             result.push_str(NL);
             // done! move on
@@ -432,7 +505,7 @@ fn replace_component_with_static(source: &String, c_id: &str, slice: String) -> 
             continue;
         }
 
-        if !comment && one_liner_paired {
+        if paired_inline {
             // one liner paired tags may contain placements
             // capture them
             let close_i = trimmed.find(&tag_close_token).unwrap();
@@ -449,26 +522,6 @@ fn replace_component_with_static(source: &String, c_id: &str, slice: String) -> 
             result.push_str(&with_filled_slots);
             result.push_str(NL);
 
-            // done! move on
-            line = lines.next();
-            continue;
-        }
-
-        // if found a open tag, try to capture of its placements until tag close
-        if !comment && !is_unpaired && tag_open {
-            let mut next_line = lines.next().unwrap();
-
-            // **** Capture all component placements
-            // A placement is a tag that will replace a slot
-            while !next_line.contains(&tag_close_token) {
-                placements.push_str(next_line);
-                next_line = lines.next().unwrap();
-            }
-
-            let with_filled_slots = handle_component_placements(&slice, &placements);
-
-            result.push_str(&with_filled_slots);
-            result.push_str(NL);
             // done! move on
             line = lines.next();
             continue;
@@ -900,6 +953,9 @@ pub fn html(file: &PathBuf, memo: &mut Memory) -> Result<()> {
     let checksum = checksum(&code);
     // skip components
     let is_component = is_component(&file);
+
+    let doc = statica::parse(file)?;
+    println!("{}", doc);
 
     // ignore empty code and components
     if is_component || code.is_empty() {
