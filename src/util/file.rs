@@ -955,7 +955,7 @@ pub fn html(file: &PathBuf, memo: &mut Memory) -> Result<()> {
     let is_component = is_component(&file);
 
     let doc = statica::parse(file)?;
-    println!("{}", doc);
+    println!("processed => {}", doc);
 
     // ignore empty code and components
     if is_component || code.is_empty() {

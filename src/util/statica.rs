@@ -1,5 +1,5 @@
 use adler::adler32_slice;
-use std::{collections::HashMap, fs::read_to_string, path::PathBuf, str::Lines};
+use std::{collections::HashMap, fs::read_to_string, ops::AddAssign, path::PathBuf, str::Lines};
 
 use crate::{
     core_t::{Emoji, Result},
@@ -17,26 +17,26 @@ struct Checksum {
 
 /// Just the UNIX line separator aka newline (NL)
 const NL: &str = "\n";
-const STATIC_QUERY_FN_TOKEN: &str = "$query";
-const QUERY_FACTORY_TOKEN: &str = "__xQueryByScope";
-const QUERY_FN_NAME: &str = "query";
+// const STATIC_QUERY_FN_TOKEN: &str = "$query";
+// const QUERY_FACTORY_TOKEN: &str = "__xQueryByScope";
+// const QUERY_FN_NAME: &str = "query";
 const DATA_SCOPE_TOKEN: &str = "data-x-scope";
 const DATA_NESTED_TOKEN: &str = "data-x-nested";
 const DATA_COMPONENT_NAME: &str = "data-x-name";
 const HTML_COMMENT_START_TOKEN: &str = "<!--";
 const HTML_COMMENT_END_TOKEN: &str = "-->";
 const COMPONENT_TAG_START_TOKEN: &str = "<x-";
-const CSS_OPEN_RULE_TOKEN: &str = "{";
-const CSS_AT_TOKEN: &str = "@";
-const HEAD_TAG_CLOSE: &str = "</head>";
-const BODY_TAG_CLOSE: &str = "</body>";
+// const CSS_OPEN_RULE_TOKEN: &str = "{";
+// const CSS_AT_TOKEN: &str = "@";
+// const HEAD_TAG_CLOSE: &str = "</head>";
+// const BODY_TAG_CLOSE: &str = "</body>";
 const COMPONENT_PREFIX_TOKEN: &str = "x-";
 /// Space token
 const SP: &str = " ";
-const JS_CLIENT_CORE_PATH: &str = "src/util/js/client_core.js";
-const GLOBAL_STYLE_ID: &str = "__X-STYLE__";
-const GLOBAL_SCRIPT_ID: &str = "__X-SCRIPT__";
-const GLOBAL_CORE_SCRIPT_ID: &str = "__X-CORE-SCRIPT__";
+// const JS_CLIENT_CORE_PATH: &str = "src/util/js/client_core.js";
+// const GLOBAL_STYLE_ID: &str = "__X-STYLE__";
+// const GLOBAL_SCRIPT_ID: &str = "__X-SCRIPT__";
+// const GLOBAL_CORE_SCRIPT_ID: &str = "__X-CORE-SCRIPT__";
 const TEMPLATE_START_TOKEN: &str = "<template";
 const TEMPLATE_END_TOKEN: &str = "</template";
 const LINK_START_TOKEN: &str = "<link";
@@ -45,6 +45,7 @@ const UNPAIRED_TAG_CLOSE_TOKEN: &str = "/>";
 // **** end CONSTANTS
 
 /// Collects a slice line by line until an end token is found
+/// end token line exclusive
 fn collect_until_end_token(lines: &mut Lines, end_token: &str) -> String {
     let mut line = lines.next();
     let mut result = String::new();
@@ -73,11 +74,8 @@ fn collect_until_an_end_token(lines: &mut Lines, end_tokens: Vec<&str>) -> Strin
         let trimmed = line.unwrap().trim();
         let mut next_line = trimmed;
 
-        // let cond = end_tokens.iter().fold(false, |acc, &token| {
-        //     !next_line.contains(token) && acc
-        // });
-
-        while let state = end_tokens
+        // on each iteration calculate if one of the tokens was found
+        while end_tokens
             .iter()
             .fold(true, |acc, &token| !next_line.contains(token) && acc)
         {
@@ -105,7 +103,10 @@ fn collect_from_to<'s>(source: &str, start_token: &str, end_token: &str) -> Stri
 
         // both tokens may be inline, verify
         if is_start && is_inline {
-            result.push_str(trimmed);
+            let start_i = trimmed.find(start_token).unwrap();
+            let end_i = trimmed.find(end_token).unwrap();
+            let slice = trimmed.get(start_i + start_token.len()..end_i).unwrap();
+            result.push_str(slice);
             return result;
         }
 
@@ -116,9 +117,9 @@ fn collect_from_to<'s>(source: &str, start_token: &str, end_token: &str) -> Stri
             let mut next_line = line.unwrap().trim();
 
             while !next_line.contains(end_token) {
-                line = lines.next();
                 result.push_str(next_line);
                 result.push_str(NL);
+                line = lines.next();
                 next_line = line.unwrap().trim();
             }
         }
@@ -164,7 +165,10 @@ fn get_attrs_inline<'a>(
             // is either the token index or the end of the string
             let e_i = end.unwrap_or(slice.len()) + s_i;
             let result = slice.get(s_i..e_i).unwrap_or("");
-            return Some(result);
+
+            if !result.is_empty() {
+                return Some(result);
+            }
         }
     }
 
@@ -212,9 +216,9 @@ fn evaluate_url(entry_file: &PathBuf, linked_file: &str) -> Option<PathBuf> {
 }
 
 /// Replaces slot in a component with its placements
-fn handle_component_placements(with_slots: &String, placements: &str) -> String {
+fn fill_component_slots(c_code: &String, placements: &str) -> String {
     let mut result = String::new();
-    result.push_str(with_slots);
+    result.push_str(c_code);
 
     let lines = &mut placements.lines();
     let mut line = lines.next();
@@ -233,7 +237,7 @@ fn handle_component_placements(with_slots: &String, placements: &str) -> String 
             // attribute containing the slot name
             let slot_name_attr = format!("name=\"{slot_name}\"");
 
-            let slot_lines = &mut with_slots.lines();
+            let slot_lines = &mut c_code.lines();
             let mut line = lines.next();
 
             while line.is_some() {
@@ -256,13 +260,21 @@ fn handle_component_placements(with_slots: &String, placements: &str) -> String 
     return result;
 }
 
-fn replace_component_with_static(lines: &mut Lines, c_id: &str, c_html: &String) -> String {
+fn log(label: &str, txt: &str) {
+    println!("\n{} => {label} = {txt}\n", file!());
+}
+
+fn replace_component_with_static(
+    c_line: &str,
+    lines: &mut Lines,
+    c_id: &str,
+    c_html: &String,
+) -> String {
     let tag_open_token = format!("<{}", c_id);
     let tag_close_token = format!("</{}", c_id);
 
     let mut result = String::new();
-
-    let mut line = lines.next();
+    let mut line = Some(c_line);
 
     while line.is_some() {
         // trim this line of code
@@ -293,44 +305,33 @@ fn replace_component_with_static(lines: &mut Lines, c_id: &str, c_html: &String)
         if is_unpaired_inline {
             result.push_str(&c_html);
             result.push_str(NL);
-            // done! move on
-            line = lines.next();
-            continue;
+            // ok, done!
+            return result;
         }
 
         if is_unpaired_tag {
-            // **** Capture all component placements
-            // A placement is a tag that will replace a slot
-
             let inner_html =
                 collect_until_an_end_token(lines, vec![UNPAIRED_TAG_CLOSE_TOKEN, &tag_close_token]);
-            let with_filled_slots = handle_component_placements(&c_html, &inner_html);
+
+            let with_filled_slots = fill_component_slots(&c_html, &inner_html);
 
             result.push_str(&with_filled_slots);
             result.push_str(NL);
 
-            line = lines.next();
-            continue;
+            // ok, done!
+            return result;
         }
 
         if paired_inline {
-            // one liner paired tags may contain placements
-            // capture them
-            let close_i = trimmed.find(&tag_close_token).unwrap();
-            // fint the index of the closing token ">" for the open token
-            let closing_tok_i = trimmed.find(">").unwrap();
-            // component placements
-            let inner_html = trimmed.get(closing_tok_i + 1..close_i).unwrap();
-
+            let inner_html = collect_from_to(trimmed, ">", &tag_close_token);
             if !inner_html.is_empty() {
-                let with_filled_slots = handle_component_placements(&c_html, &inner_html);
+                let with_filled_slots = fill_component_slots(&c_html, &inner_html);
                 result.push_str(&with_filled_slots);
                 result.push_str(NL);
             }
 
-            // done! move on
-            line = lines.next();
-            continue;
+            // ok, done!
+            return result;
         }
 
         result.push_str(trimmed);
@@ -362,7 +363,7 @@ fn get_tag_name_by_token<'t>(line: &'t str, token: &'t str) -> &'t str {
         }
     }
 
-    line.get(start_i + 1..end_token_i).unwrap()
+    line.get(start_i + 1..end_token_i).unwrap().trim()
 }
 
 fn get_component_name(line: &str) -> &str {
@@ -403,15 +404,15 @@ fn parse_component(c_id: &str, c_code: &String) -> Result<String> {
     }
 
     let attrs = get_attrs_inline(c_code, TEMPLATE_START_TOKEN, ">").unwrap_or("");
-    let inner_html = collect_from_to(&c_code, ">", "</template");
+    let c_inner_html = collect_from_to(&c_code, ">", "</template");
 
     // ship it if its empty
-    if inner_html.is_empty() {
+    if c_inner_html.is_empty() {
         return Ok("".to_string());
     }
 
     // the result starts has the component inner html
-    result.push_str(&inner_html);
+    result.push_str(&c_inner_html);
 
     let frag_attr = get_attr(attrs, "data-fragment").unwrap_or("false");
     let is_fragment = frag_attr == "true";
@@ -420,7 +421,7 @@ fn parse_component(c_id: &str, c_code: &String) -> Result<String> {
     let c_scope = if is_fragment {
         None
     } else {
-        Some(checksum(&inner_html).as_hex)
+        Some(checksum(&c_inner_html).as_hex)
     };
 
     let style_start = result.find("<style");
@@ -463,8 +464,8 @@ fn parse_component(c_id: &str, c_code: &String) -> Result<String> {
     // if the component is not a fragment, check for a root element
     if c_scope.is_some() {
         let scope = c_scope.unwrap();
-
         let rest = result.trim();
+
         let first_line = rest.lines().next().unwrap_or("");
         let last_line = rest.lines().last().unwrap_or("");
 
@@ -478,27 +479,31 @@ fn parse_component(c_id: &str, c_code: &String) -> Result<String> {
         let tag_count = rest.matches(&tag_end).count();
         let is_root_node = tag_count % 2 != 0 && last_line.contains(&tag_end);
 
-        if !is_root_node {
-            let scoped_code = format!(
-                "<div{SP}{DATA_SCOPE_TOKEN}=\"{scope}\"{SP}{DATA_NESTED_TOKEN}=\"{is_nested}\"{SP}
-        {DATA_COMPONENT_NAME}=\"{c_id}\">{rest}</div>"
-            );
+        let component_attrs = format!(
+            "{DATA_SCOPE_TOKEN}=\"{scope}\"{SP}
+        {DATA_NESTED_TOKEN}=\"{is_nested}\"{SP}
+        {DATA_COMPONENT_NAME}=\"{c_id}\""
+        );
 
+        if !is_root_node {
+            let scoped_code = format!("<div{SP}{component_attrs}>{rest}</div>");
             return Ok(scoped_code);
         }
 
         if is_root_node {
-            let attrs = get_attrs_inline(rest, &tag_start, ">").unwrap_or("");
-            // add the scope attribute
-            let scope_attr = format!(
-                "{attrs}{SP}
-            {DATA_SCOPE_TOKEN}=\"{scope}\"{SP}
-            {DATA_NESTED_TOKEN}=\"{is_nested}\"{SP}
-            {DATA_COMPONENT_NAME}=\"{c_id}\""
-            );
+            let attrs = get_attrs_inline(first_line, &tag_start, ">").unwrap_or("");
+            let inner_html = collect_from_to(&rest, ">", &tag_end);
+            let inner_html_trimmed = inner_html.trim();
 
-            // now this!
-            let scoped_code = replace_chunk(&rest.to_string(), &attrs, &scope_attr);
+            // add the scope attribute
+            let scoped_code = if attrs.is_empty() {
+                format!("{tag_start}{SP}{component_attrs}>{NL}{inner_html_trimmed}{NL}{tag_end}>",)
+            } else {
+                format!(
+                    "{tag_start}{SP}{attrs}{SP}{component_attrs}>{NL}{inner_html_trimmed}{NL}{tag_end}>",
+                )
+            };
+
             return Ok(scoped_code);
         }
     }
@@ -509,23 +514,27 @@ fn parse_component(c_id: &str, c_code: &String) -> Result<String> {
 fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
     let mut lines = code.lines();
     let mut line = lines.next();
+    let mut line_number = 0;
     let mut result = String::new();
 
-    let mut processed = HashMap::<&str, String>::new();
+    let mut templates = HashMap::<&str, String>::new();
     // a component html file
     let is_component_definition = code.trim().starts_with(TEMPLATE_START_TOKEN);
 
     while line.is_some() {
+        line_number.add_assign(1);
+
         // trim this line of code
         let trimmed = line.unwrap().trim();
         // skip empty lines
         if trimmed.is_empty() {
             line = lines.next();
+            line_number.add_assign(1);
             continue;
         }
 
         let is_inline_link = trimmed.starts_with(LINK_START_TOKEN) && trimmed.contains(">");
-        let is_component_link = trimmed.contains("rel=\"component\" ") && is_inline_link;
+        let is_component_link = trimmed.contains("rel=\"component\"") && is_inline_link;
         let is_template_start = !is_component_definition
             && trimmed.starts_with(TEMPLATE_START_TOKEN)
             && trimmed.contains(">");
@@ -539,8 +548,11 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
             while !next_line.contains(HTML_COMMENT_END_TOKEN) {
                 line = lines.next();
+                line_number.add_assign(1);
                 next_line = line.unwrap().trim();
             }
+
+            line_number.add_assign(1);
             line = lines.next();
             continue;
         }
@@ -559,13 +571,17 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
                 if c_id.is_some() {
                     let inner_html = collect_until_end_token(&mut lines, TEMPLATE_END_TOKEN);
-                    let html = format!("{trimmed}\n{inner_html}\n{TEMPLATE_END_TOKEN}>");
-                    let proc = parse_code(&html, file)?;
+                    let len_in_i32 = inner_html.len().to_string().parse::<i32>()?;
+                    line_number.add_assign(len_in_i32);
 
-                    processed.insert(c_id.unwrap(), proc);
+                    let rebuilt_html =
+                        format!("{trimmed}{NL}{inner_html}{NL}{TEMPLATE_END_TOKEN}>");
+                    let c_html = parse_code(&rebuilt_html, file)?;
+                    templates.insert(c_id.unwrap(), c_html);
 
                     // skip only when a valid component id is found
                     line = lines.next();
+                    line_number.add_assign(1);
                     continue;
                 }
             }
@@ -588,12 +604,13 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
                 if c_url.is_some() {
                     let c_html = parse(&c_url.unwrap());
                     if c_html.is_ok() {
-                        processed.insert(c_id.unwrap(), c_html.unwrap());
+                        templates.insert(c_id.unwrap(), c_html.unwrap());
                     }
                 }
             }
 
             line = lines.next();
+            line_number.add_assign(1);
             continue;
         }
 
@@ -603,32 +620,39 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
             let c_name = get_component_name(trimmed);
             let undefined = || {
                 println!(
-                    "Undefined static component {} {:?} removed",
+                    "{:?}: Undefined static component {} {:?} removed",
+                    file,
                     Emoji::FLAG,
                     c_name
                 );
             };
 
-            let entry = processed.get(c_name);
-
-            if entry.is_some() {
-                let c_html = entry.unwrap();
-                let parsed_code = parse_component(c_name, c_html)?;
-                let replaced = replace_component_with_static(&mut lines, c_name, &parsed_code);
-                result.push_str(&replaced);
-                result.push_str(NL);
-                return Ok(result);
+            let entry = templates.get(c_name);
+            if entry.is_none() {
+                undefined();
+                line = lines.next();
+                line_number.add_assign(1);
+                continue;
             }
 
-            undefined();
+            let c_html = entry.unwrap();
+            let parsed_code = parse_component(c_name, c_html)?;
+            let replaced = replace_component_with_static(trimmed, &mut lines, c_name, &parsed_code);
+
+            result.push_str(&replaced);
+            result.push_str(NL);
             line = lines.next();
+            line_number.add_assign(1);
             continue;
         }
 
         result.push_str(trimmed);
         result.push_str(NL);
         line = lines.next();
+        line_number.add_assign(1);
     }
+
+    // println!("templates => {:?}", templates);
 
     Ok(result)
 }
