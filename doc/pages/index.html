@@ -12,31 +12,39 @@
     </head>
 
     <body>
-        <template id="boo">
-            <p>Boo man!</p>
-        </template>
-        <template id="x-in-file">
-            <link rel="component" href="./parts/some.html" id="x-some-some">
-            <section>
-                <x-some-some />
 
-                <p>
-                    In file component!
-                </p>
-            </section>
-            <section>
-                <b>hello B!!</b>
-            </section>
-        </template>
-        <h1>Hello World</h1>
-        <p>THE data!</p>
-        <div>
-            <img width="400" src="./images/banana.jpeg" alt="Bananas">
-        </div>
-
+        <!-- Unpaired inline <x-some-tag /> -->
         <x-some-tag />
-        <x-in-file />
 
+        <!-- Unpaired multiline
+        <x-some-tag
+
+
+        />
+        -->
+        <x-some-tag
+
+
+        />
+
+        <!-- paired multiline
+
+        <x-some-tag>
+
+
+        </x-some-tag>
+        -->
+        <x-some-tag>
+
+
+        </x-some-tag>
+
+
+        <!-- paired inline <x-some-tag></x-some-tag> -->
+        <x-some-tag></x-some-tag>
+
+        <!-- Undefined <x-undie-> -->
+        <x-undie></x-undie>
     </body>
 
 </html>

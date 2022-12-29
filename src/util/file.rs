@@ -931,10 +931,11 @@ pub fn eval_linked_asset_edit(pb: &PathBuf, memo: &mut Memory) -> Result<()> {
     Ok(())
 }
 
+/// Verifies if the code starts with a template tag
 pub fn is_component(file: &PathBuf) -> bool {
     let code = read_code(file);
     let ccode = code.ok().unwrap_or_default();
-    return ccode.trim().starts_with(TEMPLATE_TAG_TOKEN);
+    return ccode.trim_start().starts_with(TEMPLATE_TAG_TOKEN);
 }
 
 /// Naively checks for file extension to decide if a file is linked

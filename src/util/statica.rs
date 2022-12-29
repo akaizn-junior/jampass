@@ -7,13 +7,14 @@ use crate::{
     util::path,
 };
 
+// *** TYPES ***
+
 /// Type for content checkum
 struct Checksum {
     as_hex: String,
-    as_u32: u32,
 }
 
-// **** CONSTANTS
+// *** CONSTANTS ***
 
 /// Just the UNIX line separator aka newline (NL)
 const NL: &str = "\n";
@@ -42,7 +43,7 @@ const TEMPLATE_END_TOKEN: &str = "</template";
 const LINK_START_TOKEN: &str = "<link";
 const UNPAIRED_TAG_CLOSE_TOKEN: &str = "/>";
 
-// **** end CONSTANTS
+// *** HELPERS ***
 
 /// Collects a slice line by line until an end token is found
 /// end token line exclusive
@@ -128,8 +129,11 @@ fn collect_from_to<'s>(source: &str, start_token: &str, end_token: &str) -> Stri
     return result;
 }
 
-fn is_valid_id(slice: &str) -> bool {
-    slice.starts_with(COMPONENT_PREFIX_TOKEN)
+fn get_valid_id(slice: &str) -> Option<&str> {
+    if slice.starts_with(COMPONENT_PREFIX_TOKEN) {
+        return Some(slice);
+    }
+    None
 }
 
 fn get_attr<'a>(slice: &'a str, token: &'a str) -> Option<&'a str> {
@@ -180,7 +184,7 @@ fn checksum(slice: &str) -> Checksum {
     let as_u32 = adler32_slice(slice.as_bytes());
     let as_hex = format!("{:x}", as_u32);
 
-    return Checksum { as_hex, as_u32 };
+    return Checksum { as_hex };
 }
 
 /// Evaluates the url of a linked file relative to the entry file or the CWD
@@ -260,8 +264,8 @@ fn fill_component_slots(c_code: &String, placements: &str) -> String {
     return result;
 }
 
-fn log(label: &str, txt: &str) {
-    println!("\n{} => {label} = {txt}\n", file!());
+fn log(label: &str, msg: &str) {
+    println!("\n{} => {label} = {msg}\n", file!());
 }
 
 fn replace_component_with_static(
@@ -275,6 +279,10 @@ fn replace_component_with_static(
 
     let mut result = String::new();
     let mut line = Some(c_line);
+
+    let mut write = |line| {
+        result.push_str(line);
+    };
 
     while line.is_some() {
         // trim this line of code
@@ -300,11 +308,10 @@ fn replace_component_with_static(
         // something line <tag />
         let is_unpaired_inline = tag_open && unpaired_close;
         // something like <tag></tag> in the same line
-        let paired_inline = tag_open && tag_close;
+        let is_paired_inline = tag_open && tag_close;
 
         if is_unpaired_inline {
-            result.push_str(&c_html);
-            result.push_str(NL);
+            write(&c_html);
             // ok, done!
             return result;
         }
@@ -314,28 +321,26 @@ fn replace_component_with_static(
                 collect_until_an_end_token(lines, vec![UNPAIRED_TAG_CLOSE_TOKEN, &tag_close_token]);
 
             let with_filled_slots = fill_component_slots(&c_html, &inner_html);
-
-            result.push_str(&with_filled_slots);
-            result.push_str(NL);
+            write(&with_filled_slots);
 
             // ok, done!
             return result;
         }
 
-        if paired_inline {
+        if is_paired_inline {
             let inner_html = collect_from_to(trimmed, ">", &tag_close_token);
             if !inner_html.is_empty() {
                 let with_filled_slots = fill_component_slots(&c_html, &inner_html);
-                result.push_str(&with_filled_slots);
-                result.push_str(NL);
+                write(&with_filled_slots);
+            } else {
+                write(&c_html);
             }
 
             // ok, done!
             return result;
         }
 
-        result.push_str(trimmed);
-        result.push_str(NL);
+        write(trimmed);
         // done! move on
         line = lines.next();
     }
@@ -389,10 +394,8 @@ fn replace_chunk(source: &String, cut_slice: &str, add_slice: &str) -> String {
         .to_string()
 }
 
-fn parse_component(c_id: &str, c_code: &String) -> Result<String> {
+fn parse_component(c_id: &str, c_code: &String, is_nested: bool) -> Result<String> {
     let is_template = c_code.trim().starts_with(TEMPLATE_START_TOKEN);
-    let is_nested = is_template;
-
     let mut result = String::new();
 
     if !is_template {
@@ -404,14 +407,14 @@ fn parse_component(c_id: &str, c_code: &String) -> Result<String> {
     }
 
     let attrs = get_attrs_inline(c_code, TEMPLATE_START_TOKEN, ">").unwrap_or("");
-    let c_inner_html = collect_from_to(&c_code, ">", "</template");
+    let c_inner_html = collect_from_to(&c_code, ">", TEMPLATE_END_TOKEN);
 
     // ship it if its empty
     if c_inner_html.is_empty() {
         return Ok("".to_string());
     }
 
-    // the result starts has the component inner html
+    // the result starts as the component inner html
     result.push_str(&c_inner_html);
 
     let frag_attr = get_attr(attrs, "data-fragment").unwrap_or("false");
@@ -477,31 +480,32 @@ fn parse_component(c_id: &str, c_code: &String) -> Result<String> {
         // if the tag end token count is uneven and
         // exists on the last line, its the root node
         let tag_count = rest.matches(&tag_end).count();
-        let is_root_node = tag_count % 2 != 0 && last_line.contains(&tag_end);
+        let is_root_node = (tag_count == 1 || tag_count % 2 == 0) && last_line.contains(&tag_end);
 
-        let component_attrs = format!(
+        let c_attrs = format!(
             "{DATA_SCOPE_TOKEN}=\"{scope}\"{SP}
         {DATA_NESTED_TOKEN}=\"{is_nested}\"{SP}
         {DATA_COMPONENT_NAME}=\"{c_id}\""
         );
 
         if !is_root_node {
-            let scoped_code = format!("<div{SP}{component_attrs}>{rest}</div>");
+            let scoped_code = format!("<div{SP}{c_attrs}>{rest}</div>");
             return Ok(scoped_code);
         }
 
         if is_root_node {
-            let attrs = get_attrs_inline(first_line, &tag_start, ">").unwrap_or("");
+            let attrs = get_attrs_inline(first_line, &tag_start, ">")
+                .unwrap_or("")
+                .trim();
+
             let inner_html = collect_from_to(&rest, ">", &tag_end);
-            let inner_html_trimmed = inner_html.trim();
+            let inner_html = inner_html.trim();
 
             // add the scope attribute
             let scoped_code = if attrs.is_empty() {
-                format!("{tag_start}{SP}{component_attrs}>{NL}{inner_html_trimmed}{NL}{tag_end}>",)
+                format!("{tag_start}{SP}{c_attrs}>{NL}{inner_html}{NL}{tag_end}>")
             } else {
-                format!(
-                    "{tag_start}{SP}{attrs}{SP}{component_attrs}>{NL}{inner_html_trimmed}{NL}{tag_end}>",
-                )
+                format!("{tag_start}{SP}{attrs}{SP}{c_attrs}>{NL}{inner_html}{NL}{tag_end}>")
             };
 
             return Ok(scoped_code);
@@ -519,37 +523,50 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
     let mut templates = HashMap::<&str, String>::new();
     // a component html file
-    let is_component_definition = code.trim().starts_with(TEMPLATE_START_TOKEN);
+    let is_component = code.trim_start().starts_with(TEMPLATE_START_TOKEN);
 
     while line.is_some() {
+        let pre = line.unwrap();
         line_number.add_assign(1);
 
-        // trim this line of code
-        let trimmed = line.unwrap().trim();
-        // skip empty lines
-        if trimmed.is_empty() {
+        // Write this line to the result string
+        let mut write = |line| {
+            result.push_str(line);
+            result.push_str(NL);
+        };
+
+        // before trimming write empty line as is
+        if pre.is_empty() {
+            write(pre);
             line = lines.next();
             line_number.add_assign(1);
             continue;
         }
 
+        // trim this line of code
+        let trimmed = pre.trim();
+
         let is_inline_link = trimmed.starts_with(LINK_START_TOKEN) && trimmed.contains(">");
         let is_component_link = trimmed.contains("rel=\"component\"") && is_inline_link;
-        let is_template_start = !is_component_definition
-            && trimmed.starts_with(TEMPLATE_START_TOKEN)
-            && trimmed.contains(">");
+        let is_template_start =
+            !is_component && trimmed.starts_with(TEMPLATE_START_TOKEN) && trimmed.contains(">");
 
         // is a top level comment
         let is_top_comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
 
-        // skip the whole commented section
+        // eval commented sections
         if is_top_comment {
-            let mut next_line = trimmed;
+            let mut commented_line = trimmed;
+            // this is a commented line, write it
+            write(commented_line);
 
-            while !next_line.contains(HTML_COMMENT_END_TOKEN) {
+            // multiline comment section, if the condition here is false, the loop does not run
+            // would be cool to have a do while tho
+            while !commented_line.contains(HTML_COMMENT_END_TOKEN) {
                 line = lines.next();
                 line_number.add_assign(1);
-                next_line = line.unwrap().trim();
+                commented_line = line.unwrap().trim();
+                write(commented_line);
             }
 
             line_number.add_assign(1);
@@ -557,22 +574,16 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
             continue;
         }
 
-        // *** parse in file component
+        // *** parse in-file component
         if is_template_start {
             let attrs = get_attrs_inline(trimmed, TEMPLATE_START_TOKEN, ">");
             if attrs.is_some() {
                 let attrs = attrs.unwrap();
-                let c_id = get_attr(attrs, "id").and_then(|v| {
-                    if is_valid_id(v) {
-                        return Some(v);
-                    }
-                    None
-                });
+                let c_id = get_attr(attrs, "id").and_then(|v| get_valid_id(v));
 
                 if c_id.is_some() {
                     let inner_html = collect_until_end_token(&mut lines, TEMPLATE_END_TOKEN);
-                    let len_in_i32 = inner_html.len().to_string().parse::<i32>()?;
-                    line_number.add_assign(len_in_i32);
+                    let len_as_i32 = inner_html.len().to_string().parse::<i32>()?;
 
                     let rebuilt_html =
                         format!("{trimmed}{NL}{inner_html}{NL}{TEMPLATE_END_TOKEN}>");
@@ -581,7 +592,7 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
                     // skip only when a valid component id is found
                     line = lines.next();
-                    line_number.add_assign(1);
+                    line_number.add_assign(len_as_i32 + 1);
                     continue;
                 }
             }
@@ -593,12 +604,7 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
             if attrs.is_some() {
                 let attrs = attrs.unwrap();
-                let c_id = get_attr(attrs, "id").and_then(|v| {
-                    if is_valid_id(v) {
-                        return Some(v);
-                    }
-                    None
-                });
+                let c_id = get_attr(attrs, "id").and_then(|v| get_valid_id(v));
 
                 let c_url = get_attr(attrs, "href").and_then(|u| evaluate_url(&file, u));
                 if c_url.is_some() {
@@ -614,14 +620,19 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
             continue;
         }
 
-        let is_component = trimmed.contains(COMPONENT_TAG_START_TOKEN);
+        let is_component_tag = trimmed.contains(COMPONENT_TAG_START_TOKEN);
 
-        if is_component {
+        if is_component_tag {
             let c_name = get_component_name(trimmed);
-            let undefined = || {
+            let file = path::strip_crate_cwd(file);
+            let file = file.to_str().unwrap_or("");
+
+            let undefined = |line: i32, col: i32| {
                 println!(
-                    "{:?}: Undefined static component {} {:?} removed",
+                    "{}:{}:{} Undefined static component {} {:?} removed",
                     file,
+                    line,
+                    col,
                     Emoji::FLAG,
                     c_name
                 );
@@ -629,35 +640,32 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
             let entry = templates.get(c_name);
             if entry.is_none() {
-                undefined();
                 line = lines.next();
                 line_number.add_assign(1);
+                undefined(line_number, 0);
                 continue;
             }
 
             let c_html = entry.unwrap();
-            let parsed_code = parse_component(c_name, c_html)?;
+            let parsed_code = parse_component(c_name, c_html, is_component)?;
+
             let replaced = replace_component_with_static(trimmed, &mut lines, c_name, &parsed_code);
 
-            result.push_str(&replaced);
-            result.push_str(NL);
+            write(&replaced);
             line = lines.next();
             line_number.add_assign(1);
             continue;
         }
 
-        result.push_str(trimmed);
-        result.push_str(NL);
+        write(trimmed);
         line = lines.next();
         line_number.add_assign(1);
     }
 
-    // println!("templates => {:?}", templates);
-
     Ok(result)
 }
 
-// Interface
+// *** INTERFACE ***
 
 pub fn parse(file: &PathBuf) -> Result<String> {
     let code = read_code(&file)?;

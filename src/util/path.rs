@@ -1,5 +1,4 @@
 use std::fs::read_dir;
-
 use std::path::{Path, PathBuf};
 
 use crate::core_t::Result;
@@ -15,8 +14,25 @@ pub enum Strategy {
     Nil,
 }
 
-/// **** should implement a ignore rc file
+/// *** should implement an ignorerc file
 const IGNORE: [&str; 3] = [".git", "node_modules", "public"];
+
+// *** HELPERS ***
+
+fn eval_path_strat(p: &str, strat: Strategy, f: fn() -> Strategy) -> Strategy {
+    match canonical(p) {
+        Ok(_) => strat,
+        Err(_) => f(),
+    }
+}
+
+fn strip(prefix: PathBuf, path: &PathBuf) -> &Path {
+    let prefix_as_str = prefix.to_str().unwrap_or("");
+    // get the file base, aka everything else but the prefix
+    path.strip_prefix(prefix_as_str).unwrap_or(Path::new("."))
+}
+
+// *** INTERFACE ***
 
 /// Canonicalize a string path
 pub fn canonical(p: &str) -> Result<PathBuf> {
@@ -106,13 +122,6 @@ pub fn evaluate_cwd() -> Strategy {
     return html_strat();
 }
 
-fn eval_path_strat(p: &str, strat: Strategy, f: fn() -> Strategy) -> Strategy {
-    match canonical(p) {
-        Ok(_) => strat,
-        Err(_) => f(),
-    }
-}
-
 /// Returns the path with the cwd substituted with the owd
 pub fn prefix_with_owd(file: &PathBuf) -> PathBuf {
     let owd = env::output_dir();
@@ -124,11 +133,12 @@ pub fn prefix_with_owd(file: &PathBuf) -> PathBuf {
 
 /// Strips the cwd from the path
 pub fn strip_cwd(file: &PathBuf) -> &Path {
-    let cwd = env::current_dir();
-    let cwd_as_str = cwd.to_str().unwrap_or("");
-    // get the file base, aka everything else but the cwd
-    let file_base = file.strip_prefix(cwd_as_str).unwrap_or(Path::new("."));
-    return file_base;
+    strip(env::current_dir(), file)
+}
+
+/// Strips the original CWD aka crate CWD from the path
+pub fn strip_crate_cwd(file: &PathBuf) -> &Path {
+    strip(env::crate_cwd(), file)
 }
 
 /// Strips the cwd or the known src path from the given path.
@@ -138,14 +148,13 @@ pub fn strip_cwd_for_output(file: &PathBuf) -> &Path {
 
     if file.starts_with(&src_path) {
         // strip the known src path
-        let path_as_str = src_path.to_str().unwrap_or("");
-        let file_base = file.strip_prefix(path_as_str).unwrap_or(Path::new("."));
-        return file_base;
+        return strip(env::src_dir(), file);
     }
 
     return strip_cwd(&file);
 }
 
+/// Verifies if the path starts with the OWD
 pub fn starts_with_owd(file: &PathBuf) -> bool {
     let owd = env::output_dir();
     file.starts_with(owd)

@@ -4,6 +4,7 @@ mod cli_t;
 mod core;
 mod core_t;
 mod env;
+mod test;
 mod util;
 
 fn handle_error(e: core_t::Error) {
