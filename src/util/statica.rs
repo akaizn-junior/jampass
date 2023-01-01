@@ -45,21 +45,51 @@ const UNPAIRED_TAG_CLOSE_TOKEN: &str = "/>";
 
 // *** HELPERS ***
 
-/// Collects a slice line by line until an end token is found
-/// end token line exclusive
+fn collect_html_tag(line: &str, lines: &mut Lines, tag_name: &str) -> String {
+    let mut line = Some(line);
+    let mut result = String::new();
+    let end_token = format!("</{tag_name}");
+
+    if line.is_some() && !line.unwrap().is_empty() {
+        let pre = line.unwrap();
+
+        // if its inline
+        if pre.contains(&end_token) {
+            result.push_str(pre);
+            return result;
+        }
+
+        let mut next_line = pre;
+        while !next_line.contains(&end_token) {
+            line = lines.next();
+            result.push_str(next_line);
+            result.push_str(NL);
+            next_line = line.unwrap();
+        }
+
+        // get the very last line aswell
+        result.push_str(next_line);
+    }
+
+    return result;
+}
+
+/// Collects a slice line by line until an end token is found.
+/// The top line and the line containing the end token are excluded.
+/// Relevant for using an already existing lines iterator
 fn collect_until_end_token(lines: &mut Lines, end_token: &str) -> String {
     let mut line = lines.next();
     let mut result = String::new();
 
-    if line.is_some() {
-        let trimmed = line.unwrap().trim();
-        let mut next_line = trimmed;
+    if line.is_some() && !line.unwrap().is_empty() {
+        let pre = line.unwrap();
+        let mut next_line = pre;
 
         while !next_line.contains(end_token) {
             line = lines.next();
             result.push_str(next_line);
             result.push_str(NL);
-            next_line = line.unwrap().trim();
+            next_line = line.unwrap();
         }
     }
 
@@ -72,8 +102,8 @@ fn collect_until_an_end_token(lines: &mut Lines, end_tokens: Vec<&str>) -> Strin
     let mut result = String::new();
 
     if line.is_some() {
-        let trimmed = line.unwrap().trim();
-        let mut next_line = trimmed;
+        let pre = line.unwrap();
+        let mut next_line = pre;
 
         // on each iteration calculate if one of the tokens was found
         while end_tokens
@@ -83,46 +113,52 @@ fn collect_until_an_end_token(lines: &mut Lines, end_tokens: Vec<&str>) -> Strin
             line = lines.next();
             result.push_str(next_line);
             result.push_str(NL);
-            next_line = line.unwrap().trim();
+            next_line = line.unwrap();
         }
     }
 
     return result;
 }
 
-/// Collects a slice from a start to an end token line by line
-/// The line where the start token is found is completely skipped
-fn collect_from_to<'s>(source: &str, start_token: &str, end_token: &str) -> String {
+fn collect_inner_html_inline<'s>(
+    slice: &'s str,
+    start_token: &'s str,
+    end_token: &'s str,
+) -> &'s str {
+    let start_i = slice.find(start_token).unwrap_or(0);
+    let end_i = slice.rfind(end_token).unwrap_or(slice.len());
+    slice.get(start_i + start_token.len()..end_i).unwrap()
+}
+
+fn collect_inner_html<'s>(source: &str) -> String {
     let mut lines = source.lines();
     let mut line = lines.next();
     let mut result = String::new();
 
+    let inline_start_token = ">";
+    let inline_end_token = "<";
+
     if line.is_some() {
-        let trimmed = line.unwrap().trim();
-        let is_start = trimmed.contains(start_token);
-        let is_inline = trimmed.contains(end_token);
+        let pre = line.unwrap();
+        let is_start = pre.contains(inline_start_token);
 
         // both tokens may be inline, verify
-        if is_start && is_inline {
-            let start_i = trimmed.find(start_token).unwrap();
-            let end_i = trimmed.find(end_token).unwrap();
-            let slice = trimmed.get(start_i + start_token.len()..end_i).unwrap();
-            result.push_str(slice);
+        if is_start && lines.clone().count() == 1 {
+            let inner_html = collect_inner_html_inline(pre, inline_start_token, inline_end_token);
+            result.push_str(inner_html);
             return result;
         }
 
-        if is_start && !is_inline {
-            // if here, the start token is on this line so
-            // start lookup for the end token by the next line
+        // remove the last line
+        lines.next_back();
+        // start the count
+        line = lines.next();
+        // if here, the start token is on this line so
+        // start lookup for the end token by the next line
+        while line != None {
+            result.push_str(line.unwrap());
+            result.push_str(NL);
             line = lines.next();
-            let mut next_line = line.unwrap().trim();
-
-            while !next_line.contains(end_token) {
-                result.push_str(next_line);
-                result.push_str(NL);
-                line = lines.next();
-                next_line = line.unwrap().trim();
-            }
         }
     }
 
@@ -130,7 +166,7 @@ fn collect_from_to<'s>(source: &str, start_token: &str, end_token: &str) -> Stri
 }
 
 fn get_valid_id(slice: &str) -> Option<&str> {
-    if slice.starts_with(COMPONENT_PREFIX_TOKEN) {
+    if slice.trim_start().starts_with(COMPONENT_PREFIX_TOKEN) {
         return Some(slice);
     }
     None
@@ -154,21 +190,18 @@ fn get_attr<'a>(slice: &'a str, token: &'a str) -> Option<&'a str> {
     None
 }
 
-fn get_attrs_inline<'a>(
-    slice: &'a str,
-    start_token: &'a str,
-    end_token: &'a str,
-) -> Option<&'a str> {
+fn get_attrs_inline<'a>(slice: &'a str, start_token: &'a str) -> Option<&'a str> {
     let start = slice.find(&start_token);
+    let end_token = ">";
 
     if start.is_some() {
-        let s_i = start.unwrap() + start_token.len();
-        let end = slice.get(s_i..).unwrap_or("").find(end_token);
+        let start_i = start.unwrap() + start_token.len();
+        let end = slice.get(start_i..).unwrap_or("").find(end_token);
 
         if end.is_some() {
             // is either the token index or the end of the string
-            let e_i = end.unwrap_or(slice.len()) + s_i;
-            let result = slice.get(s_i..e_i).unwrap_or("");
+            let end_i = end.unwrap_or(slice.len()) + start_i;
+            let result = slice.get(start_i..end_i).unwrap_or("");
 
             if !result.is_empty() {
                 return Some(result);
@@ -202,15 +235,17 @@ fn evaluate_url(entry_file: &PathBuf, linked_file: &str) -> Option<PathBuf> {
     // consider all linked paths to be relative to the main entry
     let mut component_path = cwd.join(file_parent).join(&linked_file);
 
+    let trimmed = linked_file.trim_start();
+
     // evaluate if linked starts with this symbol
-    if linked_file.starts_with("./") {
+    if trimmed.starts_with("./") {
         // consider linked to be relative to main
         let relative_href = linked_file.replacen("./", "", 1);
         component_path = cwd.join(file_parent).join(&relative_href);
     }
 
     // if linked starts with this symbol
-    if linked_file.starts_with("/") {
+    if trimmed.starts_with("/") {
         // consider linked to be an absolute path, relative to the CWD
         let absolute_href = linked_file.replacen("/", "", 1);
         component_path = cwd.join(&absolute_href);
@@ -224,48 +259,63 @@ fn fill_component_slots(c_code: &String, placements: &str) -> String {
     let mut result = String::new();
     result.push_str(c_code);
 
-    let lines = &mut placements.lines();
-    let mut line = lines.next();
+    let mut place_lines = placements.lines();
+    let named = HashMap::<&str, String>::new();
+    let items: (HashMap<&str, String>, Vec<&str>) = (named, vec![]);
 
-    while line.is_some() {
-        let trimmed = line.unwrap().trim();
-        let is_placement = trimmed.contains("slot=\"");
+    let places = placements.lines().fold(items, |mut acc, elem| {
+        place_lines.next();
 
-        if is_placement {
-            let tag_name = get_tag_name(trimmed);
-            let attrs = get_attrs_inline(trimmed, tag_name, ">").unwrap_or("");
+        if elem.contains("slot=") {
+            let tag_name = get_tag_name(elem);
+            let attrs = get_attrs_inline(elem, tag_name).unwrap_or("");
             let slot_name = get_attr(attrs, "slot").unwrap_or("");
-            let end_token = format!("</{tag_name}");
-            let tag_html = collect_until_end_token(lines, &end_token);
+            let elem_html = collect_html_tag(elem, &mut place_lines, tag_name);
+            // now save it
+            acc.0.insert(slot_name, elem_html);
+        } else {
+            acc.1.push(elem);
+        }
+        return acc;
+    });
 
-            // attribute containing the slot name
-            let slot_name_attr = format!("name=\"{slot_name}\"");
+    let mut c_lines = c_code.lines();
+    let mut c_line = c_lines.next();
 
-            let slot_lines = &mut c_code.lines();
-            let mut line = lines.next();
+    while c_line.is_some() {
+        let pre = c_line.unwrap();
+        let is_named_slot = pre.contains("<slot") && pre.contains("name=\"");
+        let is_catch_all_slot = pre.contains("<slot") && !pre.contains("name=\"");
 
-            while line.is_some() {
-                let trimmed = line.unwrap().trim();
-                let is_slot = trimmed.contains(&slot_name_attr);
+        let catch_all_html = places.1.join(NL);
 
-                if is_slot {
-                    let slot = collect_until_end_token(slot_lines, "</slot");
-                    // finally replace the slot with the placement
-                    result = replace_chunk(&result, &slot, &tag_html);
-                }
+        if is_catch_all_slot {
+            let slot_tag_html = collect_html_tag(pre, &mut c_lines, "slot");
+            result = replace_chunk(&result, &slot_tag_html, &catch_all_html);
+            c_line = c_lines.next();
+            continue;
+        }
 
-                line = lines.next();
+        if is_named_slot {
+            let slot_tag_html = collect_html_tag(pre, &mut c_lines, "slot");
+            let attrs = get_attrs_inline(pre, "slot").unwrap_or("");
+            let slot_name = get_attr(attrs, "name").unwrap_or("");
+            let entry = places.0.get(slot_name);
+            println!("{slot_name}");
+
+            if entry.is_some() {
+                let placement = entry.unwrap();
+                // finally replace the slot with the placement
+                result = replace_chunk(&result, &slot_tag_html, placement);
+                c_line = c_lines.next();
+                continue;
             }
         }
 
-        line = lines.next();
+        c_line = c_lines.next();
     }
 
     return result;
-}
-
-fn log(label: &str, msg: &str) {
-    println!("\n{} => {label} = {msg}\n", file!());
 }
 
 fn replace_component_with_static(
@@ -274,8 +324,8 @@ fn replace_component_with_static(
     c_id: &str,
     c_html: &String,
 ) -> String {
-    let tag_open_token = format!("<{}", c_id);
-    let tag_close_token = format!("</{}", c_id);
+    let ctag_open_token = format!("<{}", c_id);
+    let ctag_close_token = format!("</{}", c_id);
 
     let mut result = String::new();
     let mut line = Some(c_line);
@@ -285,25 +335,23 @@ fn replace_component_with_static(
     };
 
     while line.is_some() {
-        // trim this line of code
-        let trimmed = line.unwrap().trim();
+        let pre = line.unwrap();
 
         // skip empty lines
-        if trimmed.is_empty() {
+        if pre.is_empty() {
             line = lines.next();
             continue;
         }
 
         // does this line contain a tag openning
-        let tag_open = trimmed.contains(&tag_open_token);
+        let tag_open = pre.contains(&ctag_open_token);
         // should indicate the closing of an open tag
-        let tag_close = trimmed.contains(&tag_close_token);
+        let tag_close = pre.contains(&ctag_close_token);
         // for when a component is declared as an unpaired tag
-        let unpaired_close = trimmed.contains(&UNPAIRED_TAG_CLOSE_TOKEN);
+        let unpaired_close = pre.contains(&UNPAIRED_TAG_CLOSE_TOKEN);
 
-        let is_unpaired_tag = tag_open
-            && !trimmed.contains(UNPAIRED_TAG_CLOSE_TOKEN)
-            && !trimmed.contains(&tag_close_token);
+        let is_unpaired_tag =
+            tag_open && !pre.contains(UNPAIRED_TAG_CLOSE_TOKEN) && !pre.contains(&ctag_close_token);
 
         // something line <tag />
         let is_unpaired_inline = tag_open && unpaired_close;
@@ -317,8 +365,10 @@ fn replace_component_with_static(
         }
 
         if is_unpaired_tag {
-            let inner_html =
-                collect_until_an_end_token(lines, vec![UNPAIRED_TAG_CLOSE_TOKEN, &tag_close_token]);
+            let inner_html = collect_until_an_end_token(
+                lines,
+                vec![UNPAIRED_TAG_CLOSE_TOKEN, &ctag_close_token],
+            );
 
             let with_filled_slots = fill_component_slots(&c_html, &inner_html);
             write(&with_filled_slots);
@@ -328,7 +378,7 @@ fn replace_component_with_static(
         }
 
         if is_paired_inline {
-            let inner_html = collect_from_to(trimmed, ">", &tag_close_token);
+            let inner_html = collect_inner_html(pre);
             if !inner_html.is_empty() {
                 let with_filled_slots = fill_component_slots(&c_html, &inner_html);
                 write(&with_filled_slots);
@@ -340,7 +390,7 @@ fn replace_component_with_static(
             return result;
         }
 
-        write(trimmed);
+        write(pre);
         // done! move on
         line = lines.next();
     }
@@ -349,26 +399,32 @@ fn replace_component_with_static(
 }
 
 fn get_tag_name_by_token<'t>(line: &'t str, token: &'t str) -> &'t str {
+    let line = line.trim();
+
     let mut end_token_i = line.len();
     // based on the tag start token, "<" exists in this line
-    let start_i = line.find(token).unwrap();
-    // replace close tokens
-    let unpaired = line.find(UNPAIRED_TAG_CLOSE_TOKEN);
-    let close = line.find(">");
-    let space = line.find(" ");
+    let start_i = line.find(token).unwrap_or(0);
+    // find delimiter token for the name after the start token
+    let unpaired = line
+        .get(start_i..)
+        .unwrap_or("")
+        .find(UNPAIRED_TAG_CLOSE_TOKEN);
+
+    let close = line.get(start_i..).unwrap_or("").find(">");
+    let space = line.get(start_i..).unwrap_or("").find(" ");
 
     // end-token is either the end of the line of when it finds one of the tokens
     // " " and ">" and "/", the order of the tokens matter
     let token = vec![space, close, unpaired];
 
     for tok in token {
-        if tok.is_some() {
-            end_token_i = tok.unwrap();
+        if let Some(tok_i) = tok {
+            end_token_i = start_i + tok_i;
             break;
         }
     }
 
-    line.get(start_i + 1..end_token_i).unwrap().trim()
+    line.get(start_i + 1..end_token_i).unwrap()
 }
 
 fn get_component_name(line: &str) -> &str {
@@ -384,6 +440,28 @@ fn read_code(file: &PathBuf) -> Result<String> {
     Ok(content)
 }
 
+/// Checks the source code for a root node
+fn has_root_node(source: &str) -> bool {
+    let mut lines = source.trim_start().lines();
+    let first_line = lines.next().unwrap_or("");
+    let last_line = lines.next_back().unwrap_or("");
+
+    let tag_name_top = get_tag_name(first_line);
+
+    // if the supposed tag name is equal to the first_line
+    // we can say this is a text node, so no root node found
+    let is_text_node = tag_name_top.eq(first_line);
+    if is_text_node {
+        return false;
+    }
+
+    let tag_end = format!("</{tag_name_top}");
+    // if the tag end token count is uneven and
+    // exists on the last line, its the root node
+    let tag_count = source.matches(&tag_end).count();
+    (tag_count == 1 || tag_count % 2 == 0) && last_line.contains(&tag_end)
+}
+
 /// Takes a string splits it two and joins it with a new slice thus replacing a chunk
 fn replace_chunk(source: &String, cut_slice: &str, add_slice: &str) -> String {
     source
@@ -395,7 +473,7 @@ fn replace_chunk(source: &String, cut_slice: &str, add_slice: &str) -> String {
 }
 
 fn parse_component(c_id: &str, c_code: &String, is_nested: bool) -> Result<String> {
-    let is_template = c_code.trim().starts_with(TEMPLATE_START_TOKEN);
+    let is_template = c_code.trim_start().starts_with(TEMPLATE_START_TOKEN);
     let mut result = String::new();
 
     if !is_template {
@@ -406,8 +484,8 @@ fn parse_component(c_id: &str, c_code: &String, is_nested: bool) -> Result<Strin
         return Ok("".to_string());
     }
 
-    let attrs = get_attrs_inline(c_code, TEMPLATE_START_TOKEN, ">").unwrap_or("");
-    let c_inner_html = collect_from_to(&c_code, ">", TEMPLATE_END_TOKEN);
+    let attrs = get_attrs_inline(c_code, TEMPLATE_START_TOKEN).unwrap_or("");
+    let c_inner_html = collect_inner_html(&c_code);
 
     // ship it if its empty
     if c_inner_html.is_empty() {
@@ -460,27 +538,16 @@ fn parse_component(c_id: &str, c_code: &String, is_nested: bool) -> Result<Strin
 
     // if the component is a fragment, simply ship the html
     if is_fragment {
-        let code = result.trim().to_string();
-        return Ok(code);
+        return Ok(result);
     }
 
     // if the component is not a fragment, check for a root element
     if c_scope.is_some() {
         let scope = c_scope.unwrap();
-        let rest = result.trim();
+        let rest = result;
 
         let first_line = rest.lines().next().unwrap_or("");
-        let last_line = rest.lines().last().unwrap_or("");
-
-        let tag_name = get_tag_name(first_line);
-        // create the end token for this tag
-        let tag_start = format!("<{tag_name}");
-        let tag_end = format!("</{tag_name}");
-
-        // if the tag end token count is uneven and
-        // exists on the last line, its the root node
-        let tag_count = rest.matches(&tag_end).count();
-        let is_root_node = (tag_count == 1 || tag_count % 2 == 0) && last_line.contains(&tag_end);
+        let has_root_node = has_root_node(&rest);
 
         let c_attrs = format!(
             "{DATA_SCOPE_TOKEN}=\"{scope}\"{SP}
@@ -488,17 +555,19 @@ fn parse_component(c_id: &str, c_code: &String, is_nested: bool) -> Result<Strin
         {DATA_COMPONENT_NAME}=\"{c_id}\""
         );
 
-        if !is_root_node {
+        if !has_root_node {
             let scoped_code = format!("<div{SP}{c_attrs}>{rest}</div>");
             return Ok(scoped_code);
         }
 
-        if is_root_node {
-            let attrs = get_attrs_inline(first_line, &tag_start, ">")
-                .unwrap_or("")
-                .trim();
+        if has_root_node {
+            let tag_name_top = get_tag_name(first_line);
+            // create the end token for this tag
+            let tag_start = format!("<{tag_name_top}");
+            let tag_end = format!("</{tag_name_top}");
 
-            let inner_html = collect_from_to(&rest, ">", &tag_end);
+            let attrs = get_attrs_inline(first_line, &tag_start).unwrap_or("");
+            let inner_html = collect_inner_html(&rest);
             let inner_html = inner_html.trim();
 
             // add the scope attribute
@@ -535,15 +604,13 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
             result.push_str(NL);
         };
 
-        // before trimming write empty line as is
+        // write empty lines as is
         if pre.is_empty() {
             write(pre);
             line = lines.next();
-            line_number.add_assign(1);
             continue;
         }
 
-        // trim this line of code
         let trimmed = pre.trim();
 
         let is_inline_link = trimmed.starts_with(LINK_START_TOKEN) && trimmed.contains(">");
@@ -565,18 +632,17 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
             while !commented_line.contains(HTML_COMMENT_END_TOKEN) {
                 line = lines.next();
                 line_number.add_assign(1);
-                commented_line = line.unwrap().trim();
+                commented_line = line.unwrap();
                 write(commented_line);
             }
 
-            line_number.add_assign(1);
             line = lines.next();
             continue;
         }
 
         // *** parse in-file component
         if is_template_start {
-            let attrs = get_attrs_inline(trimmed, TEMPLATE_START_TOKEN, ">");
+            let attrs = get_attrs_inline(trimmed, TEMPLATE_START_TOKEN);
             if attrs.is_some() {
                 let attrs = attrs.unwrap();
                 let c_id = get_attr(attrs, "id").and_then(|v| get_valid_id(v));
@@ -592,7 +658,7 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
                     // skip only when a valid component id is found
                     line = lines.next();
-                    line_number.add_assign(len_as_i32 + 1);
+                    line_number.add_assign(len_as_i32);
                     continue;
                 }
             }
@@ -600,7 +666,7 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
         // *** parse inline link tag
         if is_component_link {
-            let attrs = get_attrs_inline(trimmed, LINK_START_TOKEN, ">");
+            let attrs = get_attrs_inline(trimmed, LINK_START_TOKEN);
 
             if attrs.is_some() {
                 let attrs = attrs.unwrap();
@@ -616,11 +682,17 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
             }
 
             line = lines.next();
-            line_number.add_assign(1);
             continue;
         }
 
-        let is_component_tag = trimmed.contains(COMPONENT_TAG_START_TOKEN);
+        // the default values here dont matter, they are set so that we can unwrap the values in place
+        // its all good as long as the component index is less than the comment index
+        let component_index = trimmed.find(COMPONENT_TAG_START_TOKEN).unwrap_or(0);
+        let comment_index = trimmed.find(HTML_COMMENT_START_TOKEN).unwrap_or(1);
+
+        // obvs only process components not comments
+        let is_component_tag =
+            trimmed.contains(COMPONENT_TAG_START_TOKEN) && component_index < comment_index;
 
         if is_component_tag {
             let c_name = get_component_name(trimmed);
@@ -641,25 +713,21 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
             let entry = templates.get(c_name);
             if entry.is_none() {
                 line = lines.next();
-                line_number.add_assign(1);
                 undefined(line_number, 0);
                 continue;
             }
 
             let c_html = entry.unwrap();
             let parsed_code = parse_component(c_name, c_html, is_component)?;
-
             let replaced = replace_component_with_static(trimmed, &mut lines, c_name, &parsed_code);
 
             write(&replaced);
             line = lines.next();
-            line_number.add_assign(1);
             continue;
         }
 
         write(trimmed);
         line = lines.next();
-        line_number.add_assign(1);
     }
 
     Ok(result)

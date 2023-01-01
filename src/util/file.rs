@@ -309,18 +309,22 @@ fn remove_undefined_static(source: String) -> Result<String> {
         // based on the tag start token, "<" exists in this line
         let start_i = line.find(COMPONENT_TAG_START_TOKEN).unwrap();
         // replace close tokens
-        let unpaired = line.find(UNPAIRED_TAG_CLOSE_TOKEN);
-        let close = line.find(">");
+        let unpaired = line
+            .get(start_i..)
+            .unwrap_or("")
+            .find(UNPAIRED_TAG_CLOSE_TOKEN);
+
+        let close = line.get(start_i..).unwrap_or("").find(">");
 
         // end-token is either the end of the line of when it finds one of the tokens
         // "/" and ">", the order of the if statements here matter
         // because end_token_i is mutable
         if close.is_some() {
-            end_token_i = close.unwrap();
+            end_token_i = start_i + close.unwrap();
         }
 
         if unpaired.is_some() {
-            end_token_i = unpaired.unwrap();
+            end_token_i = start_i + unpaired.unwrap();
         }
 
         line.get(start_i + 1..end_token_i).unwrap()
@@ -870,7 +874,7 @@ fn add_core_script(source: String) -> Result<String> {
 }
 
 fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> {
-    println!("File {} {:?}", Emoji::FILE, file);
+    println!("File {} {:?}", Emoji::FILE, path::strip_crate_cwd(file));
 
     let mut parsed_code = parse_document(file, &code, memo)?;
     parsed_code = remove_undefined_static(parsed_code)?;

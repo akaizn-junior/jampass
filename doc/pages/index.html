@@ -8,43 +8,20 @@
         <title>Jampass</title>
         <link rel="stylesheet" href="./app.css">
         <link rel="component" href="parts/tag.html" id="x-some-tag">
+        <link rel="component" href="parts/tag.html" id="x-some-tag">
         <script src="./index.js"></script>
     </head>
 
     <body>
+        <!-- Working with slots -->
+        <x-some-tag>
+            <p slot="place">I AM A PLACEMENT!</p>
+            <b>BOO FAR</b>
+            <p>FOO BAR!!</p>
+        </x-some-tag>
 
-        <!-- Unpaired inline <x-some-tag /> -->
+        <!-- same tag -->
         <x-some-tag />
-
-        <!-- Unpaired multiline
-        <x-some-tag
-
-
-        />
-        -->
-        <x-some-tag
-
-
-        />
-
-        <!-- paired multiline
-
-        <x-some-tag>
-
-
-        </x-some-tag>
-        -->
-        <x-some-tag>
-
-
-        </x-some-tag>
-
-
-        <!-- paired inline <x-some-tag></x-some-tag> -->
-        <x-some-tag></x-some-tag>
-
-        <!-- Undefined <x-undie-> -->
-        <x-undie></x-undie>
     </body>
 
 </html>
