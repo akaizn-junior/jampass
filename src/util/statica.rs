@@ -74,28 +74,6 @@ fn collect_html_tag(line: &str, lines: &mut Lines, tag_name: &str) -> String {
     return result;
 }
 
-/// Collects a slice line by line until an end token is found.
-/// The top line and the line containing the end token are excluded.
-/// Relevant for using an already existing lines iterator
-fn collect_until_end_token(lines: &mut Lines, end_token: &str) -> String {
-    let mut line = lines.next();
-    let mut result = String::new();
-
-    if line.is_some() && !line.unwrap().is_empty() {
-        let pre = line.unwrap();
-        let mut next_line = pre;
-
-        while !next_line.contains(end_token) {
-            line = lines.next();
-            result.push_str(next_line);
-            result.push_str(NL);
-            next_line = line.unwrap();
-        }
-    }
-
-    return result;
-}
-
 /// Collects a slice line by line until one of the end tokens is found
 /// Returns the result collected and the end token found
 fn collect_until_end_tag<'c>(lines: &'c mut Lines, tag_name: &'c str) -> (i32, String) {
@@ -458,6 +436,11 @@ fn read_code(file: &PathBuf) -> Result<String> {
     Ok(content)
 }
 
+fn no_cwd_path_as_str(file: &PathBuf) -> &str {
+    let file = path::strip_crate_cwd(file);
+    file.to_str().unwrap_or("")
+}
+
 /// Checks the source code for a root node
 fn has_root_node(source: &str) -> bool {
     let mut lines = source.trim_start().lines();
@@ -490,20 +473,24 @@ fn replace_chunk(source: &String, cut_slice: &str, add_slice: &str) -> String {
         .to_string()
 }
 
-fn parse_component(c_id: &str, c_code: &String, is_nested: bool) -> Result<String> {
-    let is_template = c_code.trim_start().starts_with(TEMPLATE_START_TOKEN);
+fn parse_component(file: &PathBuf, c_id: &str, c_code: &String, is_nested: bool) -> Result<String> {
+    let code = c_code.trim_start();
+    let is_template_tag = code.starts_with(TEMPLATE_START_TOKEN);
     let mut result = String::new();
 
-    if !is_template {
+    println!("\nfile {:?} c_code {} \n", file, c_code);
+
+    if !is_template_tag {
         println!(
-            "{} Components must be defined as a template tag and have a valid id",
+            "{} {} Components must be defined as a template tag",
+            no_cwd_path_as_str(file),
             Emoji::FLAG
         );
         return Ok("".to_string());
     }
 
-    let attrs = get_attrs_inline(c_code, TEMPLATE_START_TOKEN).unwrap_or("");
-    let c_inner_html = collect_component_inner_html(&c_code);
+    let attrs = get_attrs_inline(code, TEMPLATE_START_TOKEN).unwrap_or("");
+    let c_inner_html = collect_component_inner_html(&code);
 
     // ship it if its empty
     if c_inner_html.is_empty() {
@@ -603,6 +590,7 @@ fn parse_component(c_id: &str, c_code: &String, is_nested: bool) -> Result<Strin
 }
 
 fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
+    let code = code.trim_start();
     let mut lines = code.lines();
     let mut line = lines.next();
     let mut line_number = 0;
@@ -615,10 +603,11 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
     struct Meta<'m> {
         name: &'m str,
-        file: &'m PathBuf,
+        file: PathBuf,
     }
 
-    struct Proc {
+    struct Proc<'p> {
+        meta: Meta<'p>,
         html: String,
     }
 
@@ -632,15 +621,12 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
     let mut unlisted = HashMap::<&str, Unlisted>::new();
 
     // is a component html file
-    let is_component = code.trim_start().starts_with(TEMPLATE_START_TOKEN);
+    let is_component = code.starts_with(TEMPLATE_START_TOKEN);
 
     fn undefined(msg: &str, data: &Unlisted) {
-        let file = path::strip_crate_cwd(data.meta.file);
-        let file = file.to_str().unwrap_or("");
-
         println!(
             "{}:{}:{} {msg} {} {:?} removed",
-            file,
+            no_cwd_path_as_str(&data.meta.file),
             data.cursor.line,
             data.cursor.col,
             Emoji::FLAG,
@@ -712,21 +698,29 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
                 }
 
                 let c_id = c_id.unwrap();
-                let inner_html = collect_until_end_token(&mut lines, TEMPLATE_END_TOKEN);
+                let c_html = collect_html_tag(trimmed, &mut lines, "template");
 
-                let len_as_i32 = inner_html.len().to_string().parse::<i32>()?;
+                let len_as_i32 = c_html.len().to_string().parse::<i32>()?;
                 line_number.add_assign(len_as_i32);
 
-                let rebuilt_html = format!("{trimmed}{NL}{inner_html}{NL}{TEMPLATE_END_TOKEN}>");
-                let c_html = parse_code(&rebuilt_html, file)?;
+                let c_html = parse_code(&c_html, file)?;
 
-                let data = Proc { html: c_html };
+                let data = Proc {
+                    meta: Meta {
+                        name: c_id,
+                        file: file.to_owned(),
+                    },
+                    html: c_html,
+                };
 
                 processed.insert(c_id, data);
                 unlisted.insert(
                     c_id,
                     Unlisted {
-                        meta: Meta { name: c_id, file },
+                        meta: Meta {
+                            name: c_id,
+                            file: file.to_owned(),
+                        },
                         cursor: Cursor {
                             line: line_number,
                             col: 0,
@@ -736,7 +730,6 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
                 // skip only when a valid component id is found
                 line = lines.next();
-
                 continue;
             }
         }
@@ -763,9 +756,15 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
                 let c_url = get_attr(attrs, "href").and_then(|u| evaluate_url(&file, u));
 
                 if c_url.is_some() {
-                    let c_html = parse(&c_url.unwrap());
+                    let c_file = c_url.unwrap();
+                    let c_html = parse(&c_file);
+
                     if c_html.is_ok() {
                         let data = Proc {
+                            meta: Meta {
+                                name: c_id,
+                                file: c_file.to_owned(),
+                            },
                             html: c_html.unwrap(),
                         };
 
@@ -773,7 +772,10 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
                         unlisted.insert(
                             c_id,
                             Unlisted {
-                                meta: Meta { name: c_id, file },
+                                meta: Meta {
+                                    name: c_id,
+                                    file: c_file.to_owned(),
+                                },
                                 cursor: Cursor {
                                     line: line_number,
                                     col: 0,
@@ -805,7 +807,10 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
                 line = lines.next();
 
                 let data = Unlisted {
-                    meta: Meta { name: c_name, file },
+                    meta: Meta {
+                        name: c_name,
+                        file: file.to_owned(),
+                    },
                     cursor: Cursor {
                         line: line_number,
                         col: 0,
@@ -817,12 +822,12 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
             }
 
             let data = entry.unwrap();
-            let c_html = &data.html;
 
-            let parsed_code = parse_component(c_name, c_html, is_component)?;
+            let parsed_code =
+                parse_component(&data.meta.file, data.meta.name, &data.html, is_component)?;
             let replaced = replace_component_with_static(trimmed, &mut lines, c_name, &parsed_code);
 
-            // remove from unused
+            // remove from unlisted
             unlisted.remove_entry(c_name);
 
             write(&replaced);
