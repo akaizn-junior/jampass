@@ -959,31 +959,31 @@ pub fn html(file: &PathBuf, memo: &mut Memory) -> Result<()> {
     // skip components
     let is_component = is_component(&file);
 
-    let doc = statica::parse(file)?;
-    println!("processed => {}", doc);
+    let doc = statica::parse(file.to_owned())?;
+    println!("{}", doc);
 
     // ignore empty code and components
     if is_component || code.is_empty() {
         return Ok(());
     }
 
-    let file_as_str = file.to_str().unwrap();
-    let processed = memo.files.entry(file_as_str.to_string()).or_default();
-    let has_processed = processed.checksum.eq(&checksum.as_u32);
+    // let file_as_str = file.to_str().unwrap();
+    // let processed = memo.files.entry(file_as_str.to_string()).or_default();
+    // let has_processed = processed.checksum.eq(&checksum.as_u32);
 
-    // verify if the path has already been evaluated
-    // or if the output does not exist
-    if !has_processed || memo.edited_asset.was_edited {
-        memo.files.insert(
-            file_as_str.to_string(),
-            File {
-                checksum: checksum.as_u32,
-                path: file.to_owned(),
-            },
-        );
+    // // verify if the path has already been evaluated
+    // // or if the output does not exist
+    // if !has_processed || memo.edited_asset.was_edited {
+    //     memo.files.insert(
+    //         file_as_str.to_string(),
+    //         File {
+    //             checksum: checksum.as_u32,
+    //             path: file.to_owned(),
+    //         },
+    //     );
 
-        process_html(file, &code, memo)?;
-    }
+    //     process_html(file, &code, memo)?;
+    // }
 
     Ok(())
 }

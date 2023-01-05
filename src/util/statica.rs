@@ -1,5 +1,12 @@
 use adler::adler32_slice;
-use std::{collections::HashMap, fs::read_to_string, ops::AddAssign, path::PathBuf, str::Lines};
+use std::{
+    borrow::Borrow,
+    collections::HashMap,
+    fs::read_to_string,
+    ops::AddAssign,
+    path::{Path, PathBuf},
+    str::Lines,
+};
 
 use crate::{
     core_t::{Emoji, Result},
@@ -97,19 +104,25 @@ fn collect_until_end_token(lines: &mut Lines, end_token: &str) -> String {
 }
 
 /// Collects a slice line by line until one of the end tokens is found
-fn collect_until_an_end_token(lines: &mut Lines, end_tokens: Vec<&str>) -> String {
+/// Returns the result collected and the end token found
+fn collect_until_an_end_token<'c>(
+    lines: &'c mut Lines,
+    end_tokens: Vec<&'c str>,
+) -> (&'c str, String) {
     let mut line = lines.next();
     let mut result = String::new();
+    // this captures the actual end token found, starts as the the first token
+    let mut end_token_index = 0;
 
     if line.is_some() {
         let pre = line.unwrap();
         let mut next_line = pre;
 
         // on each iteration calculate if one of the tokens was found
-        while end_tokens
-            .iter()
-            .fold(true, |acc, &token| !next_line.contains(token) && acc)
-        {
+        while end_tokens.iter().fold(true, |acc, &token| {
+            end_token_index.add_assign(1);
+            return !next_line.contains(token) && acc;
+        }) {
             line = lines.next();
             result.push_str(next_line);
             result.push_str(NL);
@@ -117,7 +130,10 @@ fn collect_until_an_end_token(lines: &mut Lines, end_tokens: Vec<&str>) -> Strin
         }
     }
 
-    return result;
+    // calculate the right index
+    let end_token_found = end_tokens[end_token_index % end_tokens.len()];
+
+    return (end_token_found, result);
 }
 
 fn collect_inner_html_inline<'s>(
@@ -263,7 +279,7 @@ fn fill_component_slots(c_code: &String, placements: &str) -> String {
     let named = HashMap::<&str, String>::new();
     let items: (HashMap<&str, String>, Vec<&str>) = (named, vec![]);
 
-    let places = placements.lines().fold(items, |mut acc, elem| {
+    let (named_placements, rest) = placements.lines().fold(items, |mut acc, elem| {
         place_lines.next();
 
         if elem.contains("slot=") {
@@ -271,6 +287,7 @@ fn fill_component_slots(c_code: &String, placements: &str) -> String {
             let attrs = get_attrs_inline(elem, tag_name).unwrap_or("");
             let slot_name = get_attr(attrs, "slot").unwrap_or("");
             let elem_html = collect_html_tag(elem, &mut place_lines, tag_name);
+
             // now save it
             acc.0.insert(slot_name, elem_html);
         } else {
@@ -287,7 +304,8 @@ fn fill_component_slots(c_code: &String, placements: &str) -> String {
         let is_named_slot = pre.contains("<slot") && pre.contains("name=\"");
         let is_catch_all_slot = pre.contains("<slot") && !pre.contains("name=\"");
 
-        let catch_all_html = places.1.join(NL);
+        // join all captured lines for the catch all slot
+        let catch_all_html = rest.join(NL);
 
         if is_catch_all_slot {
             let slot_tag_html = collect_html_tag(pre, &mut c_lines, "slot");
@@ -300,8 +318,7 @@ fn fill_component_slots(c_code: &String, placements: &str) -> String {
             let slot_tag_html = collect_html_tag(pre, &mut c_lines, "slot");
             let attrs = get_attrs_inline(pre, "slot").unwrap_or("");
             let slot_name = get_attr(attrs, "name").unwrap_or("");
-            let entry = places.0.get(slot_name);
-            println!("{slot_name}");
+            let entry = named_placements.get(slot_name);
 
             if entry.is_some() {
                 let placement = entry.unwrap();
@@ -365,13 +382,20 @@ fn replace_component_with_static(
         }
 
         if is_unpaired_tag {
-            let inner_html = collect_until_an_end_token(
+            let unpaired_match = collect_until_an_end_token(
                 lines,
                 vec![UNPAIRED_TAG_CLOSE_TOKEN, &ctag_close_token],
             );
 
-            let with_filled_slots = fill_component_slots(&c_html, &inner_html);
-            write(&with_filled_slots);
+            if unpaired_match.0.eq(UNPAIRED_TAG_CLOSE_TOKEN) {
+                write(&c_html);
+            }
+
+            if unpaired_match.0.eq(&ctag_close_token) {
+                let inner_html = unpaired_match.1;
+                let with_filled_slots = fill_component_slots(&c_html, &inner_html);
+                write(&with_filled_slots);
+            }
 
             // ok, done!
             return result;
@@ -590,9 +614,31 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
     let mut line_number = 0;
     let mut result = String::new();
 
-    let mut templates = HashMap::<&str, String>::new();
+    struct Proc<'p> {
+        name: &'p str,
+        html: String,
+        file: &'p PathBuf,
+        line: i32,
+        col: i32,
+    }
+
+    let mut templates = HashMap::<&str, Proc>::new();
     // a component html file
     let is_component = code.trim_start().starts_with(TEMPLATE_START_TOKEN);
+
+    fn undefined(msg: &str, data: Proc) {
+        let file = path::strip_crate_cwd(data.file);
+        let file = file.to_str().unwrap_or("");
+
+        println!(
+            "{}:{}:{} {msg} {} {:?} removed",
+            file,
+            data.line,
+            data.col,
+            Emoji::FLAG,
+            data.name
+        );
+    }
 
     while line.is_some() {
         let pre = line.unwrap();
@@ -647,20 +693,39 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
                 let attrs = attrs.unwrap();
                 let c_id = get_attr(attrs, "id").and_then(|v| get_valid_id(v));
 
-                if c_id.is_some() {
-                    let inner_html = collect_until_end_token(&mut lines, TEMPLATE_END_TOKEN);
-                    let len_as_i32 = inner_html.len().to_string().parse::<i32>()?;
+                if c_id.is_none() {
+                    println!(
+                        "Component {} does not have a valid id. ignored",
+                        Emoji::COMPONENT
+                    );
 
-                    let rebuilt_html =
-                        format!("{trimmed}{NL}{inner_html}{NL}{TEMPLATE_END_TOKEN}>");
-                    let c_html = parse_code(&rebuilt_html, file)?;
-                    templates.insert(c_id.unwrap(), c_html);
-
-                    // skip only when a valid component id is found
                     line = lines.next();
-                    line_number.add_assign(len_as_i32);
                     continue;
                 }
+
+                let c_id = c_id.unwrap();
+                let inner_html = collect_until_end_token(&mut lines, TEMPLATE_END_TOKEN);
+
+                let len_as_i32 = inner_html.len().to_string().parse::<i32>()?;
+                line_number.add_assign(len_as_i32);
+
+                let rebuilt_html = format!("{trimmed}{NL}{inner_html}{NL}{TEMPLATE_END_TOKEN}>");
+                let c_html = parse_code(&rebuilt_html, file)?;
+                templates.insert(
+                    c_id,
+                    Proc {
+                        name: c_id,
+                        html: c_html,
+                        line: line_number,
+                        col: 0,
+                        file,
+                    },
+                );
+
+                // skip only when a valid component id is found
+                line = lines.next();
+
+                continue;
             }
         }
 
@@ -672,11 +737,32 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
                 let attrs = attrs.unwrap();
                 let c_id = get_attr(attrs, "id").and_then(|v| get_valid_id(v));
 
+                if c_id.is_none() {
+                    println!(
+                        "Linked component {} does not have a valid id. ignored",
+                        Emoji::LINK
+                    );
+
+                    line = lines.next();
+                    continue;
+                }
+
+                let c_id = c_id.unwrap();
                 let c_url = get_attr(attrs, "href").and_then(|u| evaluate_url(&file, u));
+
                 if c_url.is_some() {
-                    let c_html = parse(&c_url.unwrap());
+                    let c_html = parse(c_url.unwrap());
                     if c_html.is_ok() {
-                        templates.insert(c_id.unwrap(), c_html.unwrap());
+                        templates.insert(
+                            c_id,
+                            Proc {
+                                name: c_id,
+                                html: c_html.unwrap(),
+                                line: line_number,
+                                col: 0,
+                                file,
+                            },
+                        );
                     }
                 }
             }
@@ -696,31 +782,30 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
         if is_component_tag {
             let c_name = get_component_name(trimmed);
-            let file = path::strip_crate_cwd(file);
-            let file = file.to_str().unwrap_or("");
-
-            let undefined = |line: i32, col: i32| {
-                println!(
-                    "{}:{}:{} Undefined static component {} {:?} removed",
-                    file,
-                    line,
-                    col,
-                    Emoji::FLAG,
-                    c_name
-                );
-            };
-
             let entry = templates.get(c_name);
+
             if entry.is_none() {
                 line = lines.next();
-                undefined(line_number, 0);
+                undefined(
+                    "Undefined static component",
+                    Proc {
+                        name: c_name,
+                        file,
+                        line: line_number,
+                        col: 0,
+                        html: "".to_string(),
+                    },
+                );
                 continue;
             }
 
-            let c_html = entry.unwrap();
+            let data = entry.unwrap();
+            let c_html = &data.html;
+
             let parsed_code = parse_component(c_name, c_html, is_component)?;
             let replaced = replace_component_with_static(trimmed, &mut lines, c_name, &parsed_code);
 
+            templates.remove_entry(c_name);
             write(&replaced);
             line = lines.next();
             continue;
@@ -730,12 +815,290 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
         line = lines.next();
     }
 
+    // log left-over items
+    for entry in templates {
+        undefined("Unused component", entry.1);
+    }
+
     Ok(result)
 }
 
 // *** INTERFACE ***
 
-pub fn parse(file: &PathBuf) -> Result<String> {
+pub fn parse(file: PathBuf) -> Result<String> {
+    // parse_code(&code, &file)
+    let b = parse_tree(file)?;
+
+    println!("{:?}", b);
+
+    Ok("".to_string())
+}
+
+#[derive(Debug)]
+/// Keeps the line and column number
+struct Cursor {
+    line: i32,
+    col: i32,
+}
+
+#[derive(Debug)]
+/// Keeps were components were defined
+struct Definition {
+    content: String,
+    cursor: Cursor,
+    is_comment: bool,
+    is_empty: bool,
+}
+
+#[derive(Debug)]
+/// Keeps were components were used
+struct Usage {
+    content: String,
+    cursor: Cursor,
+    count: i32,
+}
+
+#[derive(Debug)]
+struct Buckets<'b> {
+    /// The component id or a generated id for this line
+    id: &'b str,
+    file: PathBuf,
+    definition: Definition,
+    usage: Option<Usage>,
+    linked: Vec<Doc<'b>>,
+}
+
+type Doc<'d> = HashMap<&'d str, Buckets<'d>>;
+
+fn parse_tree<'d>(file: PathBuf) -> Result<Doc<'d>> {
     let code = read_code(&file)?;
-    parse_code(&code, &file)
+
+    // a component html file
+    let is_component = code.trim_start().starts_with(TEMPLATE_START_TOKEN);
+
+    let mut lines = code.lines();
+    let mut line = lines.next();
+    let mut line_number = 0;
+
+    let mut document = Doc::new();
+
+    while line.is_some() {
+        let pre = line.unwrap();
+        line_number.add_assign(1);
+
+        let mut proccess = |file: &PathBuf, line, definition, usage, lnk: Option<Doc<'d>>| {
+            let id = get_tag_name(line);
+            let mut linked = vec![];
+
+            if lnk.is_some() {
+                let ll = lnk.unwrap();
+                linked.push(ll);
+            }
+
+            let buckets = Buckets {
+                id,
+                file: file.to_owned(),
+                definition,
+                usage,
+                linked,
+            };
+
+            document.insert(id, buckets);
+        };
+
+        // write empty lines as is
+        if pre.is_empty() {
+            proccess(
+                &file,
+                pre,
+                Definition {
+                    content: pre.to_string(),
+                    cursor: Cursor {
+                        line: line_number,
+                        col: 0,
+                    },
+                    is_comment: false,
+                    is_empty: true,
+                },
+                None,
+                None,
+            );
+            line = lines.next();
+            continue;
+        }
+
+        let trimmed = pre.trim();
+
+        let is_inline_link = trimmed.starts_with(LINK_START_TOKEN) && trimmed.contains(">");
+        let is_component_link = trimmed.contains("rel=\"component\"") && is_inline_link;
+        let is_template_start =
+            !is_component && trimmed.starts_with(TEMPLATE_START_TOKEN) && trimmed.contains(">");
+
+        // is a top level comment
+        let is_top_comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
+
+        // eval commented sections
+        if is_top_comment {
+            let mut commented_line = pre;
+            // this is a commented line, write it
+            proccess(
+                &file,
+                commented_line,
+                Definition {
+                    content: commented_line.to_string(),
+                    cursor: Cursor {
+                        line: line_number,
+                        col: 0,
+                    },
+                    is_comment: true,
+                    is_empty: false,
+                },
+                None,
+                None,
+            );
+
+            // multiline comment section, if the condition here is false, the loop does not run
+            // would be cool to have a do while tho
+            while !commented_line.contains(HTML_COMMENT_END_TOKEN) {
+                line = lines.next();
+                line_number.add_assign(1);
+                commented_line = line.unwrap();
+                proccess(
+                    &file,
+                    commented_line,
+                    Definition {
+                        content: commented_line.to_string(),
+                        cursor: Cursor {
+                            line: line_number,
+                            col: 0,
+                        },
+                        is_comment: true,
+                        is_empty: false,
+                    },
+                    None,
+                    None,
+                );
+            }
+
+            line = lines.next();
+            continue;
+        }
+
+        // *** parse in-file component
+        if is_template_start {
+            let attrs = get_attrs_inline(trimmed, TEMPLATE_START_TOKEN);
+            if attrs.is_some() {
+                let attrs = attrs.unwrap();
+                let c_id = get_attr(attrs, "id").and_then(|v| get_valid_id(v));
+
+                if c_id.is_none() {
+                    println!(
+                        "Component {} does not have a valid id. ignored",
+                        Emoji::COMPONENT
+                    );
+
+                    line = lines.next();
+                    continue;
+                }
+
+                let c_id = c_id.unwrap();
+                let html = collect_html_tag(pre, &mut lines, "template");
+                let len_as_i32 = html.len().to_string().parse::<i32>()?;
+
+                proccess(
+                    &file,
+                    trimmed,
+                    Definition {
+                        content: String::from(html),
+                        cursor: Cursor {
+                            line: line_number,
+                            col: 0,
+                        },
+                        is_comment: false,
+                        is_empty: false,
+                    },
+                    None,
+                    None,
+                );
+
+                line_number.add_assign(len_as_i32);
+                // skip only when a valid component id is found
+                line = lines.next();
+                continue;
+            }
+        }
+
+        // *** parse inline link tag
+        if is_component_link {
+            let attrs = get_attrs_inline(trimmed, LINK_START_TOKEN);
+
+            if attrs.is_some() {
+                let attrs = attrs.unwrap();
+                let c_id = get_attr(attrs, "id").and_then(|v| get_valid_id(v));
+
+                if c_id.is_none() {
+                    println!(
+                        "Linked component {} does not have a valid id. ignored",
+                        Emoji::LINK
+                    );
+
+                    line = lines.next();
+                    continue;
+                }
+
+                let c_id = c_id.unwrap();
+                let c_url = get_attr(attrs, "href").and_then(|u| evaluate_url(&file, u));
+
+                if c_url.is_none() {
+                    line = lines.next();
+                    continue;
+                }
+
+                let c_url1 = c_url.unwrap();
+                let c_url = c_url.unwrap();
+
+                let lnk = parse_tree(c_url)?;
+
+                proccess(
+                    &c_url1,
+                    trimmed,
+                    Definition {
+                        content: pre.to_string(),
+                        cursor: Cursor {
+                            line: line_number,
+                            col: 0,
+                        },
+                        is_comment: false,
+                        is_empty: false,
+                    },
+                    None,
+                    Some(lnk),
+                );
+            }
+
+            line = lines.next();
+            continue;
+        }
+
+        // the default values here dont matter, they are set so that we can unwrap the values in place
+        // its all good as long as the component index is less than the comment index
+        let component_index = trimmed.find(COMPONENT_TAG_START_TOKEN).unwrap_or(0);
+        let comment_index = trimmed.find(HTML_COMMENT_START_TOKEN).unwrap_or(1);
+
+        // obvs only process components not comments
+        let is_component_tag =
+            trimmed.contains(COMPONENT_TAG_START_TOKEN) && component_index < comment_index;
+
+        if is_component_tag {
+            let c_name = get_component_name(trimmed);
+
+            line = lines.next();
+            continue;
+        }
+
+        // proccess(trimmed);
+        line = lines.next();
+    }
+
+    Ok(document)
 }

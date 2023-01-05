@@ -8,20 +8,15 @@
         <title>Jampass</title>
         <link rel="stylesheet" href="./app.css">
         <link rel="component" href="parts/tag.html" id="x-some-tag">
-        <link rel="component" href="parts/tag.html" id="x-some-tag">
+        <link rel="component" href="parts/some.html" id="x-some-x">
         <script src="./index.js"></script>
     </head>
 
     <body>
-        <!-- Working with slots -->
-        <x-some-tag>
-            <p slot="place">I AM A PLACEMENT!</p>
-            <b>BOO FAR</b>
-            <p>FOO BAR!!</p>
+        <!-- testing unpaired tag again -->
+         <x-some-tag>
+            <x-some-x slot="elem" />
         </x-some-tag>
-
-        <!-- same tag -->
-        <x-some-tag />
     </body>
 
 </html>

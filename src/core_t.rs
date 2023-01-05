@@ -39,6 +39,7 @@ impl Emoji {
     pub const LINK: &'static str = "🖇";
     pub const TREE: &'static str = "🌳";
     pub const FILE: &'static str = "📃";
+    pub const COMPONENT: &'static str = "🪆";
     pub const FLAG: &'static str = "🚩";
     pub const ERROR: &'static str = "💣";
     pub const WATCH: &'static str = "🔭";
