@@ -622,18 +622,19 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
         html: String,
     }
 
-    struct Unused<'u> {
+    struct Unlisted<'u> {
         meta: Meta<'u>,
         cursor: Cursor,
     }
 
-    let mut templates = HashMap::<&str, Proc>::new();
-    let mut unused = HashMap::<&str, Unused>::new();
+    let mut processed = HashMap::<&str, Proc>::new();
+    // same as processed except items are removed from this map once used properly
+    let mut unlisted = HashMap::<&str, Unlisted>::new();
 
-    // a component html file
+    // is a component html file
     let is_component = code.trim_start().starts_with(TEMPLATE_START_TOKEN);
 
-    fn undefined(msg: &str, data: &Unused) {
+    fn undefined(msg: &str, data: &Unlisted) {
         let file = path::strip_crate_cwd(data.meta.file);
         let file = file.to_str().unwrap_or("");
 
@@ -668,8 +669,8 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
         let is_inline_link = trimmed.starts_with(LINK_START_TOKEN) && trimmed.contains(">");
         let is_component_link = trimmed.contains("rel=\"component\"") && is_inline_link;
-        let is_template_start =
-            !is_component && trimmed.starts_with(TEMPLATE_START_TOKEN) && trimmed.contains(">");
+        let is_inner_template =
+            line_number > 1 && trimmed.starts_with(TEMPLATE_START_TOKEN) && trimmed.contains(">");
 
         // is a top level comment
         let is_top_comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
@@ -694,7 +695,7 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
         }
 
         // *** parse in-file component
-        if is_template_start {
+        if is_inner_template {
             let attrs = get_attrs_inline(trimmed, TEMPLATE_START_TOKEN);
             if attrs.is_some() {
                 let attrs = attrs.unwrap();
@@ -721,10 +722,10 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
                 let data = Proc { html: c_html };
 
-                templates.insert(c_id, data);
-                unused.insert(
+                processed.insert(c_id, data);
+                unlisted.insert(
                     c_id,
-                    Unused {
+                    Unlisted {
                         meta: Meta { name: c_id, file },
                         cursor: Cursor {
                             line: line_number,
@@ -762,16 +763,16 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
                 let c_url = get_attr(attrs, "href").and_then(|u| evaluate_url(&file, u));
 
                 if c_url.is_some() {
-                    let c_html = parse(c_url.unwrap());
+                    let c_html = parse(&c_url.unwrap());
                     if c_html.is_ok() {
                         let data = Proc {
                             html: c_html.unwrap(),
                         };
 
-                        templates.insert(c_id, data);
-                        unused.insert(
+                        processed.insert(c_id, data);
+                        unlisted.insert(
                             c_id,
-                            Unused {
+                            Unlisted {
                                 meta: Meta { name: c_id, file },
                                 cursor: Cursor {
                                     line: line_number,
@@ -798,12 +799,12 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
         if is_component_tag {
             let c_name = get_component_name(trimmed);
-            let entry = templates.get(c_name);
+            let entry = processed.get(c_name);
 
             if entry.is_none() {
                 line = lines.next();
 
-                let data = Unused {
+                let data = Unlisted {
                     meta: Meta { name: c_name, file },
                     cursor: Cursor {
                         line: line_number,
@@ -822,7 +823,7 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
             let replaced = replace_component_with_static(trimmed, &mut lines, c_name, &parsed_code);
 
             // remove from unused
-            unused.remove_entry(c_name);
+            unlisted.remove_entry(c_name);
 
             write(&replaced);
             line = lines.next();
@@ -834,7 +835,7 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
     }
 
     // log left-over items
-    for entry in unused {
+    for entry in unlisted {
         undefined("Unused component", &entry.1);
     }
 
@@ -843,7 +844,7 @@ fn parse_code(code: &String, file: &PathBuf) -> Result<String> {
 
 // *** INTERFACE ***
 
-pub fn parse(file: PathBuf) -> Result<String> {
+pub fn parse(file: &PathBuf) -> Result<String> {
     let code = read_code(&file)?;
     parse_code(&code, &file)
 }
