@@ -97,7 +97,7 @@ fn checksum(slice: &str) -> Checksum {
 fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> {
     println!("File {} {:?}", Emoji::FILE, path::strip_crate_cwd(file));
 
-    let parsed = statica::parse_code(&code, file)?;
+    let parsed = statica::transform(&code, file)?;
 
     for lnk in parsed.linked_list {
         // if the asset does not exists, skip it
@@ -108,7 +108,7 @@ fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> 
         capture_linked_asset(&lnk.file, &lnk.asset, memo);
 
         // if the asset is not a component copy it
-        if !lnk.is_component{
+        if !lnk.is_component {
             recursive_output(&lnk.asset, OutputAction::Copy(&lnk.asset))?;
         }
     }
@@ -117,7 +117,7 @@ fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> 
     Ok(())
 }
 
-// Interface
+// *** INTERFACE ***
 
 pub fn handle_component_rename(from: &PathBuf, to: &PathBuf, memo: &mut Memory) -> Result<()> {
     // capture the path of the component being edited

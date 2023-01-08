@@ -14,34 +14,60 @@ struct Checksum {
     as_hex: String,
 }
 
+struct Cursor {
+    line: i32,
+    col: i32,
+}
+
+struct Meta<'m> {
+    name: &'m str,
+    file: PathBuf,
+}
+
+struct Proc<'p> {
+    meta: Meta<'p>,
+    html: String,
+}
+
+struct Unlisted<'u> {
+    meta: Meta<'u>,
+    cursor: Cursor,
+}
+
+/// Defines a scoped CSS selector
+struct ScopedSelector {
+    class: String,
+    name: String,
+    style_tag_id: String,
+    script_tag_id: String,
+}
+
 pub struct Linked {
     pub file: PathBuf,
     pub asset: PathBuf,
     pub is_component: bool,
 }
 
-pub struct ParsedResult {
+pub struct TransformOutput {
     pub linked_list: Vec<Linked>,
     pub code: String,
 }
 
-/// Defines a scoped CSS selector
-struct ScopedCssSelector {
-    class: String,
-    name: String,
-}
-
-impl ScopedCssSelector {
+impl ScopedSelector {
     const CLASS_SELECTOR_TOKEN: &'static str = ".";
 
     fn new(selector: &str, scope: &str) -> Self {
         let default_prefix = "_x_";
         let scoped_selector = format!("{default_prefix}{selector}_{scope}");
         let class = format!("{}{scoped_selector}", Self::CLASS_SELECTOR_TOKEN);
+        let style_tag_id = format!("{selector}-{scope}-style");
+        let script_tag_id = format!("{selector}-{scope}-script");
 
         Self {
             class,
             name: scoped_selector,
+            style_tag_id,
+            script_tag_id,
         }
     }
 }
@@ -571,7 +597,7 @@ fn replace_chunk(source: &str, cut_slice: &str, add_slice: &str) -> String {
         .to_string()
 }
 
-fn parse_css(code: &str, c_id: &str, scope: &str) -> String {
+fn transform_css(code: &str, c_id: &str, scope: &str) -> String {
     let mut result = String::new();
 
     for line in code.lines() {
@@ -580,7 +606,8 @@ fn parse_css(code: &str, c_id: &str, scope: &str) -> String {
         }
 
         if line.contains("<style") {
-            let with_id = format!("{NL}<style id=\"{c_id}-{scope}-style\">");
+            let style_tag_id = ScopedSelector::new(c_id, scope).style_tag_id;
+            let with_id = format!("{NL}<style id=\"{style_tag_id}\">");
             result.push_str(&with_id);
             continue;
         }
@@ -612,7 +639,7 @@ fn parse_css(code: &str, c_id: &str, scope: &str) -> String {
                 ""
             };
 
-            let scoped_class = ScopedCssSelector::new(selector, scope).class;
+            let scoped_class = ScopedSelector::new(selector, scope).class;
             let scoped_selector = format!("{NL}{scoped_class}{SP}{open_token}{NL}");
 
             result.push_str(&scoped_selector);
@@ -626,8 +653,8 @@ fn parse_css(code: &str, c_id: &str, scope: &str) -> String {
     result
 }
 
-/// Handles client bound static functions
-fn handle_script_static_fns(code: &str, scope: &str) -> (String, String) {
+/// Transforms client bound static functions
+fn transform_static_fns(code: &str, scope: &str) -> (String, String) {
     let mut src_code = String::new();
     src_code.push_str(code);
 
@@ -658,18 +685,21 @@ fn handle_script_static_fns(code: &str, scope: &str) -> (String, String) {
     return (scoped_fns, src_code);
 }
 
-fn parse_script(code: &str, c_id: &str, scope: &str) -> String {
+fn transform_script(code: &str, c_id: &str, scope: &str) -> String {
     let mut result = String::new();
     let collected = collect_until_end_tag(&mut code.lines(), "script");
     let code = collected.1;
+
+    let script_tag_id = ScopedSelector::new(c_id, scope).script_tag_id;
+
     let with_id =
-        format!("{NL}<script id=\"{c_id}-{scope}-script\" data-namespace=\"{GLOBAL_SCRIPT_ID}\">");
+        format!("{NL}<script id=\"{script_tag_id}\" data-namespace=\"{GLOBAL_SCRIPT_ID}\">");
 
     if !scope.is_empty() {
         // define the component's scoped function
         let scoped_fn_definition = format!("function x_{}()", scope);
         // evaluate all static functions
-        let (scoped_fns, src_code) = handle_script_static_fns(&code, scope);
+        let (scoped_fns, src_code) = transform_static_fns(&code, scope);
 
         let scoped = format!(
             "{NL}({}{SP}{{{}{NL}{}}})();",
@@ -732,7 +762,7 @@ fn scope_inner_html(code: &str, scope: &str) -> String {
             let attrs = get_attrs_inline(pre, &start_token).unwrap_or("");
             let class_attr_value = get_attr(attrs, "class");
             // create the scoped class name
-            let mut scoped_class = ScopedCssSelector::new(tag_name, scope).name;
+            let mut scoped_class = ScopedSelector::new(tag_name, scope).name;
             // if attributes indicate that an element is a component, handle it accordingly
             // scoped selectors for inner components may not clash with the parent component
             let c_name_attr = get_attr(pre, "data-x-name");
@@ -740,7 +770,7 @@ fn scope_inner_html(code: &str, scope: &str) -> String {
             if let Some(value) = c_name_attr {
                 let c_name_with_underscores = value.replace("-", "_");
                 let c_name_with_underscores = format!("_{c_name_with_underscores}_{tag_name}");
-                scoped_class = ScopedCssSelector::new(&c_name_with_underscores, scope).name;
+                scoped_class = ScopedSelector::new(&c_name_with_underscores, scope).name;
             }
 
             if let Some(value) = class_attr_value {
@@ -786,7 +816,12 @@ fn scope_inner_html(code: &str, scope: &str) -> String {
     result
 }
 
-fn parse_component(file: &PathBuf, c_id: &str, c_code: &String, is_nested: bool) -> Result<String> {
+fn transform_component(
+    file: &PathBuf,
+    c_id: &str,
+    c_code: &String,
+    is_nested: bool,
+) -> Result<String> {
     let code = c_code.trim_start();
     let is_template_tag = code.starts_with(TEMPLATE_START_TOKEN);
 
@@ -840,7 +875,7 @@ fn parse_component(file: &PathBuf, c_id: &str, c_code: &String, is_nested: bool)
             .get(style_start_i..style_end_i + style_end_token.len())
             .unwrap_or("");
 
-        let parsed = parse_css(style_code, c_id, &c_scope);
+        let parsed = transform_css(style_code, c_id, &c_scope);
         parsed_css_and_script.push_str(&parsed);
         tags = replace_chunk(&tags, style_code, "");
     }
@@ -853,7 +888,7 @@ fn parse_component(file: &PathBuf, c_id: &str, c_code: &String, is_nested: bool)
             .get(script_start_i..script_end_i + script_end_token.len())
             .unwrap_or("");
 
-        let parsed = parse_script(script_code, c_id, &c_scope);
+        let parsed = transform_script(script_code, c_id, &c_scope);
         parsed_css_and_script.push_str(&parsed);
         tags = replace_chunk(&tags, script_code, "");
     }
@@ -909,32 +944,12 @@ fn parse_component(file: &PathBuf, c_id: &str, c_code: &String, is_nested: bool)
 
 // *** INTERFACE ***
 
-pub fn parse_code(code: &String, file: &PathBuf) -> Result<ParsedResult> {
+pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
     let code = code.trim_start();
     let mut lines = code.lines();
     let mut line = lines.next();
     let mut line_number = 0;
     let mut result = String::new();
-
-    struct Cursor {
-        line: i32,
-        col: i32,
-    }
-
-    struct Meta<'m> {
-        name: &'m str,
-        file: PathBuf,
-    }
-
-    struct Proc<'p> {
-        meta: Meta<'p>,
-        html: String,
-    }
-
-    struct Unlisted<'u> {
-        meta: Meta<'u>,
-        cursor: Cursor,
-    }
 
     let mut processed = HashMap::<&str, Proc>::new();
     // same as processed except items are removed from this map once used properly
@@ -1055,7 +1070,7 @@ pub fn parse_code(code: &String, file: &PathBuf) -> Result<ParsedResult> {
                 let len_as_i32 = c_html.len().to_string().parse::<i32>()?;
                 line_number.add_assign(len_as_i32);
 
-                let mut parsed = parse_code(&c_html, file)?;
+                let mut parsed = transform(&c_html, file)?;
                 // append to the current linked list
                 linked_list.append(&mut parsed.linked_list);
 
@@ -1110,7 +1125,7 @@ pub fn parse_code(code: &String, file: &PathBuf) -> Result<ParsedResult> {
 
                 if let Some(c_file) = c_url {
                     let code = read_code(&c_file)?;
-                    let mut parsed = parse_code(&code, &c_file)?;
+                    let mut parsed = transform(&code, &c_file)?;
                     // append to the current linked list
                     linked_list.append(&mut parsed.linked_list);
 
@@ -1179,7 +1194,7 @@ pub fn parse_code(code: &String, file: &PathBuf) -> Result<ParsedResult> {
             let data = entry.unwrap();
 
             let parsed_code =
-                parse_component(&data.meta.file, data.meta.name, &data.html, is_component)?;
+                transform_component(&data.meta.file, data.meta.name, &data.html, is_component)?;
             let resolved = resolve_component(trimmed, &mut lines, c_name, &parsed_code);
 
             // remove from unlisted
@@ -1201,7 +1216,7 @@ pub fn parse_code(code: &String, file: &PathBuf) -> Result<ParsedResult> {
 
     let with_core = add_core_script(&result)?;
 
-    Ok(ParsedResult {
+    Ok(TransformOutput {
         linked_list,
         code: with_core,
     })

@@ -1,17 +1,21 @@
 <template id="x-some-tag">
     <style>
         h1 {
-            color: red;
+            color: ("title-color");
         }
     </style>
     <script>
-        let h1 = $query("h1");
-        h1.prop("innerHTML").edit(" Bnanana ");
+        let h1 = $find("h1");
+        let color = ("title-color");
+
+        console.log(color)
+
+        h1.prop("innerHTML").edit(" BANANA ");
     </script>
     <div class="boo foo bar car">
         <template id="x-in-comp">
             <p>
-                --BOO--
+                --BOO-- ("title-color")
             </p>
         </template>
 
