@@ -76,9 +76,9 @@ impl ScopedSelector {
 
 /// Just the UNIX line separator aka newline (NL)
 const NL: &str = "\n";
-const STATIC_QUERY_FN_TOKEN: &str = "$query";
+const STATIC_QUERY_FN_TOKEN: &str = "$find";
 const QUERY_FACTORY_TOKEN: &str = "_x_QueryByScope";
-const QUERY_FN_NAME: &str = "query";
+const QUERY_FN_NAME: &str = "find";
 const DATA_SCOPE_TOKEN: &str = "data-x-scope";
 const DATA_NESTED_TOKEN: &str = "data-x-nested";
 const DATA_COMPONENT_NAME: &str = "data-x-name";
@@ -413,6 +413,11 @@ fn resolve_component(c_line: &str, lines: &mut Lines, c_id: &str, c_html: &Strin
 
     let mut result = String::new();
     let mut line = Some(c_line);
+
+    // get component props
+    let attrs = get_attrs_inline(c_line, ">");
+
+    println!("{:?}", attrs);
 
     let mut write = |line| {
         result.push_str(line);
