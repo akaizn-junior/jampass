@@ -1,10 +1,13 @@
 <template id="x-some-tag">
-
     <style>
         h1 {
             color: red;
         }
     </style>
+    <script>
+        let h1 = $query("h1");
+        h1.prop("innerHTML").edit(" Bnanana ");
+    </script>
     <div class="boo foo bar car">
         <template id="x-in-comp">
             <p>

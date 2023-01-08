@@ -29,7 +29,7 @@ mod statica {
         let expected = PathBuf::from(expected);
         let expected = file::read_code(&expected)?;
 
-        let result = statica::parse(&file)?;
+        let result = statica::parse_file(&file)?;
         let expected = format_expected(expected);
 
         Ok(TestResult { result, expected })

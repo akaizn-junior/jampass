@@ -84,8 +84,9 @@ fn handle_watch_event(config: &Opts, event: Event, memo: &mut Memory) -> Result<
                     }
 
                     let linked = ps.iter().find(|&p| file::is_linked_naive(&p));
-                    if linked.is_some() {
-                        memo.edited_asset.set(true, linked.unwrap().to_owned());
+
+                    if let Some(lnk) = linked {
+                        memo.edited_asset.set(true, lnk.to_owned());
                     }
 
                     gen(&config, &ps, memo)?;

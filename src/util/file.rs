@@ -1,5 +1,4 @@
 use adler::adler32_slice;
-use scraper::{Html, Selector};
 
 use std::{
     collections::HashMap,
@@ -16,9 +15,8 @@ use crate::{
     util::statica,
 };
 
-/// Type for content checkum
+/// Content checksum Type
 struct Checksum {
-    as_hex: String,
     as_u32: u32,
 }
 
@@ -30,41 +28,9 @@ enum OutputAction<'a> {
 
 // **** CONSTANTS
 
-/// Just the UNIX line separator aka newline (NL)
-const NL: &str = "\n";
-const STATIC_QUERY_FN_TOKEN: &str = "$query";
-const QUERY_FACTORY_TOKEN: &str = "__xQueryByScope";
-const QUERY_FN_NAME: &str = "query";
-const DATA_SCOPE_TOKEN: &str = "data-x-scope";
-const DATA_NESTED_TOKEN: &str = "data-x-nested";
-const DATA_COMPONENT_NAME: &str = "data-x-name";
-const HTML_COMMENT_START_TOKEN: &str = "<!--";
-const HTML_COMMENT_END_TOKEN: &str = "-->";
-const COMPONENT_TAG_START_TOKEN: &str = "<x-";
-const CSS_OPEN_RULE_TOKEN: &str = "{";
-const CSS_AT_TOKEN: &str = "@";
-const HEAD_TAG_CLOSE: &str = "</head>";
-const BODY_TAG_CLOSE: &str = "</body>";
-const COMPONENT_PREFIX_TOKEN: &str = "x-";
-/// Space token
-const SP: &str = " ";
-const JS_CLIENT_CORE_PATH: &str = "src/util/js/client_core.js";
-const GLOBAL_STYLE_ID: &str = "__X-STYLE__";
-const GLOBAL_SCRIPT_ID: &str = "__X-SCRIPT__";
-const GLOBAL_CORE_SCRIPT_ID: &str = "__X-CORE-SCRIPT__";
 const TEMPLATE_TAG_TOKEN: &str = "<template";
-const UNPAIRED_TAG_CLOSE_TOKEN: &str = "/>";
 
 // **** end CONSTANTS
-
-/// Takes a string splits it two and joins it with a new slice thus replacing a chunk
-fn replace_chunk(text: String, cut_slice: &str, add_slice: &str) -> String {
-    text.split(cut_slice)
-        .collect::<Vec<&str>>()
-        .join(add_slice)
-        .trim()
-        .to_string()
-}
 
 pub fn read_code(file: &PathBuf) -> Result<String> {
     let content = read_to_string(file)?;
@@ -80,6 +46,12 @@ fn copy_file(from: &PathBuf, to: &PathBuf) -> Result<()> {
     // copy returns the total number of bytes copied
     copy(from, to)?;
     Ok(())
+}
+
+/// Capture files that link to asset path
+fn capture_linked_asset(file: &PathBuf, asset_path: &PathBuf, memo: &mut Memory) {
+    let entry = memo.linked.entry(asset_path.to_owned()).or_default();
+    entry.insert(file.to_owned(), file.to_owned());
 }
 
 /// Recursively create the full output path then write to it
@@ -114,779 +86,34 @@ fn recursive_output(file: &PathBuf, action: OutputAction) -> Result<()> {
     Ok(())
 }
 
-fn evaluate_href(entry_file: &PathBuf, linked_file: &str) -> Option<PathBuf> {
-    if linked_file.is_empty() {
-        return None;
-    }
-
-    let cwd = env::current_dir();
-    // path base
-    let file_endpoint = path::strip_cwd(entry_file);
-    // get the parent folder of the main entry file
-    //  so linked items are fetched relative the right place
-    let file_parent = file_endpoint.parent().unwrap();
-    // consider all linked paths to be relative to the main entry
-    let mut component_path = cwd.join(file_parent).join(&linked_file);
-
-    // evaluate if linked starts with this symbol
-    if linked_file.starts_with("./") {
-        // consider linked to be relative to main
-        let relative_href = linked_file.replacen("./", "", 1);
-        component_path = cwd.join(file_parent).join(&relative_href);
-    }
-
-    // if linked starts with this symbol
-    if linked_file.starts_with("/") {
-        // consider linked to be an absolute path, relative to the CWD
-        let absolute_href = linked_file.replacen("/", "", 1);
-        component_path = cwd.join(&absolute_href);
-    }
-
-    Some(component_path)
-}
-
-fn str_to_selector(s: &str) -> Option<Selector> {
-    let result = Selector::parse(s);
-    result.ok()
-}
-
 /// Generates a checksum as an Hex string from a string slice
 fn checksum(slice: &str) -> Checksum {
     let as_u32 = adler32_slice(slice.as_bytes());
-    let as_hex = format!("{:x}", as_u32);
+    // let as_hex = format!("{:x}", as_u32);
 
-    return Checksum { as_hex, as_u32 };
-}
-
-fn valid_component_id(c_id: &str) -> bool {
-    c_id.starts_with(COMPONENT_PREFIX_TOKEN)
-}
-
-fn remove_top_level_html_comments(code: &String) -> String {
-    let mut result = String::new();
-    let mut lines = code.lines();
-    let mut line = lines.next();
-
-    while line.is_some() {
-        // trim this line of code
-        let trimmed = line.unwrap().trim();
-
-        // skip empty lines
-        if trimmed.is_empty() {
-            line = lines.next();
-            continue;
-        }
-
-        let found = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
-
-        if found {
-            let mut next_line = trimmed;
-
-            while !next_line.contains(HTML_COMMENT_END_TOKEN) {
-                line = lines.next();
-                next_line = line.unwrap().trim();
-            }
-            line = lines.next();
-            continue;
-        }
-
-        result.push_str(trimmed);
-        result.push_str(NL);
-        // done! move on
-        line = lines.next();
-    }
-
-    return result;
-}
-
-fn parse_document(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String> {
-    let doc = Html::parse_document(&code);
-    let link_sel = str_to_selector("link").unwrap();
-    let src_attr_sel = str_to_selector("[src]").unwrap();
-
-    let mut result = code.to_owned();
-    let linked_href = doc.select(&link_sel);
-    let linked_src = doc.select(&src_attr_sel);
-
-    /// Capture all files that use this linked item
-    fn capture_linked_asset(file: &PathBuf, asset_path: &PathBuf, memo: &mut Memory) {
-        let entry = memo.linked.entry(asset_path.to_owned()).or_default();
-        entry.insert(file.to_owned(), file.to_owned());
-    }
-
-    for src in linked_src {
-        let src_asset = src.value().attr("src").unwrap_or("");
-        let asset_path = evaluate_href(file, src_asset).unwrap_or(PathBuf::new());
-
-        // if asset does not exists, skip it
-        if asset_path.metadata().is_err() {
-            continue;
-        }
-
-        capture_linked_asset(file, &asset_path, memo);
-        recursive_output(&asset_path, OutputAction::Copy(&asset_path))?;
-    }
-
-    for link in linked_href {
-        let link_rel = link.value().attr("rel").unwrap_or("");
-        let link_href = link.value().attr("href").unwrap_or("");
-        let link_id = link.value().attr("id");
-        let link_path = evaluate_href(file, link_href).unwrap_or(PathBuf::new());
-
-        // if the linked asset does not exist, skip this
-        if link_path.metadata().is_err() {
-            continue;
-        }
-
-        capture_linked_asset(file, &link_path, memo);
-        recursive_output(&link_path, OutputAction::Copy(&link_path))?;
-
-        // and the c is for component
-
-        if link_rel.eq("component") {
-            if link_id.is_none() {
-                println!(
-                    "Linked component {} {:?} does not have an id. ignored",
-                    Emoji::LINK,
-                    link_rel
-                );
-                continue;
-            }
-
-            let c_id = link_id.unwrap();
-
-            // avoid recursive nesting aka do not link the same component within itself
-            if file.eq(&link_path) {
-                let nada = "".to_string();
-                result = replace_component_with_static(&result, c_id, nada);
-                continue;
-            }
-
-            // generate a selector for the linked component
-            // the selector would work for something like
-            // <x-some-tag />
-            let c_selector = str_to_selector(c_id);
-
-            // if the selector is valid
-            if c_selector.is_some() {
-                let selector = c_selector.unwrap();
-                // verify if the linked component is actually used
-                let component = doc.select(&selector).next();
-
-                // skipped undeclared linked component
-                if component.is_none() {
-                    println!(
-                        "Linked component {} {:?} not used, ignored",
-                        Emoji::LINK,
-                        c_id
-                    );
-                    continue;
-                }
-            }
-
-            if !valid_component_id(c_id) {
-                println!("Invalid component id {} \"{c_id}\"", Emoji::FLAG);
-                continue;
-            }
-
-            let parsed_code = parse_component(&link_path, c_id, is_component(file), memo)?;
-            let static_code = replace_component_with_static(&result, c_id, parsed_code);
-            result = static_code;
-        }
-    }
-
-    Ok(result)
-}
-
-/// Evaluates the generated source code line by line
-fn remove_undefined_static(source: String) -> Result<String> {
-    let mut result = String::new();
-    let mut lines = source.lines();
-    let mut line = lines.next();
-
-    fn get_component_name(line: &str) -> &str {
-        let mut end_token_i = line.len();
-        // based on the tag start token, "<" exists in this line
-        let start_i = line.find(COMPONENT_TAG_START_TOKEN).unwrap();
-        // replace close tokens
-        let unpaired = line
-            .get(start_i..)
-            .unwrap_or("")
-            .find(UNPAIRED_TAG_CLOSE_TOKEN);
-
-        let close = line.get(start_i..).unwrap_or("").find(">");
-
-        // end-token is either the end of the line of when it finds one of the tokens
-        // "/" and ">", the order of the if statements here matter
-        // because end_token_i is mutable
-        if close.is_some() {
-            end_token_i = start_i + close.unwrap();
-        }
-
-        if unpaired.is_some() {
-            end_token_i = start_i + unpaired.unwrap();
-        }
-
-        line.get(start_i + 1..end_token_i).unwrap()
-    }
-
-    while line.is_some() {
-        let trimmed = line.unwrap().trim();
-
-        // skip empty lines
-        if trimmed.is_empty() {
-            line = lines.next();
-            continue;
-        }
-
-        let unused_component = trimmed.contains(COMPONENT_TAG_START_TOKEN);
-
-        // notify and remove unprocessed static component
-        if unused_component {
-            let unpaired_inline = trimmed.find(UNPAIRED_TAG_CLOSE_TOKEN);
-            let c_name = get_component_name(trimmed);
-            let end_tag = format!("</{c_name}");
-
-            let notify = || {
-                println!(
-                    "Undefined static component {} {:?} removed",
-                    Emoji::FLAG,
-                    c_name
-                );
-            };
-
-            if unpaired_inline.is_some() {
-                notify();
-                line = lines.next();
-                continue;
-            }
-
-            if unpaired_inline.is_none() {
-                // look for the closing token
-                // 1 - is unpaired but not inline, meaning the "/>" is on another line
-                // 2 - is a paired tag, meaning "<x-end-token" is on another line
-                let mut next_line = line.unwrap().trim();
-                while !next_line.contains(&end_tag) && !next_line.contains(UNPAIRED_TAG_CLOSE_TOKEN)
-                {
-                    // skip all lines in between the openning and the closing
-                    line = lines.next();
-                    next_line = line.unwrap().trim();
-                }
-
-                notify();
-                // found it, skip it
-                line = lines.next();
-                continue;
-            }
-        }
-
-        result.push_str(trimmed);
-        result.push_str(NL);
-        line = lines.next();
-    }
-
-    return Ok(result);
-}
-
-/// Replaces slot in a component with its placements
-fn handle_component_placements(slice: &str, to_place: &str) -> String {
-    let mut result = slice.to_string();
-    let slice_doc = Html::parse_fragment(slice);
-    let to_place_doc = Html::parse_fragment(to_place);
-
-    // a selector for all [slots] aka placements
-    let sel = str_to_selector("[slot]").unwrap();
-    let place_items = to_place_doc.select(&sel);
-
-    for place_item in place_items {
-        let slot_name = place_item.value().attr("slot").unwrap_or("");
-        // attribute containing the slot name
-        let slot_name_as_attr = format!("[name={slot_name}]");
-        // a selector for the specific named slot
-        let sel = str_to_selector(&slot_name_as_attr).unwrap();
-        let slot_ref = slice_doc.select(&sel).next();
-
-        if slot_ref.is_some() {
-            // the element of the slot
-            let slot = slot_ref.unwrap();
-            // the html of the tag to place
-            let mut to_place_html = place_item.html();
-
-            // specific slot attribute
-            let name_attr = format!("slot=\"{slot_name}\"");
-            // replace the slot attribute
-            to_place_html = to_place_html.replace(&name_attr, "");
-
-            // finally replace the slot with the placement
-            result = replace_chunk(result, &slot.html(), &to_place_html);
-        }
-    }
-
-    return result;
-}
-
-fn replace_component_with_static(source: &String, c_id: &str, slice: String) -> String {
-    let tag_open_token = format!("<{}", c_id);
-    let tag_close_token = format!("</{}", c_id);
-
-    let mut result = String::new();
-    // will contain placement tags inside a component
-    let mut placements = String::new();
-
-    let no_top_comments = remove_top_level_html_comments(&source);
-
-    let mut lines = no_top_comments.lines();
-    let mut line = lines.next();
-
-    while line.is_some() {
-        // trim this line of code
-        let trimmed = line.unwrap().trim();
-
-        // skip empty lines
-        if trimmed.is_empty() {
-            line = lines.next();
-            continue;
-        }
-
-        // immediately remove the link declaration to this component
-        let c_id_attr = format!("id=\"{c_id}\"");
-        let this_component_link =
-            trimmed.contains("rel=\"component\"") && trimmed.contains(&c_id_attr);
-        if this_component_link {
-            // done! move on
-            line = lines.next();
-            continue;
-        }
-
-        // does this line contain a tag openning
-        let tag_open = trimmed.contains(&tag_open_token);
-        // should indicate the closing of an open tag
-        let tag_close = trimmed.contains(&tag_close_token);
-        // for when a component is declared as an unpaired tag
-        let unpaired_close = trimmed.contains(&UNPAIRED_TAG_CLOSE_TOKEN);
-
-        // something line <tag />
-        let is_unpaired_inline = tag_open && unpaired_close;
-        // something like <tag></tag> in the same line
-        let paired_inline = tag_open && tag_close;
-
-        let is_unpaired_tag = tag_open
-            && !trimmed.contains(UNPAIRED_TAG_CLOSE_TOKEN)
-            && !trimmed.contains(&tag_close_token);
-
-        if is_unpaired_tag {
-            let mut next_line = lines.next().unwrap().trim();
-
-            // capture attributes
-            while !next_line.contains(&tag_close_token) {
-                next_line = lines.next().unwrap().trim();
-            }
-
-            // **** Capture all component placements
-            // A placement is a tag that will replace a slot
-            while !next_line.contains(&tag_close_token) {
-                if !next_line.is_empty() {
-                    placements.push_str(next_line);
-                }
-
-                next_line = lines.next().unwrap().trim();
-            }
-
-            let with_filled_slots = handle_component_placements(&slice, &placements);
-
-            result.push_str(&with_filled_slots);
-            result.push_str(NL);
-            // done! move on
-            line = lines.next();
-            continue;
-        }
-
-        if is_unpaired_inline {
-            result.push_str(&slice);
-            result.push_str(NL);
-            // done! move on
-            line = lines.next();
-            continue;
-        }
-
-        if paired_inline {
-            // one liner paired tags may contain placements
-            // capture them
-            let close_i = trimmed.find(&tag_close_token).unwrap();
-            // fint the index of the closing token ">" for the open token
-            let closing_tok_i = trimmed.find(">").unwrap();
-            // component placements
-            let inner_html = trimmed.get(closing_tok_i + 1..close_i).unwrap();
-
-            if !inner_html.is_empty() {
-                placements.push_str(&inner_html);
-            }
-
-            let with_filled_slots = handle_component_placements(&slice, &placements);
-            result.push_str(&with_filled_slots);
-            result.push_str(NL);
-
-            // done! move on
-            line = lines.next();
-            continue;
-        }
-
-        result.push_str(trimmed);
-        result.push_str(NL);
-        // done! move on
-        line = lines.next();
-    }
-
-    return result;
-}
-
-fn parse_nested_components(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<String> {
-    // parse this component's nested components
-    let parsed = parse_document(file, &code, memo)?;
-    Ok(parsed)
-}
-
-fn parse_component(
-    file: &PathBuf,
-    c_id: &str,
-    is_nested: bool,
-    memo: &mut Memory,
-) -> Result<String> {
-    // evaluate all linked
-    let c_code = read_code(file)?;
-    let c_sel_str = format!("template[id={}]", c_id);
-    let c_selector = str_to_selector(&c_sel_str);
-
-    if c_selector.is_some() {
-        let parsed = parse_nested_components(file, &c_code, memo)?;
-        let component = Html::parse_fragment(&parsed);
-
-        let selector = c_selector.unwrap();
-        let c_template = component.select(&selector).next();
-
-        // if an element is not found
-        // lets safely assume by previous logic
-        // 1 - tag is not a "template" tag
-        // 2 - the id is not a valid id
-        if c_template.is_none() {
-            println!(
-                "{} Components must be defined as a template tag and have a valid id",
-                Emoji::FLAG
-            );
-            return Ok("".to_string());
-        }
-
-        if c_template.is_some() {
-            let template = c_template.unwrap();
-            // components are not fragments by default
-            let fragment_attr = template.value().attr("data-fragment").unwrap_or("false");
-            let is_fragment = fragment_attr == "true";
-
-            // and the t is for template
-            let mut t_code = template.inner_html();
-
-            // ship it if its empty
-            if t_code.is_empty() {
-                return Ok("".to_string());
-            }
-
-            // fragments should not be scoped
-            let component_scope = if is_fragment {
-                "".to_string()
-            } else {
-                checksum(&t_code).as_hex
-            };
-
-            let style_selector = str_to_selector("style").unwrap();
-            let script_selector = str_to_selector("script").unwrap();
-
-            let style_tag = template.select(&style_selector).next();
-            let script_tag = template.select(&script_selector).next();
-
-            if style_tag.is_some() {
-                let tag = style_tag.unwrap();
-                let css_code = tag.inner_html();
-
-                let evaled_css = evaluate_component_style(css_code, &component_scope);
-                memo.component.style.push(evaled_css);
-
-                t_code = replace_chunk(t_code, &tag.html(), "");
-            }
-
-            if script_tag.is_some() {
-                let tag = script_tag.unwrap();
-                let script_code = tag.inner_html();
-
-                let evaled_code = evaluate_component_script(script_code, &component_scope);
-                memo.component.script.push(evaled_code);
-
-                t_code = replace_chunk(t_code, &tag.html(), "");
-            }
-
-            // if the component is a fragment, simply ship the html
-            if is_fragment {
-                let code = t_code.trim().to_string();
-                return Ok(code);
-            }
-
-            let component_html = Html::parse_fragment(&t_code.trim());
-            let first_elem = component_html.root_element().first_child();
-
-            if first_elem.is_some() {
-                let node = first_elem.unwrap();
-                let is_root_node = !node.has_siblings();
-
-                if !is_root_node {
-                    let scoped_code = format!(
-                        "<div{SP}{DATA_SCOPE_TOKEN}=\"{component_scope}\"{SP}
-                    {DATA_NESTED_TOKEN}=\"{is_nested}\"{SP}
-                    {DATA_COMPONENT_NAME}=\"{c_id}\"
-                    >{t_code}</div>"
-                    );
-
-                    return Ok(scoped_code);
-                }
-
-                // if is a root node and not a fragment add the scope to it
-                if is_root_node {
-                    let elem = node.value().as_element();
-                    if elem.is_some() {
-                        let el = elem.unwrap();
-                        let elem_name = el.name();
-                        // tag-open-token of the root element
-                        let tag_open = format!("<{elem_name}");
-
-                        // collect any previous set attributes
-                        let attrs = el
-                            .attrs
-                            .iter()
-                            .map(|a| format!("{}=\"{}\"", a.0.local, a.1))
-                            .collect::<Vec<String>>()
-                            .join(SP);
-
-                        let tag_with_attrs = format!("{tag_open}{SP}{attrs}");
-                        let with_attrs = tag_with_attrs.trim();
-
-                        // add the scope attribute
-                        let scope_attr = format!(
-                            "{with_attrs}{SP}
-                        {DATA_SCOPE_TOKEN}=\"{component_scope}\"{SP}
-                        {DATA_NESTED_TOKEN}=\"{is_nested}\"{SP}
-                        {DATA_COMPONENT_NAME}=\"{c_id}\""
-                        );
-
-                        // now this!
-                        let scoped_code = replace_chunk(t_code, &with_attrs, &scope_attr);
-                        return Ok(scoped_code);
-                    }
-                }
-            }
-        }
-    }
-
-    Ok("".to_string())
-}
-
-/// Handles client bound static functions
-fn handle_static_fns(source: String, scope: &str) -> (String, String) {
-    let mut src_code = source;
-    let mut scoped_fns = String::new();
-
-    // **** Define scoped functions
-
-    let scoped_query_fn_name = format!("{}_{}", QUERY_FN_NAME, scope);
-    let scoped_query_fn = format!(
-        "function {}(sel) {{ return {}(sel, {:?}); }}",
-        scoped_query_fn_name, QUERY_FACTORY_TOKEN, scope
-    );
-
-    // **** Register scoped functions
-
-    let static_fns = vec![(STATIC_QUERY_FN_TOKEN, scoped_query_fn_name, scoped_query_fn)];
-
-    // **** Replace static functions with their scoped counterparts
-
-    for fns in static_fns {
-        if src_code.contains(fns.0) {
-            src_code = src_code.replace(fns.0, &fns.1);
-            scoped_fns.push_str(NL);
-            scoped_fns.push_str(&fns.2);
-        }
-    }
-
-    return (scoped_fns, src_code);
-}
-
-fn evaluate_component_script(source: String, c_scope: &str) -> String {
-    if !c_scope.is_empty() {
-        // define the component's scoped function
-        let scoped_fn_definition = format!("function x_{}()", c_scope);
-        // evaluate all static functions
-        let (scoped_fns, src_code) = handle_static_fns(source, c_scope);
-
-        return format!(
-            "{NL}({}{SP}{{{}{NL}{}}})();",
-            scoped_fn_definition,
-            scoped_fns,
-            src_code.trim()
-        );
-    }
-
-    return format!("{NL}{{{NL}{}{NL}}}", source.trim());
-}
-
-fn evaluate_component_style(source: String, scope: &str) -> String {
-    let mut result = String::new();
-
-    for line in source.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        let at_selector = trimmed.starts_with(CSS_AT_TOKEN);
-        let has_open_token = trimmed.contains(CSS_OPEN_RULE_TOKEN);
-
-        // if this line does not contain the open selector token
-        // use the end of the line as the cap to read the selector from
-        let selector_end_i = trimmed.find(CSS_OPEN_RULE_TOKEN).unwrap_or(trimmed.len());
-        let selector = trimmed.get(..selector_end_i).unwrap_or("");
-
-        // verify the selector validity
-        let is_valid_selector = !at_selector
-            && !selector.contains(":")
-            && !selector.contains("}")
-            && !selector.contains(";")
-            && !selector.contains(CSS_OPEN_RULE_TOKEN);
-
-        if is_valid_selector && !scope.is_empty() {
-            let open_token = if has_open_token {
-                CSS_OPEN_RULE_TOKEN
-            } else {
-                ""
-            };
-
-            let not_selector = format!("[{DATA_SCOPE_TOKEN}=\"{scope}\"]>{SP}:not([{DATA_NESTED_TOKEN}=\"true\"]){SP}{selector}");
-            let scoped_selector = format!("{NL}[{DATA_SCOPE_TOKEN}=\"{scope}\"]>{SP}{selector},{SP}{not_selector}{NL}{SP}{open_token}");
-
-            result.push_str(&scoped_selector);
-            continue;
-        }
-
-        result.push_str(NL);
-        result.push_str(line);
-    }
-
-    result
-}
-
-fn construct_components_style(memo: &mut Memory) -> String {
-    let mut result = String::new();
-
-    for code in memo.component.style.iter() {
-        result.push_str(code);
-        result.push_str(NL);
-    }
-
-    if !result.is_empty() {
-        result = format!("<style id=\"{GLOBAL_STYLE_ID}\">{result}</style>");
-    }
-
-    // clear the code for this session
-    memo.component.style.clear();
-
-    return result;
-}
-
-fn construct_components_script(memo: &mut Memory) -> String {
-    let mut result = String::new();
-
-    for code in memo.component.script.iter() {
-        result.push_str(code);
-        result.push_str(NL);
-    }
-
-    if !result.is_empty() {
-        result = format!("<script id=\"{GLOBAL_SCRIPT_ID}\">{result}</script>");
-    }
-
-    // clear the code for this session
-    memo.component.script.clear();
-
-    return result;
-}
-
-fn add_components_style(source: String, slice: String) -> String {
-    if slice.is_empty() {
-        return source;
-    }
-
-    let style_id = format!("id=\"{GLOBAL_STYLE_ID}\"");
-
-    if !source.contains(&style_id) {
-        let mut style_tag = slice;
-        style_tag.push_str(NL);
-        style_tag.push_str(HEAD_TAG_CLOSE);
-
-        return replace_chunk(source, HEAD_TAG_CLOSE, &style_tag);
-    }
-
-    source
-}
-
-fn add_components_script(source: String, slice: String) -> String {
-    if slice.is_empty() {
-        return source;
-    }
-
-    let script_id = format!("id=\"{GLOBAL_SCRIPT_ID}\"");
-
-    if !source.contains(&script_id) {
-        let mut script_tag = slice;
-        script_tag.push_str(NL);
-        script_tag.push_str(BODY_TAG_CLOSE);
-
-        return replace_chunk(source, BODY_TAG_CLOSE, &script_tag);
-    }
-
-    source
-}
-
-fn add_core_script(source: String) -> Result<String> {
-    let pkg_cwd = env::crate_cwd();
-    let file = pkg_cwd.join(JS_CLIENT_CORE_PATH);
-    let code = read_code(&file);
-
-    let script_id = format!("id=\"{GLOBAL_SCRIPT_ID}\"");
-
-    if source.contains(&script_id) {
-        let x_script_tag = format!("<script {script_id}>");
-        let ccode = format!(
-            "<script id=\"{GLOBAL_CORE_SCRIPT_ID}\">{NL}{}</script>{NL}{}",
-            code.unwrap(),
-            x_script_tag
-        );
-
-        return Ok(replace_chunk(source, &x_script_tag, &ccode));
-    }
-
-    Ok(source)
+    return Checksum { as_u32 };
 }
 
 fn process_html(file: &PathBuf, code: &String, memo: &mut Memory) -> Result<()> {
     println!("File {} {:?}", Emoji::FILE, path::strip_crate_cwd(file));
 
-    let mut parsed_code = parse_document(file, &code, memo)?;
-    parsed_code = remove_undefined_static(parsed_code)?;
+    let parsed = statica::parse_code(&code, file)?;
 
-    let global_script_tag = construct_components_script(memo);
-    let global_style_tag = construct_components_style(memo);
+    for lnk in parsed.linked_list {
+        // if the asset does not exists, skip it
+        if lnk.asset.metadata().is_err() {
+            continue;
+        }
 
-    parsed_code = add_components_style(parsed_code, global_style_tag);
-    parsed_code = add_components_script(parsed_code, global_script_tag);
-    parsed_code = add_core_script(parsed_code)?;
+        capture_linked_asset(&lnk.file, &lnk.asset, memo);
 
-    recursive_output(&file, OutputAction::Write(&parsed_code))?;
+        // if the asset is not a component copy it
+        if !lnk.is_component{
+            recursive_output(&lnk.asset, OutputAction::Copy(&lnk.asset))?;
+        }
+    }
+
+    recursive_output(&file, OutputAction::Write(&parsed.code))?;
     Ok(())
 }
 
@@ -938,8 +165,12 @@ pub fn eval_linked_asset_edit(pb: &PathBuf, memo: &mut Memory) -> Result<()> {
 /// Verifies if the code starts with a template tag
 pub fn is_component(file: &PathBuf) -> bool {
     let code = read_code(file);
-    let ccode = code.ok().unwrap_or_default();
-    return ccode.trim_start().starts_with(TEMPLATE_TAG_TOKEN);
+
+    if let Ok(code) = code {
+        return code.trim_start().starts_with(TEMPLATE_TAG_TOKEN);
+    }
+
+    false
 }
 
 /// Naively checks for file extension to decide if a file is linked
@@ -959,31 +190,28 @@ pub fn html(file: &PathBuf, memo: &mut Memory) -> Result<()> {
     // skip components
     let is_component = is_component(&file);
 
-    let doc = statica::parse(&file)?;
-    println!("{}", doc);
-
     // ignore empty code and components
     if is_component || code.is_empty() {
         return Ok(());
     }
 
-    // let file_as_str = file.to_str().unwrap();
-    // let processed = memo.files.entry(file_as_str.to_string()).or_default();
-    // let has_processed = processed.checksum.eq(&checksum.as_u32);
+    let file_as_str = file.to_str().unwrap();
+    let processed = memo.files.entry(file_as_str.to_string()).or_default();
+    let has_processed = processed.checksum.eq(&checksum.as_u32);
 
-    // // verify if the path has already been evaluated
-    // // or if the output does not exist
-    // if !has_processed || memo.edited_asset.was_edited {
-    //     memo.files.insert(
-    //         file_as_str.to_string(),
-    //         File {
-    //             checksum: checksum.as_u32,
-    //             path: file.to_owned(),
-    //         },
-    //     );
+    // verify if the path has already been evaluated
+    // or if the output does not exist
+    if !has_processed || memo.edited_asset.was_edited {
+        memo.files.insert(
+            file_as_str.to_string(),
+            File {
+                checksum: checksum.as_u32,
+                path: file.to_owned(),
+            },
+        );
 
-    //     process_html(file, &code, memo)?;
-    // }
+        process_html(file, &code, memo)?;
+    }
 
     Ok(())
 }
