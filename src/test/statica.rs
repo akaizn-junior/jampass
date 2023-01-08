@@ -28,11 +28,12 @@ mod statica {
         let file = PathBuf::from(input);
         let expected = PathBuf::from(expected);
         let expected = file::read_code(&expected)?;
+        let code = file::read_code(&file)?;
 
-        let result = statica::parse_file(&file)?;
+        let parsed = statica::transform(&code, &file)?;
         let expected = format_expected(expected);
 
-        Ok(TestResult { result, expected })
+        Ok(TestResult { result: parsed.code, expected })
     }
 
     #[test]
