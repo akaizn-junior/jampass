@@ -910,8 +910,8 @@ fn get_props_dict(list: Option<&str>) -> ComponentPropMap<&str> {
 
 fn get_usage_props(list: Option<&str>) -> ComponentPropMap<&str> {
     get_props_list_helper(list, SP, "=", |name, value| {
-        // the value here, as quotes because is defined by as an attribute by the user
-        // so lets remove the quotes
+        // the value here has quotes because is read from html attributes
+        // remove the double quotes
         let value = value.replace("\"", "");
 
         let mut c_prop = ComponentProp::new(name.trim());
