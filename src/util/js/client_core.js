@@ -1,22 +1,22 @@
 const _x_SafeFun = f => typeof f === "function" ? f : function() {};
 
 class _x_Element  {
-    constructor(selector, nodeList) {
+    constructor(selector, nodeList, nodeIndex) {
         this._selector = selector;
         this._nodeList = nodeList;
-        this._prop = null;
+        this._elem = nodeList[nodeIndex] || nodeList[0]
+        this._elemProp = null;
     }
 
-    get(prop) {
-        // the index here should be statically replaced for each component
-        return this._nodeList[0][prop];
+    get element() {
+        return this._elem;
     }
 
     prop(name) {
-        this._prop = name;
+        this._elemProp = name;
         return {
-            edit: this._edit,
-            append: this._append
+            edit: this._edit.bind(this),
+            append: this._append.bind(this)
         }
     }
 
@@ -30,11 +30,11 @@ class _x_Element  {
     }
 
     _edit(value) {
-        this.prop && this._apply(this._prop, value, 'edit');
+        this._elemProp && this._apply(this._elemProp, value, 'edit');
     }
 
     _append(value) {
-        this.prop && this._apply(this._prop, value, 'append');
+        this._elemProp && this._apply(this._elemProp, value, 'append');
     }
 
     _apply(prop, value, op = 'edit') {
@@ -62,9 +62,10 @@ class _x_Element  {
 /**
  * Query a component by its scope
  */
-function _x_QueryByScope(selector, scope) {
+function _x_QueryByScope(selector, scope, instance) {
     let sel = typeof selector === "string" ? selector : '';
+    let _instance = instance || 0;
     let scoped_selector = `._x_${sel}_${scope}`;
     let all = document.querySelectorAll(scoped_selector) || [];
-    return new _x_Element(scoped_selector, all);
+    return new _x_Element(scoped_selector, all, _instance);
 }

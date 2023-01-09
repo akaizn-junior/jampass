@@ -27,6 +27,14 @@ struct Meta<'m> {
 struct Proc<'p> {
     meta: Meta<'p>,
     html: String,
+    /// keeps count of how may times a component is rendered
+    usage: i32,
+}
+
+impl<'p> Proc<'p> {
+    fn inc_usage(&mut self, value: i32) {
+        self.usage.add_assign(value);
+    }
 }
 
 struct Unlisted<'u> {
@@ -72,6 +80,41 @@ impl ScopedSelector {
     }
 }
 
+#[derive(Debug, PartialEq)]
+struct ComponentProp {
+    name: String,
+    default: Option<String>,
+    value: Option<String>,
+    /// a list of ways a prop can be used
+    templates: Vec<String>,
+}
+
+impl ComponentProp {
+    fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            default: None,
+            value: None,
+            templates: vec![
+                format!("(\"{}\")", name.to_string()),
+                format!("(\'{}\')", name.to_string()),
+                format!("--{}", name.to_string()),
+            ],
+        }
+    }
+
+    fn default_mut(&mut self) -> &mut Option<String> {
+        &mut self.default
+    }
+
+    fn value_mut(&mut self) -> &mut Option<String> {
+        &mut self.value
+    }
+}
+
+/// A dict for component props
+type ComponentPropMap<K> = HashMap<K, ComponentProp>;
+
 // *** CONSTANTS ***
 
 /// Just the UNIX line separator aka newline (NL)
@@ -82,6 +125,7 @@ const QUERY_FN_NAME: &str = "find";
 const DATA_SCOPE_TOKEN: &str = "data-x-scope";
 const DATA_NESTED_TOKEN: &str = "data-x-nested";
 const DATA_COMPONENT_NAME: &str = "data-x-name";
+const DATA_COMPONENT_INSTANCE: &str = "data-x-instance";
 const HTML_COMMENT_START_TOKEN: &str = "<!--";
 const HTML_COMMENT_END_TOKEN: &str = "-->";
 const COMPONENT_TAG_START_TOKEN: &str = "<x-";
@@ -279,19 +323,29 @@ fn get_attr<'a>(line: &'a str, token: &'a str) -> Option<&'a str> {
 }
 
 fn get_attrs_inline<'a>(slice: &'a str, start_token: &'a str) -> Option<&'a str> {
-    let end_token = ">";
+    let end_token_slash = "/";
+    let end_token_gt = ">";
 
     if let Some(start) = slice.find(&start_token) {
         let start_i = start + start_token.len();
-        let end = slice
-            .get(start_i..)
-            .unwrap_or("")
-            .find(end_token)
-            .unwrap_or(slice.len() - 1);
+        let get_end_tok = |tok, fallback| {
+            slice
+                .get(start_i..)
+                .unwrap_or("")
+                .find(tok)
+                .unwrap_or(fallback)
+        };
+
+        let end_tok = if slice.ends_with(UNPAIRED_TAG_CLOSE_TOKEN) {
+            get_end_tok(end_token_slash, slice.len() - 2)
+        } else {
+            get_end_tok(end_token_gt, slice.len() - 1)
+        };
 
         // is either the token index or the end of the string
-        let end_i = end + start_i;
+        let end_i = end_tok + start_i;
         let result = slice.get(start_i..end_i).unwrap_or("");
+        let result = result.trim();
 
         if !result.is_empty() {
             return Some(result);
@@ -413,11 +467,6 @@ fn resolve_component(c_line: &str, lines: &mut Lines, c_id: &str, c_html: &Strin
 
     let mut result = String::new();
     let mut line = Some(c_line);
-
-    // get component props
-    let attrs = get_attrs_inline(c_line, ">");
-
-    println!("{:?}", attrs);
 
     let mut write = |line| {
         result.push_str(line);
@@ -659,7 +708,7 @@ fn transform_css(code: &str, c_id: &str, scope: &str) -> String {
 }
 
 /// Transforms client bound static functions
-fn transform_static_fns(code: &str, scope: &str) -> (String, String) {
+fn transform_static_fns(code: &str, scope: &str, instance: i32) -> (String, String) {
     let mut src_code = String::new();
     src_code.push_str(code);
 
@@ -669,8 +718,8 @@ fn transform_static_fns(code: &str, scope: &str) -> (String, String) {
 
     let scoped_query_fn_name = format!("{}_{}", QUERY_FN_NAME, scope);
     let scoped_query_fn = format!(
-        "function {}(sel) {{ return {}(sel, {:?}); }}",
-        scoped_query_fn_name, QUERY_FACTORY_TOKEN, scope
+        "function {}(sel) {{ return {}(sel, {:?}, {}); }}",
+        scoped_query_fn_name, QUERY_FACTORY_TOKEN, scope, instance
     );
 
     // **** Register scoped functions
@@ -690,7 +739,7 @@ fn transform_static_fns(code: &str, scope: &str) -> (String, String) {
     return (scoped_fns, src_code);
 }
 
-fn transform_script(code: &str, c_id: &str, scope: &str) -> String {
+fn transform_script(code: &str, c_id: &str, scope: &str, instance: i32) -> String {
     let mut result = String::new();
     let collected = collect_until_end_tag(&mut code.lines(), "script");
     let code = collected.1;
@@ -704,7 +753,7 @@ fn transform_script(code: &str, c_id: &str, scope: &str) -> String {
         // define the component's scoped function
         let scoped_fn_definition = format!("function x_{}()", scope);
         // evaluate all static functions
-        let (scoped_fns, src_code) = transform_static_fns(&code, scope);
+        let (scoped_fns, src_code) = transform_static_fns(&code, scope, instance);
 
         let scoped = format!(
             "{NL}({}{SP}{{{}{NL}{}}})();",
@@ -821,11 +870,142 @@ fn scope_inner_html(code: &str, scope: &str) -> String {
     result
 }
 
+fn get_props_list_helper<'g>(
+    list: Option<&'g str>,
+    props_sep_tok: &'g str,
+    props_value_tok: &'g str,
+    handle: for<'f> fn(name: &'f str, value: &'f str) -> ComponentPropMap<&'f str>,
+) -> ComponentPropMap<&'g str> {
+    if let Some(props) = list {
+        let list = props.split(props_sep_tok).collect::<Vec<&str>>();
+        for item in list {
+            if item.contains(props_value_tok) {
+                let prop = item.split(props_value_tok).collect::<Vec<&str>>();
+                let name = prop[0];
+                let value = prop[1];
+                return handle(name, value);
+            } else {
+                let cp = ComponentProp::new(item.trim());
+
+                let mut map = ComponentPropMap::new();
+                map.insert(item.trim(), cp);
+                return map;
+            }
+        }
+    }
+
+    ComponentPropMap::new()
+}
+
+fn get_props_dict(list: Option<&str>) -> ComponentPropMap<&str> {
+    get_props_list_helper(list, ",", ":", |name, value| {
+        let mut c_prop = ComponentProp::new(name.trim());
+        *c_prop.default_mut() = Some(value.trim().to_string());
+
+        let mut map = ComponentPropMap::new();
+        map.insert(name.trim(), c_prop);
+        return map;
+    })
+}
+
+fn get_usage_props(list: Option<&str>) -> ComponentPropMap<&str> {
+    get_props_list_helper(list, SP, "=", |name, value| {
+        // the value here, as quotes because is defined by as an attribute by the user
+        // so lets remove the quotes
+        let value = value.replace("\"", "");
+
+        let mut c_prop = ComponentProp::new(name.trim());
+        *c_prop.value_mut() = Some(value.trim().to_string());
+
+        let mut map = ComponentPropMap::new();
+        map.insert(name.trim(), c_prop);
+        return map;
+    })
+}
+
+fn eval_props(
+    code: &str,
+    props_dict: ComponentPropMap<&str>,
+    passed_props: ComponentPropMap<&str>,
+) -> String {
+    let result = String::from(code);
+
+    fn replace_prop(code: String, templates: Vec<String>, value: String) -> String {
+        println!("TEMPLATES = {:?}", templates);
+        let mut result = String::new();
+
+        let double_quotes = &templates[0];
+        let single_quotes = &templates[1];
+        let css_prop = &templates[2];
+
+        for line in code.lines() {
+            // contains the prop in a css custom property
+            if line.contains(css_prop) {
+                // add a definition of the custom prop just before its used
+                let custom_prop = format!("{css_prop}: {value};");
+                result.push_str(&custom_prop);
+                result.push_str(NL);
+                result.push_str(line);
+                result.push_str(NL);
+                continue;
+            }
+
+            if line.contains(double_quotes) {
+                let replaced = line.replace(double_quotes, &value);
+                result.push_str(&replaced);
+                result.push_str(NL);
+                continue;
+            }
+
+            if line.contains(single_quotes) {
+                let replaced = line.replace(single_quotes, &value);
+                result.push_str(&replaced);
+                result.push_str(NL);
+                continue;
+            }
+
+            result.push_str(line);
+            result.push_str(NL);
+        }
+
+        result
+    }
+
+    // match usage props with the defined props lists and process each of them
+    for (prop_name, mut prop_meta) in passed_props {
+        // verify if the passed prop is used on the component
+        if props_dict.contains_key(prop_name) {
+            let used_prop = props_dict.get(prop_name);
+
+            if let Some(used) = used_prop {
+                // passed the default value to the passed prop if it exists
+                if let Some(value) = &used.default {
+                    *prop_meta.default_mut() = Some(value.trim().to_string());
+                }
+            }
+
+            println!("PASSED PROPS META = {:?}", prop_meta);
+
+            if let Some(value) = prop_meta.value {
+                return replace_prop(result, prop_meta.templates, value);
+            }
+
+            if let Some(value) = prop_meta.default {
+                return replace_prop(result, prop_meta.templates, value);
+            }
+        }
+    }
+
+    result
+}
+
 fn transform_component(
     file: &PathBuf,
     c_id: &str,
     c_code: &String,
     is_nested: bool,
+    usage_count: i32,
+    passed_props: ComponentPropMap<&str>,
 ) -> Result<String> {
     let code = c_code.trim_start();
     let is_template_tag = code.starts_with(TEMPLATE_START_TOKEN);
@@ -840,9 +1020,17 @@ fn transform_component(
     }
 
     let attrs = get_attrs_inline(code, TEMPLATE_START_TOKEN).unwrap_or("");
-    let c_inner_html = collect_component_inner_html(&code);
+    // read component props
+    let c_props = get_attr(attrs, "data-attributes");
+    let props_dict = get_props_dict(c_props);
+
+    // code with processed props
+    let code = eval_props(code, props_dict, passed_props);
+
     let frag_attr = get_attr(attrs, "data-fragment").unwrap_or("false");
     let is_fragment = frag_attr == "true";
+
+    let c_inner_html = collect_component_inner_html(&code);
 
     // fragments are not scoped
     let c_scope = if is_fragment {
@@ -893,7 +1081,7 @@ fn transform_component(
             .get(script_start_i..script_end_i + script_end_token.len())
             .unwrap_or("");
 
-        let parsed = transform_script(script_code, c_id, &c_scope);
+        let parsed = transform_script(script_code, c_id, &c_scope, usage_count);
         parsed_css_and_script.push_str(&parsed);
         tags = replace_chunk(&tags, script_code, "");
     }
@@ -911,8 +1099,8 @@ fn transform_component(
         let has_root_node = has_root_node(&rest);
 
         let c_attrs = format!(
-            "{}=\"{c_scope}\"{SP}{}=\"{is_nested}\"{SP}{}=\"{c_id}\"",
-            DATA_SCOPE_TOKEN, DATA_NESTED_TOKEN, DATA_COMPONENT_NAME
+            "{}=\"{c_scope}\"{SP}{}=\"{is_nested}\"{SP}{}=\"{c_id}\"{SP}{}=\"{usage_count}\"",
+            DATA_SCOPE_TOKEN, DATA_NESTED_TOKEN, DATA_COMPONENT_NAME, DATA_COMPONENT_INSTANCE
         );
 
         if !has_root_node {
@@ -1087,6 +1275,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                         file: file.to_owned(),
                     },
                     html: c_html,
+                    usage: 0,
                 };
 
                 processed.insert(c_id, data);
@@ -1142,6 +1331,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                             file: c_file.to_owned(),
                         },
                         html: c_html,
+                        usage: 0,
                     };
 
                     processed.insert(c_id, data);
@@ -1176,7 +1366,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
 
         if is_component_tag {
             let c_name = get_component_name(trimmed);
-            let entry = processed.get(c_name);
+            let entry = processed.get_mut(c_name);
 
             if entry.is_none() {
                 line = lines.next();
@@ -1197,9 +1387,20 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
             }
 
             let data = entry.unwrap();
+            data.inc_usage(1);
 
-            let parsed_code =
-                transform_component(&data.meta.file, data.meta.name, &data.html, is_component)?;
+            let props = get_attrs_inline(trimmed, c_name);
+            let passed_props = get_usage_props(props);
+
+            let parsed_code = transform_component(
+                &data.meta.file,
+                data.meta.name,
+                &data.html,
+                is_component,
+                data.usage,
+                passed_props,
+            )?;
+
             let resolved = resolve_component(trimmed, &mut lines, c_name, &parsed_code);
 
             // remove from unlisted

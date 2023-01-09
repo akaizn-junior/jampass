@@ -36,7 +36,7 @@ pub struct Emoji {}
 
 impl Emoji {
     pub const EMPTY: &'static str = "🪹";
-    pub const LINK: &'static str = "🖇";
+    pub const LINK: &'static str = "🖇 ";
     pub const TREE: &'static str = "🌳";
     pub const FILE: &'static str = "📃";
     pub const COMPONENT: &'static str = "🪆";

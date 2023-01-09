@@ -1,4 +1,4 @@
-<template id="x-some-tag" data-attributes="title-color: red">
+<template id="x-some-tag" data-attributes="title-color: red, size: 2em">
     <style>
         h1 {
             color: var(--title-color);
@@ -6,7 +6,7 @@
     </style>
     <script>
         let h1 = $find("h1");
-        let color = ("title-color");
+        let color = "('title-color')";
 
         console.log(color)
 
