@@ -931,7 +931,6 @@ fn eval_props(
     let result = String::from(code);
 
     fn replace_prop(code: String, templates: Vec<String>, value: String) -> String {
-        println!("TEMPLATES = {:?}", templates);
         let mut result = String::new();
 
         let double_quotes = &templates[0];
@@ -983,8 +982,6 @@ fn eval_props(
                     *prop_meta.default_mut() = Some(value.trim().to_string());
                 }
             }
-
-            println!("PASSED PROPS META = {:?}", prop_meta);
 
             if let Some(value) = prop_meta.value {
                 return replace_prop(result, prop_meta.templates, value);
