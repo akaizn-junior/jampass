@@ -7,11 +7,9 @@ edition = "2021"
 
 [dependencies]
 dotenv = "0.15.0"
-swc = "0.232.42"
-clap = { version = "4.0.17", features = ["derive"] }
+swc = "0.239.1"
+clap = { version = "4.0.32", features = ["derive"] }
 notify = { version = "5.0.0", features = ["serde"] }
 adler = "1.0.2"
-scraper = "0.13.0"
 futures = "0.3"
-lightningcss = "1.0.0-alpha.37"
-js-sandbox = "0.1.6"
+lightningcss = "1.0.0-alpha.39"
