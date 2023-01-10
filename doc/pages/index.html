@@ -15,7 +15,7 @@
         <x-some-tag title-color="blue"></x-some-tag>
         <!-- testing paired tag again -->
 
-        <x-some-tag title-color="yellow" />
+        <x-some-tag title-color="yellow" :map="{ title, description } = item in data" />
     </body>
 
 </html>

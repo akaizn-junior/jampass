@@ -1018,7 +1018,7 @@ fn transform_component(
 
     let attrs = get_attrs_inline(code, TEMPLATE_START_TOKEN).unwrap_or("");
     // read component props
-    let c_props = get_attr(attrs, "data-attributes");
+    let c_props = get_attr(attrs, "data-props");
     let props_dict = get_props_dict(c_props);
 
     // code with processed props
