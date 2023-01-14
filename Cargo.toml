@@ -13,3 +13,7 @@ notify = { version = "5.0.0", features = ["serde"] }
 adler = "1.0.2"
 futures = "0.3"
 lightningcss = "1.0.0-alpha.39"
+serde_json = "1.0.91"
+serde = "1.0.152"
+hyper = "0.14.23"
+ureq = "2.6.1"

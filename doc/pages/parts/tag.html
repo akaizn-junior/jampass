@@ -1,29 +1,26 @@
 <template id="x-some-tag" data-props="title-color: red, size: 2em">
+    <link rel="component" href="some.html" id="x-some">
+
     <style>
         h1 {
             color: var(--title-color);
         }
+
+        .foo {
+            text-decoration: underline;
+        }
     </style>
     <script>
-        let h1 = $find("h1");
-        let color = "('title-color')";
-
-        console.log(color)
-
-        h1.prop("innerHTML").edit(" BANANA ");
+        let [h1] = $find("h1");
+        h1.innerHTML += " - ('title-color')";
     </script>
     <div class="boo foo bar car">
-        <template id="x-in-comp">
-            <p>
-                --BOO-- ("title-color")
-            </p>
-        </template>
+        <h1 class="foo">SOME TAG TOP</h1>
+        <p>SOME TAG P</p>
+        <slot name="instance"></slot>
 
-        <slot name="elem"></slot>
-
-        <h1 class="boo">I am just some tag!</h1>
-        <p>some data</p>
-
-        <x-in-comp />
+        <!-- INNER SOME TAG -->
+        <x-some />
+        <!-- END INNER SOME TAG -->
     </div>
 </template>

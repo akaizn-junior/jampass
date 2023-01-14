@@ -5,17 +5,29 @@
         <link rel="component" href="parts/meta.html" id="x-meta">
         <x-meta />
         <link rel="stylesheet" href="./app.css">
-        <link rel="component" href="parts/tag.html" id="x-some-tag">
+        <link rel="component" href="parts/tag.html" id="x-some-tag" />
+        <link rel="component" href="parts/some.html" id="x-some">
         <script src="./index.js"></script>
     </head>
 
     <body>
         <img src="./images/banana.jpeg" alt="IMAGEM" width="270">
-        <!-- testing paired tag again -->
-        <x-some-tag title-color="blue"></x-some-tag>
-        <!-- testing paired tag again -->
 
-        <x-some-tag title-color="yellow" :map="{ title, description } = item in data" />
+        <!-- X TAG 1 -->
+        <x-some-tag title-color="blue">
+            <p slot="instance">FIRST INSTANCE</p>
+        </x-some-tag>
+        <!-- X TAG 1 -->
+
+        <!-- X TAG 2 -->
+        <x-some-tag title-color="yellow">
+            <p slot="instance">SECOND INSTANCE</p>
+        </x-some-tag>
+        <!-- X TAG 2 -->
+
+        <!-- SOME TAG -->
+        <x-some />
+        <!-- SOME TAG -->
     </body>
 
 </html>
