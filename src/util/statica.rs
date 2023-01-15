@@ -75,7 +75,10 @@ impl ScopedSelector {
         let scoped_selector = format!("{selector}{}{scope}", Self::INFIX);
 
         let name = if selector.starts_with(Self::CLASS_SELECTOR_TOKEN) {
-            let name = selector.split(".").collect::<Vec<&str>>()[1];
+            let mut split = selector.split(".");
+            // skip the first index
+            split.next();
+            let name = split.next().unwrap();
             format!("{name}{}{scope}", Self::INFIX)
         } else {
             format!("{selector}{}{scope}", Self::INFIX)
@@ -92,8 +95,8 @@ impl ScopedSelector {
     }
 
     fn is_scoped(slice: &str) -> bool {
-        let item = slice.split(Self::INFIX).collect::<Vec<&str>>();
-        let has_scope = item.len() > 1;
+        let item = slice.split(Self::INFIX);
+        let has_scope = item.count() > 1;
         has_scope
     }
 }
@@ -169,79 +172,96 @@ const TEMPLATE_END_TOKEN: &str = "</template";
 const LINK_START_TOKEN: &str = "<link";
 const UNPAIRED_TAG_CLOSE_TOKEN: &str = "/>";
 const BODY_TAG_OPEN: &str = "<body>";
-const CHECKSUM_HEX_LEN: usize = 8;
 
 // *** HELPERS ***
 
-fn consume_tag_html(line: &str, lines: &mut Lines, tag_name: &str) -> String {
-    let mut result = String::new();
+fn consume_chars_while(chars: &mut Peekable<Chars>, condition: fn(char) -> bool) -> Option<String> {
+    let mut consumed = String::new();
+    while chars.peek().map_or(false, |&c| condition(c)) {
+        consumed.push(chars.next().unwrap());
+    }
+
+    (!consumed.is_empty()).then_some(consumed)
+}
+
+fn consume_lines_while(
+    lines: &mut Peekable<Lines>,
+    end_token: &str,
+    condition: fn(&str, &str) -> bool,
+) -> Option<String> {
+    let mut consumed = String::new();
+    while lines.peek().map_or(false, |&s| condition(s, end_token)) {
+        if let Some(line) = lines.next() {
+            consumed.push_str(line);
+        }
+        consumed.push_str(NL);
+    }
+
+    (!consumed.is_empty()).then_some(consumed)
+}
+
+fn consume_tag_html(pre: &str, lines: &mut Lines, tag_name: &str) -> String {
     let end_token = format!("</{tag_name}");
 
-    if !line.is_empty() {
-        let pre = line;
-
-        // if its inline, verify if it contains a paired end token or an unpaired end token
-        if pre.contains(&end_token) || pre.contains(UNPAIRED_TAG_CLOSE_TOKEN) {
-            result.push_str(pre);
-            return result;
-        }
-
-        let mut current_line = Some(pre);
-        let mut next_line = current_line.unwrap();
-
-        while !next_line.contains(&end_token) {
-            current_line = lines.next();
-            result.push_str(next_line);
-            result.push_str(NL);
-            next_line = current_line.unwrap();
-        }
-
-        // get the very last line aswell
-        result.push_str(next_line);
+    // if its inline, verify if it contains a paired end token or an unpaired end token
+    if pre.contains(&end_token) || pre.contains(UNPAIRED_TAG_CLOSE_TOKEN) {
+        return pre.to_string();
     }
+
+    let mut result = String::from(pre);
+    result.push_str(NL);
+
+    let mut next = lines.next();
+
+    while !next.unwrap_or(&end_token).contains(&end_token) {
+        result.push_str(next.unwrap());
+        result.push_str(NL);
+        next = lines.next();
+    }
+
+    // add the end token then ship it
+    result.push_str(&end_token);
 
     return result;
 }
 
-/// Collects a slice line by line until one of the end tokens is found
-/// Returns the result collected until the end token is found
-fn consume_until_end_tag<'c>(lines: &'c mut Lines, tag_name: &'c str) -> (i32, String) {
-    let mut line = lines.next();
+/// Reads code that reprensents a component usage line by line until an end token is found
+fn consume_until_end_token(lines: &mut Lines, c_id: &str) -> (i32, String) {
     let mut result = String::new();
-    // create the end tag token
-    let start_token = format!("<{}", tag_name);
-    let end_token = format!("</{}", tag_name);
-    // this code will represent 1 if the tag was paired
-    // and 0 if it was unpaired
+    // create the end-tag-token to match
+    let end_token = format!("</{}", c_id);
+    // the end code is 1 if the tag was paired
+    // or 0 if it was unpaired
     let mut end_token_code = 1;
 
-    if line.is_some() {
-        let pre = line.unwrap();
-        let mut next_line = pre;
+    // now, peekable lines
+    let mut lines = lines.peekable();
 
-        // on each iteration calculate if one of the tokens was found
-        while !next_line.contains(&end_token) {
-            // if somehow this lines contains the start token, skip it
-            if next_line.contains(&start_token) {
-                line = lines.next();
-                next_line = line.unwrap();
-                continue;
-            }
-
-            // if this tag is unpaired, stop here
-            if next_line.trim_start().starts_with(UNPAIRED_TAG_CLOSE_TOKEN) {
-                end_token_code = 0;
-                break;
-            }
-
-            line = lines.next();
-            result.push_str(next_line);
-            result.push_str(NL);
-            next_line = line.unwrap();
+    while lines.peek().map_or(false, |&line| {
+        let trimmed = line.trim_start();
+        if trimmed == UNPAIRED_TAG_CLOSE_TOKEN {
+            end_token_code = 0;
+            return false;
         }
+        !trimmed.starts_with(&end_token)
+    }) {
+        if let Some(line) = lines.next() {
+            result.push_str(line);
+        }
+        result.push_str(NL);
     }
 
     return (end_token_code, result);
+}
+
+fn consume_inner_content(lines: &mut Peekable<Lines>) -> String {
+    // skip the top line
+    lines.next();
+    // skip the bottom line
+    lines.next_back();
+    // consume the rest
+    let content = consume_lines_while(lines, "", |s, _| s != NL);
+    content.unwrap_or_default()
 }
 
 fn consume_inner_html_inline<'s>(line: &'s str) -> Option<String> {
@@ -252,39 +272,15 @@ fn consume_inner_html_inline<'s>(line: &'s str) -> Option<String> {
     return consume_chars_while(&mut chars, |c| c != '<');
 }
 
-fn consume_inner_html<'c>(line: &'c str, lines: &'c mut Lines, tag_name: &'c str) -> String {
-    let end_token = format!("</{}", tag_name);
-    let mut result = String::new();
-
-    // *** Grab the first line
-    let pre = line;
-    let is_paired_inline = pre.contains(&end_token);
-
-    // *** if end token found on the first line, consider it done
-    if is_paired_inline {
-        if let Some(inner_html) = consume_inner_html_inline(pre) {
-            result.push_str(&inner_html);
-            return result;
-        }
-    }
-
-    let collected = consume_until_end_tag(lines, tag_name);
-    result.push_str(NL);
-    result.push_str(&collected.1);
-
-    return result;
-}
-
 fn consume_component_inner_html<'s>(source: &str) -> String {
-    let mut lines = source.lines();
-    // *** Grab the first line
+    let mut lines = source.lines().peekable();
     let mut result = String::new();
 
     // *** Components may have nested components
     // *** so looking for a closng template tag is not enough
     // *** visit every line until the end
 
-    if let Some(pre) = lines.next() {
+    if let Some(pre) = lines.peek() {
         let is_paired_inline = pre.contains(TEMPLATE_END_TOKEN);
 
         // *** if end token found on the first line, consider it done
@@ -295,16 +291,9 @@ fn consume_component_inner_html<'s>(source: &str) -> String {
             }
         }
 
-        // remove the last line
-        lines.next_back();
-        // move to the next line and get on with it
-        // until the end
-        let mut line = lines.next();
-        while line != None {
-            result.push_str(line.unwrap());
-            result.push_str(NL);
-            line = lines.next();
-        }
+        // *** consume until the end
+        let content = consume_inner_content(&mut lines);
+        result.push_str(&content);
     }
 
     return result;
@@ -337,8 +326,8 @@ fn checksum(slice: &str) -> Checksum {
 }
 
 /// Evaluates the url of a linked file relative to the entry file or the CWD
-fn evaluate_url(entry_file: &PathBuf, linked_file: &str) -> Option<PathBuf> {
-    if linked_file.is_empty() {
+fn evaluate_url(entry_file: &PathBuf, linked_path: &str) -> Option<PathBuf> {
+    if linked_path.is_empty() {
         return None;
     }
 
@@ -349,25 +338,25 @@ fn evaluate_url(entry_file: &PathBuf, linked_file: &str) -> Option<PathBuf> {
     // so linked items are fetched relative to the right place
     let file_parent = file_endpoint.parent().unwrap();
     // consider all linked paths to be relative to the main entry
-    let mut component_path = cwd.join(file_parent).join(&linked_file);
+    let asset_path = cwd.join(file_parent).join(&linked_path);
 
-    let trimmed = linked_file.trim_start();
+    let trimmed = linked_path.trim_start();
 
     // evaluate if linked starts with this symbol
     if trimmed.starts_with("./") {
         // consider linked to be relative to main
-        let relative_href = linked_file.replacen("./", "", 1);
-        component_path = cwd.join(file_parent).join(&relative_href);
+        let relative_href = linked_path.replacen("./", "", 1);
+        return Some(cwd.join(file_parent).join(&relative_href));
     }
 
     // if linked starts with this symbol
     if trimmed.starts_with("/") {
         // consider linked to be an absolute path, relative to the CWD
-        let absolute_href = linked_file.replacen("/", "", 1);
-        component_path = cwd.join(&absolute_href);
+        let absolute_href = linked_path.replacen("/", "", 1);
+        return Some(cwd.join(&absolute_href));
     }
 
-    Some(component_path)
+    Some(asset_path)
 }
 
 /// Replaces slot in a component with its placements
@@ -437,98 +426,75 @@ fn fill_component_slots(c_code: &String, placements: &str) -> String {
 }
 
 /// Replaces the static component with the code generated
-fn resolve_component(c_line: &str, lines: &mut Lines, c_id: &str, c_html: &String) -> String {
+fn resolve_component(pre: &str, lines: &mut Lines, c_id: &str, c_html: &String) -> String {
     let ctag_open_token = format!("<{}", c_id);
     let ctag_close_token = format!("</{}", c_id);
 
     let mut result = String::new();
-    let mut line = Some(c_line);
 
     let mut write = |line| {
         result.push_str(line);
     };
 
-    while line.is_some() {
-        let pre = line.unwrap();
+    // does this line contain a tag openning
+    let tag_open = pre.contains(&ctag_open_token);
+    // should indicate the closing of an open tag
+    let tag_close = pre.contains(&ctag_close_token);
+    // for when a component is declared as an unpaired tag
+    let unpaired_close = pre.contains(&UNPAIRED_TAG_CLOSE_TOKEN);
 
-        // skip empty lines
-        if pre.is_empty() {
-            line = lines.next();
-            continue;
-        }
+    let is_unpaired_tag =
+        tag_open && !pre.contains(UNPAIRED_TAG_CLOSE_TOKEN) && !pre.contains(&ctag_close_token);
 
-        // does this line contain a tag openning
-        let tag_open = pre.contains(&ctag_open_token);
-        // should indicate the closing of an open tag
-        let tag_close = pre.contains(&ctag_close_token);
-        // for when a component is declared as an unpaired tag
-        let unpaired_close = pre.contains(&UNPAIRED_TAG_CLOSE_TOKEN);
+    // something line <tag />
+    let is_unpaired_inline = tag_open && unpaired_close;
+    // something like <tag></tag> in the same line
+    let is_paired_inline = tag_open && tag_close;
 
-        let is_unpaired_tag =
-            tag_open && !pre.contains(UNPAIRED_TAG_CLOSE_TOKEN) && !pre.contains(&ctag_close_token);
+    if is_unpaired_inline {
+        write(&c_html);
+        // ok, done!
+        return result;
+    }
 
-        // something line <tag />
-        let is_unpaired_inline = tag_open && unpaired_close;
-        // something like <tag></tag> in the same line
-        let is_paired_inline = tag_open && tag_close;
+    if is_unpaired_tag {
+        let end_match = consume_until_end_token(lines, c_id);
+        const UNPAIRED_CODE: i32 = 0;
+        const PAIRED_CODE: i32 = 1;
 
-        if is_unpaired_inline {
+        if end_match.0.eq(&UNPAIRED_CODE) {
             write(&c_html);
-            // ok, done!
-            return result;
         }
 
-        if is_unpaired_tag {
-            let end_match = consume_until_end_tag(lines, c_id);
-            let unpaired_end_code = 0;
-            let paired_end_code = 1;
+        if end_match.0.eq(&PAIRED_CODE) {
+            let inner_html = end_match.1;
+            let with_filled_slots = fill_component_slots(&c_html, &inner_html);
+            write(&with_filled_slots);
+        }
 
-            if end_match.0.eq(&unpaired_end_code) {
+        // ok, done!
+        return result;
+    }
+
+    if is_paired_inline {
+        let inner_html = consume_inner_html_inline(pre);
+
+        if let Some(inner_html) = inner_html {
+            if inner_html.is_empty() {
                 write(&c_html);
+                return result;
             }
 
-            if end_match.0.eq(&paired_end_code) {
-                let inner_html = end_match.1;
-                let with_filled_slots = fill_component_slots(&c_html, &inner_html);
-                write(&with_filled_slots);
-            }
-
-            // ok, done!
-            return result;
+            let with_filled_slots = fill_component_slots(&c_html, &inner_html);
+            write(&with_filled_slots);
         }
 
-        if is_paired_inline {
-            let inner_html = consume_inner_html_inline(pre);
-
-            if let Some(inner_html) = inner_html {
-                if inner_html.is_empty() {
-                    write(&c_html);
-                    return result;
-                }
-
-                let with_filled_slots = fill_component_slots(&c_html, &inner_html);
-                write(&with_filled_slots);
-            }
-
-            // ok, done!
-            return result;
-        }
-
-        write(pre);
-        // done! move on
-        line = lines.next();
+        // ok, done!
+        return result;
     }
 
+    write(pre);
     return result;
-}
-
-fn consume_chars_while(chars: &mut Peekable<Chars>, condition: fn(char) -> bool) -> Option<String> {
-    let mut consumed = String::new();
-    while chars.peek().map_or(false, |c| condition(*c)) {
-        consumed.push(chars.next().unwrap());
-    }
-
-    (!consumed.is_empty()).then_some(consumed)
 }
 
 /// The tag name is a ASCII string that may contain dashes
@@ -712,9 +678,8 @@ fn transform_static_fns(code: &str, scope: &str, instance: i32) -> (String, Stri
 
 fn transform_script(code: &str, scope: &str, instance: i32) -> String {
     let mut result = String::new();
-    let collected = consume_until_end_tag(&mut code.lines(), "script");
-    let code = collected.1;
-
+    let lines = &mut code.lines().peekable();
+    let code = consume_inner_content(lines);
     let with_namespace = format!("{NL}<script data-namespace=\"{GLOBAL_SCRIPT_ID}\">");
 
     if !scope.is_empty() {
@@ -737,10 +702,7 @@ fn transform_script(code: &str, scope: &str, instance: i32) -> String {
         return result;
     }
 
-    format!(
-        "{with_namespace}{NL}{{{NL}{}{NL}}}{NL}</script>",
-        code.trim()
-    )
+    format!("{with_namespace}{NL}{{{NL}{}{NL}}}{NL}</>", code.trim())
 }
 
 fn add_core_script(source: &str) -> Result<String> {
@@ -778,15 +740,15 @@ fn transform_attrs_with_scope(line: &str, tag_name: String, scope: &str) -> Stri
         let class_attr_value = class.value.to_owned().unwrap_or_default();
         let tag_name = tag_name.unwrap();
 
-        // scope all used classes
-        let mut class_split = class_attr_value.split(SP);
+        // skip already scoped classes
+        if let Some(classname) = class_attr_value.split(SP).peekable().peek() {
+            if ScopedSelector::is_scoped(classname) {
+                return line.to_string();
+            }
+        }
 
-        let first_class = class_split.next();
-        let first_class = first_class.unwrap_or_default();
-
-        println!("first_class = {}", first_class);
-
-        let mut class_list = class_split
+        let mut class_list = class_attr_value
+            .split(SP)
             .map(|classname| {
                 // skip already scoped classes
                 let is_scoped = ScopedSelector::is_scoped(classname);
@@ -802,23 +764,23 @@ fn transform_attrs_with_scope(line: &str, tag_name: String, scope: &str) -> Stri
         let scoped_class = ScopedSelector::new(&tag_name, scope).name;
         class_list.push(scoped_class);
 
-        // turn back into a string
+        // turn list into a string
         let class_list = class_list.join(SP);
 
-        // edit the class with the new scoped values
+        // edit the class attr with the new scoped values
         attrs
             .entry("class".to_string())
             .and_modify(|v| *v.value_mut() = Some(class_list));
 
-        // new attrs string
+        // attrs back to string
         let attrs = attrs_to_string(attrs);
 
-        // ship it
+        // ship it with the rest of the line without old attrs
         let rest = line.get(end_tok_i..).unwrap_or("");
         return format!("{start_token}{SP}{}{rest}", attrs.trim());
     }
 
-    // no class attribute but vlaid tag name
+    // no class attribute but valid tag name
     if let Some(tag_name) = tag_name {
         let scoped_class = ScopedSelector::new(&tag_name, scope).name;
         // add the new scoped class to the list of attrs
@@ -842,8 +804,6 @@ fn scope_component_html(code: &str, scope: &str) -> String {
     let mut lines = code.lines();
     let mut line = lines.next();
 
-    println!("CODE = -----");
-
     if code.is_empty() || is_text_node(code) {
         return code.to_string();
     }
@@ -864,6 +824,7 @@ fn scope_component_html(code: &str, scope: &str) -> String {
             let skip = vec!["style", "script", "slot"];
             if !skip.contains(&tag_name.as_ref()) {
                 let transformed = transform_attrs_with_scope(pre, tag_name, scope);
+
                 result.push_str(&transformed);
                 result.push_str(NL);
                 line = lines.next();
@@ -879,7 +840,7 @@ fn scope_component_html(code: &str, scope: &str) -> String {
     result
 }
 
-fn get_props_helper(
+fn evaluate_props(
     list: Option<&String>,
     props_sep_tok: &str,
     props_value_tok: &str,
@@ -888,13 +849,13 @@ fn get_props_helper(
     let mut map = PropMap::new();
 
     if let Some(props) = list {
-        let list = props.split(props_sep_tok).collect::<Vec<&str>>();
+        let list = props.split(props_sep_tok);
 
         for item in list {
             if item.contains(props_value_tok) {
-                let prop = item.split(props_value_tok).collect::<Vec<&str>>();
-                let name = prop[0];
-                let value = prop[1];
+                let mut prop = item.split(props_value_tok);
+                let name = prop.next().unwrap();
+                let value = prop.next().unwrap();
                 let prop = handler(name, value);
                 map.insert(name.to_string(), prop);
             } else {
@@ -908,7 +869,7 @@ fn get_props_helper(
 }
 
 fn get_props_dict(list: Option<&String>) -> PropMap {
-    get_props_helper(list, ",", ":", |name, value| {
+    evaluate_props(list, ",", ":", |name, value| {
         let mut c_prop = Prop::new(name.trim());
         *c_prop.default_mut() = Some(value.trim().to_string());
         c_prop
@@ -920,7 +881,7 @@ fn get_tag_attrs(list: Option<&String>) -> PropMap {
     // so split with this token "\"{SP}" where SP is space
     let html_split_tok = format!("\"{SP}");
 
-    get_props_helper(list, &html_split_tok, "=", |name, value| {
+    evaluate_props(list, &html_split_tok, "=", |name, value| {
         // the value here has quotes because is read from html attributes
         // remove the double quotes
         let value = value.replace("\"", "");
@@ -942,10 +903,10 @@ fn attrs_to_string(attrs: PropMap) -> String {
         .to_string()
 }
 
-fn eval_props(code: &str, props_dict: PropMap, passed_props: PropMap) -> String {
+fn resolve_props(code: &str, props_dict: PropMap, passed_props: PropMap) -> String {
     let result = String::from(code);
 
-    fn replace_prop(code: String, templates: Vec<String>, value: String) -> String {
+    fn resolve(code: String, templates: Vec<String>, value: String) -> String {
         let mut result = String::new();
 
         let double_quotes = &templates[0];
@@ -999,11 +960,11 @@ fn eval_props(code: &str, props_dict: PropMap, passed_props: PropMap) -> String 
             }
 
             if let Some(value) = prop_meta.value {
-                return replace_prop(result, prop_meta.templates, value);
+                return resolve(result, prop_meta.templates, value);
             }
 
             if let Some(value) = prop_meta.default {
-                return replace_prop(result, prop_meta.templates, value);
+                return resolve(result, prop_meta.templates, value);
             }
         }
     }
@@ -1056,7 +1017,7 @@ fn transform_component(
     };
 
     // code with processed props
-    let code = eval_props(code, props_dict, passed_props);
+    let code = resolve_props(code, props_dict, passed_props);
     // now get the inner html
     let c_inner_html = consume_component_inner_html(&code);
 
@@ -1268,8 +1229,11 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                 let c_id = c_id.unwrap();
                 let c_html = consume_tag_html(trimmed, &mut lines, "template");
 
-                let len_as_i32 = c_html.len().to_string().parse::<i32>()?;
-                line_number.add_assign(len_as_i32);
+                println!("C HTML = {c_html}");
+
+                // update line number with the corrent number of lines skiped
+                let len_skipped: i32 = c_html.lines().count().try_into().unwrap_or_default();
+                line_number.add_assign(len_skipped);
 
                 let mut parsed = transform(&c_html, file)?;
                 // append to the current linked list
