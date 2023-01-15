@@ -359,67 +359,75 @@ fn evaluate_url(entry_file: &PathBuf, linked_path: &str) -> Option<PathBuf> {
     Some(asset_path)
 }
 
-/// Replaces slot in a component with its placements
+/// Replaces component slots with their placements
 fn fill_component_slots(c_code: &String, placements: &str) -> String {
     let mut result = String::new();
     result.push_str(c_code);
 
-    type NamedMap = HashMap<String, String>;
+    let mut lines = placements.lines();
 
-    let mut place_lines = placements.lines();
-    let named = NamedMap::new();
-    let items: (NamedMap, Vec<&str>) = (named, vec![]);
+    // a dict for all named placements
+    let mut named = HashMap::<String, String>::new();
+    // the rest
+    let mut rest = Vec::<&str>::new();
 
-    let (named_placements, rest) = placements.lines().fold(items, |mut acc, elem| {
-        place_lines.next();
+    // *** Collect placements
+
+    let mut line = lines.next();
+    while line.is_some() {
+        let elem = line.unwrap();
 
         if elem.contains("slot=") {
             let tag_name = get_tag_name(elem).unwrap();
             let attrs = get_attrs_inline(elem);
 
             if let Some(attr) = attrs.get("slot") {
-                let elem_html = consume_tag_html(elem, &mut place_lines, &tag_name);
-                acc.0.insert(attr.name.to_owned(), elem_html);
+                let elem_html = consume_tag_html(elem, &mut lines, &tag_name);
+                let value = attr.value.to_owned().unwrap_or_default();
+                named.insert(value, elem_html);
             }
         } else {
-            acc.1.push(elem);
+            rest.push(elem);
         }
-        return acc;
-    });
 
-    let mut c_lines = c_code.lines();
-    let mut c_line = c_lines.next();
+        line = lines.next();
+    }
 
-    while c_line.is_some() {
-        let pre = c_line.unwrap();
-        let is_named_slot = pre.contains("<slot") && pre.contains("name=\"");
-        let is_catch_all_slot = pre.contains("<slot") && !pre.contains("name=\"");
+    // *** Fill component slots
+
+    let mut lines = c_code.lines();
+    let mut line = lines.next();
+
+    while line.is_some() {
+        let elem = line.unwrap();
+        let is_named = elem.contains("<slot") && elem.contains("name=\"");
+        let is_catch_all = elem.contains("<slot") && !elem.contains("name=\"");
 
         // join all captured lines for the catch all slot
         let catch_all_html = rest.join(NL);
 
-        if is_catch_all_slot {
-            let slot_tag_html = consume_tag_html(pre, &mut c_lines, "slot");
+        if is_catch_all {
+            let slot_tag_html = consume_tag_html(elem, &mut lines, "slot");
             result = replace_chunk(&result, &slot_tag_html, &catch_all_html);
-            c_line = c_lines.next();
+            line = lines.next();
             continue;
         }
 
-        if is_named_slot {
-            let slot_tag_html = consume_tag_html(pre, &mut c_lines, "slot");
-            let attrs = get_attrs_inline(pre);
+        if is_named {
+            let slot_tag_html = consume_tag_html(elem, &mut lines, "slot");
+            let attrs = get_attrs_inline(elem);
             let name_attr = attrs.get("name").unwrap();
-            let slot_name = name_attr.value.to_owned().unwrap_or_default();
+            let name_attr_value = name_attr.value.to_owned().unwrap_or_default();
 
-            if let Some(placement) = named_placements.get(&slot_name) {
+            if let Some(placement) = named.get(&name_attr_value) {
                 // finally replace the slot with the placement
                 result = replace_chunk(&result, &slot_tag_html, placement);
-                c_line = c_lines.next();
+                line = lines.next();
                 continue;
             }
         }
 
-        c_line = c_lines.next();
+        line = lines.next();
     }
 
     return result;
@@ -480,6 +488,7 @@ fn resolve_component(pre: &str, lines: &mut Lines, c_id: &str, c_html: &String) 
         let inner_html = consume_inner_html_inline(pre);
 
         if let Some(inner_html) = inner_html {
+            // no inner html, ship it
             if inner_html.is_empty() {
                 write(&c_html);
                 return result;
@@ -1228,8 +1237,6 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
 
                 let c_id = c_id.unwrap();
                 let c_html = consume_tag_html(trimmed, &mut lines, "template");
-
-                println!("C HTML = {c_html}");
 
                 // update line number with the corrent number of lines skiped
                 let len_skipped: i32 = c_html.lines().count().try_into().unwrap_or_default();
