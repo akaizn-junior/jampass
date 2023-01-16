@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    core_t::{Emoji, Result},
+    core_t::{Emoji, Result, Colors},
     env,
     util::path,
 };
@@ -48,6 +48,7 @@ impl Proc {
 struct Unlisted {
     meta: Meta,
     cursor: Cursor,
+    html: String,
 }
 
 pub struct Linked {
@@ -239,7 +240,7 @@ fn consume_until_end_token(lines: &mut Lines, c_id: &str) -> (i32, String) {
 
     while lines.peek().map_or(false, |&line| {
         let trimmed = line.trim_start();
-        if trimmed == UNPAIRED_TAG_CLOSE_TOKEN {
+        if trimmed.contains(UNPAIRED_TAG_CLOSE_TOKEN) {
             end_token_code = 0;
             return false;
         }
@@ -1130,12 +1131,13 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
 
     fn undefined(msg: &str, data: &Unlisted) {
         println!(
-            "{}:{}:{} {msg} {} {:?} removed",
+            "\n{}{SP}{}:{}:{}\n{msg} {:?} removed\n|\n|>{SP}{}\n|",
+            Emoji::FLAG,
             no_cwd_path_as_str(&data.meta.file),
             data.cursor.line,
             data.cursor.col,
-            Emoji::FLAG,
-            data.meta.name
+            data.meta.name,
+            Colors::bold(&data.html)
         );
     }
 
@@ -1196,6 +1198,8 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
             && trimmed.contains("href")
             && trimmed.contains(">");
         let is_component_link = trimmed.contains("rel=\"component\"") && is_inline_link;
+        // "line_number > 1" checks surely that this is not the first line of a file
+        // skipping a root template tag
         let is_inner_template =
             line_number > 1 && trimmed.starts_with(TEMPLATE_START_TOKEN) && trimmed.contains(">");
 
@@ -1211,8 +1215,8 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
             // multiline comment section, if the condition here is false, the loop does not run
             // would be cool to have a do while tho
             while !commented_line.contains(HTML_COMMENT_END_TOKEN) {
-                line = lines.next();
                 line_number.add_assign(1);
+                line = lines.next();
                 commented_line = line.unwrap();
                 write(commented_line);
             }
@@ -1253,7 +1257,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                         name: c_id.to_owned(),
                         file: file.to_owned(),
                     },
-                    html: c_html,
+                    html: c_html.to_owned(),
                     usage: 0,
                 };
 
@@ -1269,6 +1273,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                             line: line_number,
                             col: 0,
                         },
+                        html: c_html.to_owned(),
                     },
                 );
 
@@ -1314,6 +1319,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                                 line: line_number,
                                 col: 0,
                             },
+                            html: trimmed.to_string(),
                         };
 
                         undefined("Component not found", &data);
@@ -1333,7 +1339,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                             name: c_id.to_owned(),
                             file: c_file.to_owned(),
                         },
-                        html: c_html,
+                        html: c_html.to_owned(),
                         usage: 0,
                     };
 
@@ -1349,6 +1355,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                                 line: line_number,
                                 col: 0,
                             },
+                            html: c_html.to_owned(),
                         },
                     );
                 }
@@ -1383,6 +1390,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                         line: line_number,
                         col: 0,
                     },
+                    html: trimmed.to_string(),
                 };
 
                 undefined("Undefined component", &data);
@@ -1391,6 +1399,22 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
 
             let data = entry.unwrap();
             data.inc_usage(1);
+
+            // Update the line count
+            let tag_inner_html = consume_until_end_token(&mut lines.clone(), &c_name);
+
+            let len: i32 = tag_inner_html
+                .1
+                .lines()
+                .count()
+                .try_into()
+                .unwrap_or_default();
+
+            // add to the line number, the number of inner items plus the end tag
+            // obvs inline component usage is already accounted for
+            if !trimmed.contains(UNPAIRED_TAG_CLOSE_TOKEN) {
+                line_number.add_assign(len + 1);
+            }
 
             let passed_props = get_attrs_inline(trimmed);
 

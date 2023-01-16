@@ -44,3 +44,11 @@ impl Emoji {
     pub const ERROR: &'static str = "💣";
     pub const WATCH: &'static str = "🔭";
 }
+
+pub struct Colors {}
+
+impl Colors {
+    pub fn bold(str: &str) -> String {
+        format!("\x1b[1m{str}\x1b[0m")
+    }
+}
