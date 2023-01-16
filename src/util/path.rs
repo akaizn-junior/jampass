@@ -52,9 +52,11 @@ pub fn is_valid_path(path: &PathBuf) -> bool {
     let is_ignored = IGNORE.contains(&fnm_as_str);
     // skip already processed files
     let is_processed = path::starts_with_owd(&path);
+    // skip data files
+    let is_data = path::is_data(&path);
 
     // eval rules
-    if !is_dot_file_not_env && !is_ignored && !is_processed {
+    if !is_dot_file_not_env && !is_ignored && !is_processed && !is_data {
         return true;
     }
 
@@ -158,4 +160,24 @@ pub fn strip_cwd_for_output(file: &PathBuf) -> &Path {
 pub fn starts_with_owd(file: &PathBuf) -> bool {
     let owd = env::output_dir();
     file.starts_with(owd)
+}
+
+/// Verifies if the path is a data file
+pub fn is_data(file: &PathBuf) -> bool {
+    let data = env::data_dir();
+    let is_data_dir = file.starts_with(data);
+
+    // check the last component of the path
+    if let Some(part) = file.components().next_back() {
+        // turn the last component of the path into a string
+        let part = &part.as_os_str().to_str().unwrap_or_default();
+        // get the extension
+        let ext = file.extension().unwrap_or_default();
+        // create the data extension
+        let data_ext = format!(".data.{}", ext.to_string_lossy());
+        // check
+        return part.ends_with(&data_ext) || is_data_dir;
+    }
+
+    is_data_dir
 }

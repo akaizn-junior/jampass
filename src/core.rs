@@ -21,6 +21,7 @@ use crate::{
 fn read_src_path(root: &str) -> Result<PathList> {
     let custom_src = path::canonical(root)?;
     let paths = path::recursive_read_paths(custom_src)?;
+    println!("PATHS = {:?}", paths);
     Ok(paths)
 }
 
@@ -124,6 +125,7 @@ pub fn setup(init: Init) -> Result<()> {
     env::config(&init.cwd)?;
     env::set_output_dir(&init.owd);
     env::set_src_dir(&init.src);
+    env::set_data_dir(&init.data);
     Ok(())
 }
 

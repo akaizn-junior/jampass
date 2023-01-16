@@ -40,9 +40,9 @@ pub struct App {
     #[arg(short = 'F', long, default_value = "jampass.data.js")]
     funnel: String,
 
-    /// Views path
-    #[arg(long, default_value = "views")]
-    views: String,
+    /// Data path
+    #[arg(long, default_value = "data")]
+    pub data: String,
 
     /// Re-generate pages on data changes
     #[arg(short = 'W', long, default_value_t = false)]

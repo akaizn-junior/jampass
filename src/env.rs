@@ -88,11 +88,27 @@ pub fn set_src_dir(src: &str) {
     env::set_var("JAMPASS_SRC", p);
 }
 
+/// Set the data directory as "JAMPASS_DATA" env var
+pub fn set_data_dir(dir: &str) {
+    let tested = test_path_input("JAMPASS_DATA", dir, "data");
+    // now set the full path as a dir inside the cwd
+    let p = current_dir().join(tested);
+    env::set_var("JAMPASS_DATA", p);
+}
+
 /// Get the current source directory
 pub fn src_dir() -> PathBuf {
     let with_src = current_dir().join("src");
     let default = with_src.to_str().unwrap_or_default();
     let var = env::var("JAMPASS_SRC").unwrap_or(default.to_string());
+    return PathBuf::from(var);
+}
+
+/// Get the data directory
+pub fn data_dir() -> PathBuf {
+    let with_data = current_dir().join("data");
+    let default = with_data.to_str().unwrap_or_default();
+    let var = env::var("JAMPASS_DATA").unwrap_or(default.to_string());
     return PathBuf::from(var);
 }
 

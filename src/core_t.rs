@@ -10,6 +10,7 @@ pub struct Init {
     pub cwd: String,
     pub owd: String,
     pub src: String,
+    pub data: String,
 }
 
 #[derive(Debug)]

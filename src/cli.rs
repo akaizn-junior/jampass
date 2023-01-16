@@ -12,11 +12,13 @@ pub fn parse() -> Result<()> {
     let custom_cwd = &app.cwd;
     let custom_owd = &app.dist;
     let custom_src = &app.src;
+    let custom_data = &app.data;
 
     core::setup(Init {
         cwd: custom_cwd.to_string(),
         owd: custom_owd.to_string(),
         src: custom_src.to_string(),
+        data: custom_data.to_string(),
     })?;
 
     let mut memo = Memory::default();
