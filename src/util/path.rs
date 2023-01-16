@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 
 use crate::core_t::Result;
 use crate::env;
-use crate::util::path;
 
 pub type PathList = Vec<PathBuf>;
 
@@ -51,9 +50,9 @@ pub fn is_valid_path(path: &PathBuf) -> bool {
     // Ignore specific files/dirs
     let is_ignored = IGNORE.contains(&fnm_as_str);
     // skip already processed files
-    let is_processed = path::starts_with_owd(&path);
-    // skip data files
-    let is_data = path::is_data(&path);
+    let is_processed = starts_with_owd(&path);
+    // no data
+    let is_data = is_data(&path);
 
     // eval rules
     if !is_dot_file_not_env && !is_ignored && !is_processed && !is_data {
@@ -65,7 +64,40 @@ pub fn is_valid_path(path: &PathBuf) -> bool {
 }
 
 /// Recursively reads paths from a directory
-pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
+pub fn recursive_read_paths(root: PathBuf, with_data: bool) -> Result<PathList> {
+    let mut list = PathList::new();
+
+    fn inner(root: &PathBuf, list: &mut PathList, with_data: bool) {
+        let dir_entries = read_dir(root).unwrap();
+
+        dir_entries.for_each(|res| {
+            let de = res.unwrap();
+            let de_path = de.path();
+
+            if !is_valid_path(&de_path) {
+                return;
+            }
+
+            // Parse subdirectories
+            if de.file_type().is_ok() {
+                let filetype = de.file_type().unwrap();
+                if filetype.is_dir() {
+                    return inner(&de_path, list, with_data);
+                }
+            }
+
+            list.push(de_path);
+        });
+    }
+
+    inner(&root, &mut list, with_data);
+
+    Ok(list)
+}
+
+/// Reads funneled data
+pub fn read_data() -> Result<PathList> {
+    let root = env::current_dir();
     let mut list = PathList::new();
 
     fn inner(root: &PathBuf, list: &mut PathList) {
@@ -75,7 +107,7 @@ pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
             let de = res.unwrap();
             let de_path = de.path();
 
-            if !is_valid_path(&de_path) {
+            if !is_data(&de_path) {
                 return;
             }
 
@@ -92,7 +124,6 @@ pub fn recursive_read_paths(root: PathBuf) -> Result<PathList> {
     }
 
     inner(&root, &mut list);
-
     Ok(list)
 }
 

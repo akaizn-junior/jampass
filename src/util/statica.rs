@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    core_t::{Emoji, Result, Colors},
+    core_t::{Colors, Emoji, Result},
     env,
     util::path,
 };
@@ -1447,6 +1447,10 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
     }
 
     let with_core = add_core_script(&result)?;
+
+    let data = path::read_data()?;
+
+    println!("DATA = {:?}", data);
 
     Ok(TransformOutput {
         linked_list,
