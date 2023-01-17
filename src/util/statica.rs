@@ -858,23 +858,23 @@ fn evaluate_props(
     list: Option<&String>,
     props_sep_tok: &str,
     props_value_tok: &str,
-    handler: fn(name: &str, value: &str) -> Prop,
+    handler: fn(name: &str, value: Option<&str>) -> Prop,
 ) -> PropMap {
     let mut map = PropMap::new();
 
     if let Some(props) = list {
-        let list = props.split(props_sep_tok);
+        let prop_list = props.split(props_sep_tok);
 
-        for item in list {
-            if item.contains(props_value_tok) {
-                let mut prop = item.split(props_value_tok);
+        for prop_item in prop_list {
+            if prop_item.contains(props_value_tok) {
+                let mut prop = prop_item.split(props_value_tok);
                 let name = prop.next().unwrap();
-                let value = prop.next().unwrap();
+                let value = prop.next();
                 let prop = handler(name, value);
                 map.insert(name.to_string(), prop);
             } else {
-                let prop = Prop::new(item.trim());
-                map.insert(item.trim().to_string(), prop);
+                let prop = Prop::new(prop_item.trim());
+                map.insert(prop_item.trim().to_string(), prop);
             }
         }
     }
@@ -885,7 +885,11 @@ fn evaluate_props(
 fn get_props_dict(list: Option<&String>) -> PropMap {
     evaluate_props(list, ",", ":", |name, value| {
         let mut c_prop = Prop::new(name.trim());
-        *c_prop.default_mut() = Some(value.trim().to_string());
+
+        if let Some(value) = value {
+            *c_prop.default_mut() = Some(value.trim().to_string());
+        }
+
         c_prop
     })
 }
@@ -896,12 +900,15 @@ fn get_tag_attrs(list: Option<&String>) -> PropMap {
     let html_split_tok = format!("\"{SP}");
 
     evaluate_props(list, &html_split_tok, "=", |name, value| {
-        // the value here has quotes because is read from html attributes
-        // remove the double quotes
-        let value = value.replace("\"", "");
-        // mutate then ship
         let mut c_prop = Prop::new(name.trim());
-        *c_prop.value_mut() = Some(value.trim().to_string());
+
+        if let Some(value) = value {
+            // the value here has quotes because is read from html attributes
+            // remove the double quotes
+            let value = value.replace("\"", "");
+            *c_prop.value_mut() = Some(value.trim().to_string());
+        }
+
         c_prop
     })
 }
