@@ -301,7 +301,11 @@ fn consume_component_inner_html<'s>(source: &str) -> String {
 }
 
 fn get_valid_id(slice: &String) -> Option<String> {
-    if slice.trim_start().starts_with(COMPONENT_PREFIX_TOKEN) {
+    // starts with valid token
+    if slice.trim_start().starts_with(COMPONENT_PREFIX_TOKEN)
+    // is at least longer than the token length
+        && slice.len() > COMPONENT_PREFIX_TOKEN.len()
+    {
         return Some(slice.to_owned());
     }
     None
