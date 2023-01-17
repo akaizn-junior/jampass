@@ -174,6 +174,11 @@ pub fn strip_crate_cwd(file: &PathBuf) -> &Path {
     strip(env::crate_cwd(), file)
 }
 
+/// Strips the data dir from the path
+pub fn strip_data_dir(file: &PathBuf) -> &Path {
+    strip(env::data_dir(), file)
+}
+
 /// Strips the cwd or the known src path from the given path.
 /// Used specifically for when generating paths for output
 pub fn strip_cwd_for_output(file: &PathBuf) -> &Path {
@@ -211,4 +216,10 @@ pub fn is_data(file: &PathBuf) -> bool {
     }
 
     is_data_dir
+}
+
+/// Check if the file is inside the data dir
+pub fn is_data_dir(file: &PathBuf) -> bool {
+    let data = env::data_dir();
+    file.starts_with(data)
 }

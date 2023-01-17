@@ -543,7 +543,7 @@ fn get_tag_name(line: &str) -> Option<String> {
     None
 }
 
-fn read_code(file: &PathBuf) -> Result<String> {
+fn read_file(file: &PathBuf) -> Result<String> {
     let content = read_to_string(file)?;
     Ok(content)
 }
@@ -718,7 +718,7 @@ fn transform_script(code: &str, scope: &str, instance: i32) -> String {
 fn add_core_script(source: &str) -> Result<String> {
     let pkg_cwd = env::crate_cwd();
     let file = pkg_cwd.join(JS_CLIENT_CORE_PATH);
-    let code = read_code(&file);
+    let code = read_file(&file);
 
     let namespace = format!("data-namespace=\"{GLOBAL_SCRIPT_ID}\"");
 
@@ -1327,7 +1327,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                         continue;
                     }
 
-                    let code = read_code(&c_file)?;
+                    let code = read_file(&c_file)?;
                     let mut parsed = transform(&code, &c_file)?;
                     // append to the current linked list
                     linked_list.append(&mut parsed.linked_list);
@@ -1447,10 +1447,6 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
     }
 
     let with_core = add_core_script(&result)?;
-
-    let data = path::read_data()?;
-
-    println!("DATA = {:?}", data);
 
     Ok(TransformOutput {
         linked_list,
