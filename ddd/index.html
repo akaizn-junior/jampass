@@ -1,14 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jampass</title>
-</head>
-<body>
-    Hello World!
-    <template id="x-"></template>
-    <x-></x->
-</body>
+
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Jampass</title>
+    </head>
+
+    <body>
+        Hello World!
+        <template id="x-div" data-props="name: Item name">
+            <div>
+                <slot name="name">("name")</slot>
+            </div>
+        </template>
+
+        <x-div :map="">
+            <p slot="name">{"name"}</p>
+        </x-div>
+    </body>
+
 </html>
