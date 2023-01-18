@@ -186,6 +186,18 @@ const BODY_TAG_OPEN: &str = "<body>";
 
 // *** HELPERS ***
 
+/// Should be a valid uncomment line containing a given token
+fn is_uncommented(line: &str, token: &str, check: fn(&str) -> bool) -> bool {
+    let trimmed = line.trim_start();
+
+    // the default values here dont matter, they are set so that we can unwrap the values in place
+    // if either token is not found, it should default to the comment index being larger, way larger
+    let token_index = trimmed.find(token).unwrap_or(0);
+    let comment_index = trimmed.find(HTML_COMMENT_START_TOKEN).unwrap_or(999999999);
+    let is_uncommented = token_index < comment_index;
+    check(trimmed) && is_uncommented
+}
+
 fn consume_chars_while(chars: &mut Peekable<Chars>, condition: fn(char) -> bool) -> Option<String> {
     let mut consumed = String::new();
     while chars.peek().map_or(false, |&c| condition(c)) {
@@ -392,7 +404,7 @@ fn fill_component_slots(c_code: &String, placements: &str) -> String {
     while line.is_some() {
         let elem = line.unwrap();
 
-        if elem.contains("slot=") {
+        if is_uncommented(elem, "slot=", |line| line.contains("slot=")) {
             let tag_name = get_tag_name(elem).unwrap();
             let attrs = get_attrs_inline(elem);
 
@@ -415,8 +427,13 @@ fn fill_component_slots(c_code: &String, placements: &str) -> String {
 
     while line.is_some() {
         let elem = line.unwrap();
-        let is_named = elem.contains("<slot") && elem.contains("name=\"");
-        let is_catch_all = elem.contains("<slot") && !elem.contains("name=\"");
+        let is_named = is_uncommented(elem, "<slot", |line| {
+            line.contains("<slot") && line.contains("name=\"")
+        });
+
+        let is_catch_all = is_uncommented(elem, "<slot", |line| {
+            line.contains("<slot") && !line.contains("name=\"")
+        });
 
         // join all captured lines for the catch all slot
         let catch_all_html = rest.join(NL);
@@ -971,11 +988,9 @@ fn resolve_props(
         let css_template = &templates[2];
         let value_template = &templates[3];
 
-        println!("{}", data.list_to_string());
-
         for line in code.lines() {
             // is a data $value
-            if line.contains(value_template) {
+            if is_uncommented(line, value_template, |line| line.contains("$value(\"")) {
                 let value_i = line.find(value_template).unwrap();
                 let end_i = line.get(value_i..).unwrap().find("\")");
 
@@ -985,8 +1000,11 @@ fn resolve_props(
                     let key = line.get(start..end).unwrap();
 
                     let value_tok = format!("{value_template}{key}\")");
+                    let data_item = &data.list[render_index];
 
-                    if let Some(val) = &data.list[render_index].pointer(key) {
+                    // println!("index {render_index} {:?}", data_item.pointer(key));
+
+                    if let Some(val) = data_item.pointer(key) {
                         let data = val.as_str().unwrap();
 
                         let replaced = line.replace(&value_tok, data);
@@ -999,7 +1017,7 @@ fn resolve_props(
             }
 
             // contains the prop in a css custom property
-            if line.contains(css_template) {
+            if is_uncommented(line, css_template, |line| line.contains("--")) {
                 // add a definition of the custom prop just before its used
                 let custom_prop = format!("{css_template}: {value};");
                 result.push_str(&custom_prop);
@@ -1009,14 +1027,18 @@ fn resolve_props(
                 continue;
             }
 
-            if line.contains(dquotes_template) {
+            if is_uncommented(line, dquotes_template, |line| {
+                line.contains("(\"") && line.contains("\")")
+            }) {
                 let replaced = line.replace(dquotes_template, &value);
                 result.push_str(&replaced);
                 result.push_str(NL);
                 continue;
             }
 
-            if line.contains(squotes_template) {
+            if is_uncommented(line, squotes_template, |line| {
+                line.contains("(\'") && line.contains("\')")
+            }) {
                 let replaced = line.replace(squotes_template, &value);
                 result.push_str(&replaced);
                 result.push_str(NL);
@@ -1197,6 +1219,8 @@ fn eval_directives(passed_props: PropMap) -> (usize, PropMap) {
     let data = data::get_data().ok().unwrap();
     let mut data_count: usize = 0;
 
+    // println!("{}", data.list_to_string());
+
     let map = &mut PropMap::from(passed_props.to_owned());
 
     for (prop_name, prop_meta) in passed_props {
@@ -1275,9 +1299,13 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
             continue;
         }
 
-        let is_linked_rel = pre.contains("rel=") && pre.contains("href=");
-        let is_linked_src = pre.contains("src=");
-        let is_linked_component = pre.contains("rel=\"component\"");
+        let is_linked_rel = is_uncommented(pre, "<link", |line| {
+            line.contains("rel=") && line.contains("href=")
+        });
+
+        let is_linked_src = is_uncommented(pre, "<link", |line| line.contains("src="));
+        let is_linked_component =
+            is_uncommented(pre, "<link", |line| line.contains("rel=\"component\""));
 
         if is_linked_rel {
             let attrs = get_attrs_inline(pre);
@@ -1311,14 +1339,17 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
 
         let trimmed = pre.trim();
 
-        let is_inline_link = trimmed.starts_with(LINK_START_TOKEN)
-            && trimmed.contains("href")
-            && trimmed.contains(">");
-        let is_component_link = trimmed.contains("rel=\"component\"") && is_inline_link;
+        let is_inline_link = is_uncommented(pre, "<link", |line| {
+            line.starts_with(LINK_START_TOKEN) && line.contains("href") && line.contains(">")
+        });
+
+        let is_component_link = is_inline_link
+            && is_uncommented(pre, "<link", |line| line.contains("rel=\"component\""));
+
         // "line_number > 1" checks surely that this is not the first line of a file
         // skipping a root template tag
         let is_inner_template =
-            line_number > 1 && trimmed.starts_with(TEMPLATE_START_TOKEN) && trimmed.contains(">");
+            line_number > 1 && is_uncommented(pre, TEMPLATE_START_TOKEN, |line| line.contains(">"));
 
         // is a top level comment
         let is_top_comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
@@ -1484,14 +1515,10 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
             continue;
         }
 
-        // the default values here dont matter, they are set so that we can unwrap the values in place
-        // its all good as long as the component index is less than the comment index
-        let component_index = trimmed.find(COMPONENT_TAG_START_TOKEN).unwrap_or(0);
-        let comment_index = trimmed.find(HTML_COMMENT_START_TOKEN).unwrap_or(1);
-
         // obvs only process components not comments
-        let is_component_tag =
-            trimmed.contains(COMPONENT_TAG_START_TOKEN) && component_index < comment_index;
+        let is_component_tag = is_uncommented(pre, COMPONENT_TAG_START_TOKEN, |line| {
+            line.starts_with(COMPONENT_TAG_START_TOKEN)
+        });
 
         if is_component_tag {
             let c_name = get_tag_name(trimmed).unwrap();

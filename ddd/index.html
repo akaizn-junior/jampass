@@ -13,12 +13,12 @@
         <template id="x-div" data-props="item">
             <div>
                 <b name="name">$value("item/name")</b>
-                <slot name="name"></slot>
+                <!-- <slot name="name"></slot> -->
             </div>
         </template>
 
         <x-div :each="item">
-            <p slot="name">$value("item/name")</p>
+            <!-- <p slot="name">$value("item/name")</p> -->
         </x-div>
     </body>
 
