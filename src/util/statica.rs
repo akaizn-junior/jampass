@@ -11,7 +11,7 @@ use std::{
 use crate::{
     core_t::{Colors, Emoji, Result},
     env,
-    util::path,
+    util::{data, path},
 };
 
 // *** TYPES ***
@@ -21,27 +21,39 @@ struct Checksum {
     as_hex: String,
 }
 
+/// A dict for component props
+type PropMap = HashMap<String, Prop>;
+
 struct Cursor {
     line: i32,
     col: i32,
 }
 
+#[derive(Debug, Clone)]
 struct Meta {
     name: String,
     file: PathBuf,
 }
 
 /// Processed
+#[derive(Debug, Clone)]
 struct Proc {
     meta: Meta,
     html: String,
     /// keeps count of how may times a component is rendered
     usage: i32,
+    props: Option<PropMap>,
 }
 
 impl Proc {
+    /// Increment the usage count
     fn inc_usage(&mut self, value: i32) {
         self.usage.add_assign(value);
+    }
+
+    /// Add props
+    fn props_mut(&mut self) -> &mut Option<PropMap> {
+        &mut self.props
     }
 }
 
@@ -121,6 +133,7 @@ impl Prop {
                 format!("(\"{}\")", name.to_string()),
                 format!("(\'{}\')", name.to_string()),
                 format!("--{}", name.to_string()),
+                format!("$value(\"{}", name.to_string()),
             ],
         }
     }
@@ -141,9 +154,6 @@ impl Prop {
         )
     }
 }
-
-/// A dict for component props
-type PropMap = HashMap<String, Prop>;
 
 // *** CONSTANTS ***
 
@@ -439,15 +449,18 @@ fn fill_component_slots(c_code: &String, placements: &str) -> String {
 }
 
 /// Replaces the static component with the code generated
-fn resolve_component(pre: &str, lines: &mut Lines, c_id: &str, c_html: &String) -> String {
+fn resolve_component(
+    pre: &str,
+    lines: &mut Lines,
+    data: &Proc,
+    render_count: usize,
+    is_nested: bool,
+) -> Result<String> {
+    let c_id = &data.meta.name;
     let ctag_open_token = format!("<{}", c_id);
     let ctag_close_token = format!("</{}", c_id);
 
     let mut result = String::new();
-
-    let mut write = |line| {
-        result.push_str(line);
-    };
 
     // does this line contain a tag openning
     let tag_open = pre.contains(&ctag_open_token);
@@ -465,9 +478,12 @@ fn resolve_component(pre: &str, lines: &mut Lines, c_id: &str, c_html: &String) 
     let is_paired_inline = tag_open && tag_close;
 
     if is_unpaired_inline {
-        write(&c_html);
-        // ok, done!
-        return result;
+        for render_index in 0..render_count {
+            let c_code = transform_component(data, render_index, is_nested)?;
+            result.push_str(&c_code);
+        }
+
+        return Ok(result);
     }
 
     if is_unpaired_tag {
@@ -476,17 +492,24 @@ fn resolve_component(pre: &str, lines: &mut Lines, c_id: &str, c_html: &String) 
         const PAIRED_CODE: i32 = 1;
 
         if end_match.0.eq(&UNPAIRED_CODE) {
-            write(&c_html);
+            for render_index in 0..render_count {
+                let c_code = transform_component(data, render_index, is_nested)?;
+                result.push_str(&c_code);
+            }
         }
 
         if end_match.0.eq(&PAIRED_CODE) {
             let inner_html = end_match.1;
-            let with_filled_slots = fill_component_slots(&c_html, &inner_html);
-            write(&with_filled_slots);
+
+            for render_index in 0..render_count {
+                let c_code = transform_component(data, render_index, is_nested)?;
+                let with_filled_slots = fill_component_slots(&c_code, &inner_html);
+                result.push_str(&with_filled_slots);
+            }
         }
 
         // ok, done!
-        return result;
+        return Ok(result);
     }
 
     if is_paired_inline {
@@ -495,20 +518,27 @@ fn resolve_component(pre: &str, lines: &mut Lines, c_id: &str, c_html: &String) 
         if let Some(inner_html) = inner_html {
             // no inner html, ship it
             if inner_html.is_empty() {
-                write(&c_html);
-                return result;
+                for render_index in 0..render_count {
+                    let c_html = transform_component(data, render_index, is_nested)?;
+                    result.push_str(&c_html);
+                }
+
+                return Ok(result);
             }
 
-            let with_filled_slots = fill_component_slots(&c_html, &inner_html);
-            write(&with_filled_slots);
+            for render_index in 0..render_count {
+                let c_html = transform_component(data, render_index, is_nested)?;
+                let with_filled_slots = fill_component_slots(&c_html, &inner_html);
+                result.push_str(&with_filled_slots);
+            }
         }
 
         // ok, done!
-        return result;
+        return Ok(result);
     }
 
-    write(pre);
-    return result;
+    result.push_str(pre);
+    return Ok(result);
 }
 
 /// The tag name is a ASCII string that may contain dashes
@@ -924,21 +954,54 @@ fn attrs_to_string(attrs: PropMap) -> String {
         .to_string()
 }
 
-fn resolve_props(code: &str, props_dict: PropMap, passed_props: PropMap) -> String {
+fn resolve_props(
+    code: &str,
+    props_dict: PropMap,
+    passed_props: Option<&PropMap>,
+    render_index: usize,
+) -> String {
     let result = String::from(code);
 
-    fn resolve(code: String, templates: Vec<String>, value: String) -> String {
+    fn resolve(code: String, templates: Vec<String>, value: String, render_index: usize) -> String {
         let mut result = String::new();
+        let data = data::get_data().ok().unwrap();
 
-        let double_quotes = &templates[0];
-        let single_quotes = &templates[1];
-        let css_prop = &templates[2];
+        let dquotes_template = &templates[0];
+        let squotes_template = &templates[1];
+        let css_template = &templates[2];
+        let value_template = &templates[3];
+
+        println!("{}", data.list_to_string());
 
         for line in code.lines() {
+            // is a data $value
+            if line.contains(value_template) {
+                let value_i = line.find(value_template).unwrap();
+                let end_i = line.get(value_i..).unwrap().find("\")");
+
+                if let Some(end_i) = end_i {
+                    let start = value_i + value_template.len();
+                    let end = end_i + value_i;
+                    let key = line.get(start..end).unwrap();
+
+                    let value_tok = format!("{value_template}{key}\")");
+
+                    if let Some(val) = &data.list[render_index].pointer(key) {
+                        let data = val.as_str().unwrap();
+
+                        let replaced = line.replace(&value_tok, data);
+                        result.push_str(&replaced);
+                        result.push_str(NL);
+                    }
+                }
+
+                continue;
+            }
+
             // contains the prop in a css custom property
-            if line.contains(css_prop) {
+            if line.contains(css_template) {
                 // add a definition of the custom prop just before its used
-                let custom_prop = format!("{css_prop}: {value};");
+                let custom_prop = format!("{css_template}: {value};");
                 result.push_str(&custom_prop);
                 result.push_str(NL);
                 result.push_str(line);
@@ -946,15 +1009,15 @@ fn resolve_props(code: &str, props_dict: PropMap, passed_props: PropMap) -> Stri
                 continue;
             }
 
-            if line.contains(double_quotes) {
-                let replaced = line.replace(double_quotes, &value);
+            if line.contains(dquotes_template) {
+                let replaced = line.replace(dquotes_template, &value);
                 result.push_str(&replaced);
                 result.push_str(NL);
                 continue;
             }
 
-            if line.contains(single_quotes) {
-                let replaced = line.replace(single_quotes, &value);
+            if line.contains(squotes_template) {
+                let replaced = line.replace(squotes_template, &value);
                 result.push_str(&replaced);
                 result.push_str(NL);
                 continue;
@@ -967,11 +1030,18 @@ fn resolve_props(code: &str, props_dict: PropMap, passed_props: PropMap) -> Stri
         result
     }
 
+    if passed_props.is_none() {
+        return code.to_string();
+    }
+
+    let passed_props = passed_props.unwrap();
+
     // match usage props with the defined props lists and process each of them
-    for (prop_name, mut prop_meta) in passed_props {
+    for (prop_name, prop_meta) in passed_props {
         // verify if the passed prop is used on the component
-        if props_dict.contains_key(&prop_name) {
-            let used_prop = props_dict.get(&prop_name);
+        if props_dict.contains_key(prop_name) {
+            let used_prop = props_dict.get(prop_name);
+            let mut prop_meta = prop_meta.to_owned();
 
             if let Some(used) = used_prop {
                 // passed the default value to the passed prop if it exists
@@ -981,11 +1051,11 @@ fn resolve_props(code: &str, props_dict: PropMap, passed_props: PropMap) -> Stri
             }
 
             if let Some(value) = prop_meta.value {
-                return resolve(result, prop_meta.templates, value);
+                return resolve(result, prop_meta.templates, value, render_index);
             }
 
             if let Some(value) = prop_meta.default {
-                return resolve(result, prop_meta.templates, value);
+                return resolve(result, prop_meta.templates, value, render_index);
             }
         }
     }
@@ -993,14 +1063,13 @@ fn resolve_props(code: &str, props_dict: PropMap, passed_props: PropMap) -> Stri
     result
 }
 
-fn transform_component(
-    file: &PathBuf,
-    c_id: &str,
-    c_code: &String,
-    is_nested: bool,
-    usage_count: i32,
-    passed_props: PropMap,
-) -> Result<String> {
+fn transform_component(data: &Proc, render_index: usize, is_nested: bool) -> Result<String> {
+    let file = &data.meta.file;
+    let c_id = &data.meta.name;
+    let c_code = &data.html;
+    let usage_count = data.usage;
+    let passed_props = data.props.as_ref();
+
     let code = c_code.trim_start();
     let is_template_tag = code.starts_with(TEMPLATE_START_TOKEN);
 
@@ -1038,7 +1107,7 @@ fn transform_component(
     };
 
     // code with processed props
-    let code = resolve_props(code, props_dict, passed_props);
+    let code = resolve_props(code, props_dict, passed_props, render_index);
     // now get the inner html
     let c_inner_html = consume_component_inner_html(&code);
 
@@ -1120,6 +1189,43 @@ fn transform_component(
     }
 
     Ok("".to_string())
+}
+
+fn eval_directives(passed_props: PropMap) -> (usize, PropMap) {
+    const FN_PROP_TOKEN: &str = ":";
+    const VALID_PROP_FNS: [&str; 1] = [":each"];
+    let data = data::get_data().ok().unwrap();
+    let mut data_count: usize = 0;
+
+    let map = &mut PropMap::from(passed_props.to_owned());
+
+    for (prop_name, prop_meta) in passed_props {
+        let is_directive = prop_name.starts_with(FN_PROP_TOKEN);
+
+        // should be a valid fn prop
+        if is_directive && VALID_PROP_FNS.contains(&prop_name.as_str()) {
+            // remove directive from the props
+            map.remove(&prop_name);
+
+            let meta = prop_meta.to_owned();
+            let fn_body = meta.value;
+
+            if let Some(body) = fn_body {
+                let mut evaled_body = body.split("in");
+
+                if let Some(var) = evaled_body.next() {
+                    let mut new_prop = Prop::new(var);
+                    *new_prop.value_mut() = Some("".to_string());
+                    // add new prop to the map
+                    map.insert(var.to_string(), new_prop);
+                    data_count = data.list.len();
+                }
+            }
+        }
+    }
+
+    // props without directives
+    (data_count, map.to_owned())
 }
 
 // *** INTERFACE ***
@@ -1270,6 +1376,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                     },
                     html: c_html.to_owned(),
                     usage: 0,
+                    props: None,
                 };
 
                 processed.insert(c_id.to_owned(), data);
@@ -1352,6 +1459,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                         },
                         html: c_html.to_owned(),
                         usage: 0,
+                        props: None,
                     };
 
                     processed.insert(c_id.to_owned(), data);
@@ -1429,16 +1537,14 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
 
             let passed_props = get_attrs_inline(trimmed);
 
-            let parsed_code = transform_component(
-                &data.meta.file,
-                &data.meta.name,
-                &data.html,
-                is_component,
-                data.usage,
-                passed_props,
-            )?;
+            let directive = eval_directives(passed_props);
+            let render_count = directive.0;
+            let passed_props = directive.1;
+            // add props to processed data
+            *data.props_mut() = Some(passed_props);
 
-            let resolved = resolve_component(trimmed, &mut lines, &c_name, &parsed_code);
+            let resolved =
+                resolve_component(trimmed, &mut lines, data, render_count, is_component)?;
 
             // remove from unlisted
             unlisted.remove_entry(c_name.as_str());

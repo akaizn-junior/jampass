@@ -10,14 +10,15 @@
 
     <body>
         Hello World!
-        <template id="x-div" data-props="name: Item name">
+        <template id="x-div" data-props="item">
             <div>
-                <slot name="name">("name")</slot>
+                <b name="name">$value("item/name")</b>
+                <slot name="name"></slot>
             </div>
         </template>
 
-        <x-div :map="">
-            <p slot="name">{"name"}</p>
+        <x-div :each="item">
+            <p slot="name">$value("item/name")</p>
         </x-div>
     </body>
 

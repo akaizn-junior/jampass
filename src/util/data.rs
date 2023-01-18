@@ -1,11 +1,26 @@
-use serde_json::{json, Map, Result as SerdeJsonResult, Value};
+use serde_json::{json, to_string_pretty, Map, Result as SerdeJsonResult, Value};
 
 use crate::util::path;
 use std::path::PathBuf;
 
 pub struct Data {
-    pub as_list: Vec<Value>,
-    pub as_json: Map<String, Value>,
+    pub list: Vec<Value>,
+    pub json: Map<String, Value>,
+}
+
+impl Data {
+    pub fn list_to_string(&self) -> String {
+        let mut res = String::new();
+        res.push_str("[");
+
+        for val in self.list.iter() {
+            let formatted = format!("\n{}", to_string_pretty(val).ok().unwrap_or_default());
+            res.push_str(&formatted);
+        }
+
+        res.push_str("]");
+        return res;
+    }
 }
 
 pub fn get_data() -> SerdeJsonResult<Data> {
@@ -25,18 +40,19 @@ pub fn get_data() -> SerdeJsonResult<Data> {
 
         let object = parts.fold((key, init), |acc, part| {
             let part_path = PathBuf::from(part.as_os_str());
-            let part_name = part_path.file_name();
+            let part_name = part_path.file_stem();
 
             if part_name == None {
                 return acc;
             }
 
-            let name = part_name.unwrap().to_string_lossy().to_string();
+            let filename = part_path.file_name().unwrap().to_str().unwrap().to_string();
+            let name = part_name.unwrap().to_str().unwrap().to_string();
 
             if part_path.extension().is_some() {
                 let value = json!({
                     "meta": {
-                        "filename": name.to_owned(),
+                        "filename": filename.to_owned(),
                         "raw_content": ""
                     },
                     "name": name.to_owned(),
@@ -86,8 +102,8 @@ pub fn get_data() -> SerdeJsonResult<Data> {
         (object.0.to_owned(), object.1.to_owned())
     }
 
-    let as_list = &mut vec![];
-    let as_json = &mut Map::new();
+    let list = &mut vec![];
+    let json = &mut Map::new();
 
     for file in data_files {
         // skip if file DNE
@@ -98,13 +114,13 @@ pub fn get_data() -> SerdeJsonResult<Data> {
         let ext = file.extension().and_then(|s| s.to_str());
         if ext == Some("md") || ext == Some("json") {
             let obj = transform_path_into_object(&file);
-            as_list.push(obj.1.to_owned());
-            as_json.insert(obj.0, obj.1);
+            list.push(obj.1.to_owned());
+            json.insert(obj.0, obj.1);
         }
     }
 
     Ok(Data {
-        as_list: as_list.to_owned(),
-        as_json: as_json.to_owned(),
+        list: list.to_owned(),
+        json: json.to_owned(),
     })
 }
