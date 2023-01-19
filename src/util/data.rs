@@ -7,8 +7,8 @@ use crate::util::path;
 use std::{fs::read_to_string, path::PathBuf};
 
 pub struct Data {
-    pub list: Vec<Value>,
-    pub json: Map<String, Value>,
+    pub for_each: Vec<Value>,
+    pub for_query: Map<String, Value>,
 }
 
 impl Data {
@@ -16,7 +16,7 @@ impl Data {
         let mut res = String::new();
         res.push_str("[");
 
-        for val in self.list.iter() {
+        for val in self.for_each.iter() {
             let formatted = format!("\n{}", to_string_pretty(val).ok().unwrap_or_default());
             res.push_str(&formatted);
         }
@@ -26,22 +26,56 @@ impl Data {
     }
 }
 
-fn parse_md(file: &PathBuf) -> Value {
+struct Meta<'m> {
+    name: &'m str,
+    filename: String,
+    raw: String,
+}
+
+fn parse_helper<'m>(file: &'m PathBuf) -> Option<Meta<'m>> {
     if let Some(filename) = file.file_name() {
         let filename = filename.to_str().unwrap().to_string();
-        let name = file.file_stem().unwrap().to_str().unwrap().to_string();
 
-        let raw = read_to_string(&file).ok().unwrap_or_default();
+        let file_stem = file
+            .file_stem()
+            .unwrap_or_default()
+            .to_str()
+            .unwrap_or_default();
+
+        let data_ext = format!(".data");
+
+        let name = if file_stem.ends_with(&data_ext) {
+            let mut name = file_stem.split(&data_ext);
+            let name = name.next();
+            name.unwrap()
+        } else {
+            file_stem
+        };
+
+        let raw = read_to_string(file).ok().unwrap_or_default();
+
+        return Some(Meta {
+            name,
+            filename,
+            raw,
+        });
+    }
+
+    None
+}
+
+fn parse_md(file: &PathBuf) -> Value {
+    if let Some(meta) = parse_helper(file) {
         let matter = Matter::<YAML>::new();
-        let data = matter.parse(&raw);
+        let data = matter.parse(&meta.raw);
         let content_meta: Value = data.data.unwrap().deserialize().unwrap();
 
         let value = json!({
             "meta": {
-                "filename": filename,
-                "raw_content": raw
+                "filename": meta.filename,
+                "raw_content": meta.raw
             },
-            "name": name,
+            "name": meta.name,
             "content": data.content,
             "data": content_meta
         });
@@ -53,19 +87,15 @@ fn parse_md(file: &PathBuf) -> Value {
 }
 
 fn parse_json(file: &PathBuf) -> Value {
-    if let Some(filename) = file.file_name() {
-        let filename = filename.to_str().unwrap().to_string();
-        let name = file.file_stem().unwrap().to_str().unwrap().to_string();
-
-        let raw = read_to_string(&file).ok().unwrap_or_default();
-        let data: Value = from_str(&raw).unwrap_or_default();
+    if let Some(meta) = parse_helper(file) {
+        let data: Value = from_str(&meta.raw).unwrap_or_default();
 
         let value = json!({
             "meta": {
-                "filename": filename,
-                "raw_content": raw
+                "filename": meta.filename,
+                "raw_content": meta.raw
             },
-            "name": name,
+            "name": meta.name,
             "content": Value::Null,
             "data": data
         });
@@ -175,7 +205,7 @@ pub fn get_data() -> SerdeJsonResult<Data> {
     }
 
     Ok(Data {
-        list: list.to_owned(),
-        json: json.to_owned(),
+        for_each: list.to_owned(),
+        for_query: json.to_owned(),
     })
 }

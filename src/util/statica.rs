@@ -189,7 +189,6 @@ const BODY_TAG_OPEN: &str = "<body>";
 /// Should be a valid uncomment line containing a given token
 fn is_uncommented(line: &str, token: &str, check: fn(&str) -> bool) -> bool {
     let trimmed = line.trim_start();
-
     // the default values here dont matter, they are set so that we can unwrap the values in place
     // if either token is not found, it should default to the comment index being larger, way larger
     let token_index = trimmed.find(token).unwrap_or(0);
@@ -1000,7 +999,7 @@ fn resolve_props(
                     let key = line.get(start..end).unwrap();
 
                     let value_tok = format!("{value_template}{key}\")");
-                    let data_item = &data.list[render_index];
+                    let data_item = &data.for_each[render_index];
 
                     // println!("index {render_index} {:?}", data_item.pointer(key));
 
@@ -1242,7 +1241,7 @@ fn eval_directives(passed_props: PropMap) -> (usize, PropMap) {
                     *new_prop.value_mut() = Some("".to_string());
                     // add new prop to the map
                     map.insert(var.to_string(), new_prop);
-                    data_count = data.list.len();
+                    data_count = data.for_each.len();
                 }
             }
         }
