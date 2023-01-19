@@ -1001,8 +1001,6 @@ fn resolve_props(
                     let value_tok = format!("{value_template}{key}\")");
                     let data_item = &data.for_each[render_index];
 
-                    // println!("index {render_index} {:?}", data_item.pointer(key));
-
                     if let Some(val) = data_item.pointer(key) {
                         let data = val.as_str().unwrap();
 
@@ -1213,42 +1211,40 @@ fn transform_component(data: &Proc, render_index: usize, is_nested: bool) -> Res
 }
 
 fn eval_directives(passed_props: PropMap) -> (usize, PropMap) {
-    const FN_PROP_TOKEN: &str = ":";
-    const VALID_PROP_FNS: [&str; 1] = [":each"];
-    let data = data::get_data().ok().unwrap();
-    let mut data_count: usize = 0;
+    // let data = data::get_data().ok();
 
-    // println!("{}", data.list_to_string());
+    if let Ok(data) = data::get_data() {
+        // handle passed props with this mutable var
+        let map = &mut PropMap::from(passed_props.to_owned());
+        // data size
+        let data_count = data.for_each.len();
 
-    let map = &mut PropMap::from(passed_props.to_owned());
+        for (prop_name, prop_meta) in passed_props {
+            match prop_name.as_str() {
+                ":each" => {
+                    // remove directive from the original proplist
+                    map.remove(&prop_name);
 
-    for (prop_name, prop_meta) in passed_props {
-        let is_directive = prop_name.starts_with(FN_PROP_TOKEN);
+                    let meta = prop_meta.to_owned();
+                    let fn_body = meta.value;
 
-        // should be a valid fn prop
-        if is_directive && VALID_PROP_FNS.contains(&prop_name.as_str()) {
-            // remove directive from the props
-            map.remove(&prop_name);
-
-            let meta = prop_meta.to_owned();
-            let fn_body = meta.value;
-
-            if let Some(body) = fn_body {
-                let mut evaled_body = body.split("in");
-
-                if let Some(var) = evaled_body.next() {
-                    let mut new_prop = Prop::new(var);
-                    *new_prop.value_mut() = Some("".to_string());
-                    // add new prop to the map
-                    map.insert(var.to_string(), new_prop);
-                    data_count = data.for_each.len();
+                    if let Some(var) = fn_body {
+                        let mut new_prop = Prop::new(&var);
+                        // define it with an empty value for now
+                        *new_prop.value_mut() = Some("".to_string());
+                        // add new prop to the map
+                        map.insert(var.to_string(), new_prop);
+                    }
                 }
+                _ => {}
             }
         }
+
+        // props without directives
+        return (data_count, map.to_owned());
     }
 
-    // props without directives
-    (data_count, map.to_owned())
+    (0, PropMap::new())
 }
 
 // *** INTERFACE ***

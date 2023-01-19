@@ -107,7 +107,7 @@ fn parse_json(file: &PathBuf) -> Value {
 }
 
 /// Transforms a path into a JSON Object
-fn transform_path_into_object(file: &PathBuf, content: Value) -> (String, Value) {
+fn transform_path_into_object(file: &PathBuf, content: &Value) -> (String, Value) {
     let stripped = if path::is_data_dir(file) {
         path::strip_data_dir(&file)
     } else {
@@ -190,14 +190,20 @@ pub fn get_data() -> SerdeJsonResult<Data> {
         match ext {
             Some("md") => {
                 let content = parse_md(&file);
-                let obj = transform_path_into_object(&file, content);
-                list.push(obj.1.to_owned());
+                let obj = transform_path_into_object(&file, &content);
+
+                // println!("{}", to_string_pretty(&obj.1).ok().unwrap());
+
+                list.push(content);
                 json.insert(obj.0, obj.1);
             }
             Some("json") => {
                 let content = parse_json(&file);
-                let obj = transform_path_into_object(&file, content);
-                list.push(obj.1.to_owned());
+                let obj = transform_path_into_object(&file, &content);
+
+                // println!("{}", to_string_pretty(&obj.1).ok().unwrap());
+
+                list.push(content);
                 json.insert(obj.0, obj.1);
             }
             _ => {}
