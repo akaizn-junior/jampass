@@ -1002,11 +1002,11 @@ fn resolve_props(
                     let data_item = &data.for_each[render_index];
 
                     if let Some(val) = data_item.pointer(key) {
-                        let data = val.as_str().unwrap();
-
-                        let replaced = line.replace(&value_tok, data);
-                        result.push_str(&replaced);
-                        result.push_str(NL);
+                        if let Some(data) = val.as_str() {
+                            let replaced = line.replace(&value_tok, data);
+                            result.push_str(&replaced);
+                            result.push_str(NL);
+                        }
                     }
                 }
 
