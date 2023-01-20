@@ -69,6 +69,7 @@ fn parse_md(file: &PathBuf) -> Value {
         let matter = Matter::<YAML>::new();
         let data = matter.parse(&meta.raw);
         let content_meta: Value = data.data.unwrap().deserialize().unwrap();
+        let html = markdown::to_html(&data.content);
 
         let value = json!({
             "meta": {
@@ -76,7 +77,7 @@ fn parse_md(file: &PathBuf) -> Value {
                 "raw_content": meta.raw
             },
             "name": meta.name,
-            "content": data.content,
+            "content": html,
             "data": content_meta
         });
 
