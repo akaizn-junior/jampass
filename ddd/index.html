@@ -10,18 +10,40 @@
 
     <body>
         Hello World!
-        <template id="x-div" data-props="item">
+        <template id="x-test" data-fragment="">
+            <div class="foo bar">
+                <p>Test</p>
+                <em>Testing</em>
+            </div>
+        </template>
+        <template id="x-test2" data-fragment="false">
+            <p>Test</p>
+            <em>Testing</em>
+        </template>
+        <template id="x-test3" data-fragment="true">
+            <p>Test</p>
+            <em>Testing</em>
+        </template>
+        <!-- <template id="x-div" data-props="it">
             <div>
-                <b name="name">$value("item/name")</b>
-                <b name="name">$value("item/meta/filename")</b>
-                <div name="name">$value("item/content")</div>
-                <!-- <slot name="name"></slot> -->
+                <b>$value("it/name")</b>
+                <b>$value("it/meta/filename")</b>
+                <slot name="content"></slot>
             </div>
         </template>
 
-        <x-div :each="item">
-            <!-- <p slot="name">$value("item/name")</p> -->
-        </x-div>
+        <x-div :for-each="item">
+            <div slot="content">$value("it/content")</div>
+        </x-div> -->
+
+        <!-- Test  -->
+        <x-test />
+
+        <!-- Test 2 -->
+        <x-test2 />
+
+        <!-- Fragment -->
+        <x-test3 />
     </body>
 
 </html>

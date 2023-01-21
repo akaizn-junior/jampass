@@ -9,6 +9,7 @@ use std::{fs::read_to_string, path::PathBuf};
 pub struct Data {
     pub for_each: Vec<Value>,
     pub for_query: Map<String, Value>,
+    pub length: usize,
 }
 
 impl Data {
@@ -214,5 +215,6 @@ pub fn get_data() -> SerdeJsonResult<Data> {
     Ok(Data {
         for_each: list.to_owned(),
         for_query: json.to_owned(),
+        length: list.len(),
     })
 }

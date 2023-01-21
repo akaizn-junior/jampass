@@ -21,28 +21,27 @@ struct Checksum {
     as_hex: String,
 }
 
-/// A dict for component props
-type PropMap = HashMap<String, Prop>;
-
 struct Cursor {
-    line: i32,
-    col: i32,
+    line: usize,
+    col: usize,
 }
 
+/// Metadata for a component being processed
 #[derive(Debug, Clone)]
 struct Meta {
     name: String,
     file: PathBuf,
 }
 
-/// Processed
+/// Data for a component being processed
 #[derive(Debug, Clone)]
 struct Proc {
-    meta: Meta,
-    html: String,
     /// keeps count of how may times a component is rendered
     usage: i32,
     props: Option<PropMap>,
+    meta: Meta,
+    html: String,
+    inner_html: Option<String>,
 }
 
 impl Proc {
@@ -54,6 +53,11 @@ impl Proc {
     /// Add props
     fn props_mut(&mut self) -> &mut Option<PropMap> {
         &mut self.props
+    }
+
+    /// Inner HTML
+    fn inner_html_mut(&mut self) -> &mut Option<String> {
+        &mut self.inner_html
     }
 }
 
@@ -147,12 +151,59 @@ impl Prop {
     }
 
     fn to_string(&self) -> String {
+        if self.name.is_empty() {
+            return String::new();
+        }
+
         format!(
             "{}=\"{}\"{SP}",
             self.name,
             self.value.as_ref().unwrap_or(&"".to_string())
         )
     }
+}
+
+/// A type for component props
+type PropMap = HashMap<String, Prop>;
+
+#[derive(Debug, Clone)]
+struct Props {
+    map: PropMap,
+}
+
+impl Props {
+    fn new(props: PropMap) -> Self {
+        Self { map: props }
+    }
+
+    /// Inserts a prop to the prop map, if the prop already exists, updates its value
+    fn add_prop(&mut self, name: &str, value: Option<String>) {
+        let mut prop = Prop::new(name);
+        *prop.value_mut() = value.to_owned();
+
+        self.map
+            .entry(name.to_string())
+            .and_modify(|exists| {
+                let exists_value = exists.value_mut().as_mut();
+
+                if let Some(insert) = exists_value {
+                    if let Some(val) = value {
+                        let to_append = format!("{SP}{val}");
+                        insert.push_str(&to_append);
+                    }
+                }
+            })
+            .or_insert(prop);
+    }
+
+    fn to_string(self) -> String {
+        attrs_to_string(self.map)
+    }
+}
+
+struct Directive {
+    render_count: usize,
+    props: PropMap,
 }
 
 // *** CONSTANTS ***
@@ -191,6 +242,7 @@ fn is_uncommented(line: &str, token: &str, check: fn(&str) -> bool) -> bool {
     let trimmed = line.trim_start();
     // the default values here dont matter, they are set so that we can unwrap the values in place
     // if either token is not found, it should default to the comment index being larger, way larger
+    // because if token_index is found but no comment_index, you want it to be always larger, so the check matches
     let token_index = trimmed.find(token).unwrap_or(0);
     let comment_index = trimmed.find(HTML_COMMENT_START_TOKEN).unwrap_or(999999999);
     let is_uncommented = token_index < comment_index;
@@ -385,176 +437,64 @@ fn evaluate_url(entry_file: &PathBuf, linked_path: &str) -> Option<PathBuf> {
     Some(asset_path)
 }
 
-/// Replaces component slots with their placements
-fn fill_component_slots(c_code: &String, placements: &str) -> String {
-    let mut result = String::new();
-    result.push_str(c_code);
+fn evaluate_props(
+    list: Option<&String>,
+    props_sep_tok: &str,
+    props_value_tok: &str,
+    handler: fn(name: &str, value: Option<&str>) -> Prop,
+) -> PropMap {
+    let mut map = PropMap::new();
 
-    let mut lines = placements.lines();
+    if let Some(props) = list {
+        let prop_list = props.split(props_sep_tok);
 
-    // a dict for all named placements
-    let mut named = HashMap::<String, String>::new();
-    // the rest
-    let mut rest = Vec::<&str>::new();
-
-    // *** Collect placements
-
-    let mut line = lines.next();
-    while line.is_some() {
-        let elem = line.unwrap();
-
-        if is_uncommented(elem, "slot=", |line| line.contains("slot=")) {
-            let tag_name = get_tag_name(elem).unwrap();
-            let attrs = get_attrs_inline(elem);
-
-            if let Some(attr) = attrs.get("slot") {
-                let elem_html = consume_tag_html(elem, &mut lines, &tag_name);
-                let value = attr.value.to_owned().unwrap_or_default();
-                named.insert(value, elem_html);
-            }
-        } else {
-            rest.push(elem);
-        }
-
-        line = lines.next();
-    }
-
-    // *** Fill component slots
-
-    let mut lines = c_code.lines();
-    let mut line = lines.next();
-
-    while line.is_some() {
-        let elem = line.unwrap();
-        let is_named = is_uncommented(elem, "<slot", |line| {
-            line.contains("<slot") && line.contains("name=\"")
-        });
-
-        let is_catch_all = is_uncommented(elem, "<slot", |line| {
-            line.contains("<slot") && !line.contains("name=\"")
-        });
-
-        // join all captured lines for the catch all slot
-        let catch_all_html = rest.join(NL);
-
-        if is_catch_all {
-            let slot_tag_html = consume_tag_html(elem, &mut lines, "slot");
-            result = replace_chunk(&result, &slot_tag_html, &catch_all_html);
-            line = lines.next();
-            continue;
-        }
-
-        if is_named {
-            let slot_tag_html = consume_tag_html(elem, &mut lines, "slot");
-            let attrs = get_attrs_inline(elem);
-            let name_attr = attrs.get("name").unwrap();
-            let name_attr_value = name_attr.value.to_owned().unwrap_or_default();
-
-            if let Some(placement) = named.get(&name_attr_value) {
-                // finally replace the slot with the placement
-                result = replace_chunk(&result, &slot_tag_html, placement);
-                line = lines.next();
-                continue;
+        for prop_item in prop_list {
+            if prop_item.contains(props_value_tok) {
+                let mut prop = prop_item.split(props_value_tok);
+                let name = prop.next().unwrap();
+                let value = prop.next();
+                let prop = handler(name, value);
+                map.insert(name.to_string(), prop);
+            } else {
+                let prop = Prop::new(prop_item.trim());
+                map.insert(prop_item.trim().to_string(), prop);
             }
         }
-
-        line = lines.next();
     }
 
-    return result;
+    return map;
 }
 
-/// Replaces the static component with the code generated
-fn resolve_component(
-    pre: &str,
-    lines: &mut Lines,
-    data: &Proc,
-    render_count: usize,
-    is_nested: bool,
-) -> Result<String> {
-    let c_id = &data.meta.name;
-    let ctag_open_token = format!("<{}", c_id);
-    let ctag_close_token = format!("</{}", c_id);
+/// Evaluates component directives and passes directive props to the list of props
+fn evaluate_directives(passed_props: PropMap) -> Directive {
+    if let Ok(data) = data::get_data() {
+        // handle passed props with this mutable var
+        let map = &mut PropMap::from(passed_props.to_owned());
 
-    let mut result = String::new();
+        if let Some(prop) = passed_props.get(":for-each") {
+            // remove directive from the original proplist
+            map.remove(&prop.name);
 
-    // does this line contain a tag openning
-    let tag_open = pre.contains(&ctag_open_token);
-    // should indicate the closing of an open tag
-    let tag_close = pre.contains(&ctag_close_token);
-    // for when a component is declared as an unpaired tag
-    let unpaired_close = pre.contains(&UNPAIRED_TAG_CLOSE_TOKEN);
+            let directive_body = &prop.value;
+            if let Some(var) = directive_body {
+                let mut new_prop = Prop::new(var);
+                // define it with an empty value for now
+                *new_prop.value_mut() = Some("".to_string());
+                // add new prop to the map
+                map.insert(var.to_string(), new_prop);
+            }
 
-    let is_unpaired_tag =
-        tag_open && !pre.contains(UNPAIRED_TAG_CLOSE_TOKEN) && !pre.contains(&ctag_close_token);
-
-    // something line <tag />
-    let is_unpaired_inline = tag_open && unpaired_close;
-    // something like <tag></tag> in the same line
-    let is_paired_inline = tag_open && tag_close;
-
-    if is_unpaired_inline {
-        for render_index in 0..render_count {
-            let c_code = transform_component(data, render_index, is_nested)?;
-            result.push_str(&c_code);
+            return Directive {
+                render_count: data.length,
+                props: map.to_owned(),
+            };
         }
-
-        return Ok(result);
     }
 
-    if is_unpaired_tag {
-        let end_match = consume_until_end_token(lines, c_id);
-        const UNPAIRED_CODE: i32 = 0;
-        const PAIRED_CODE: i32 = 1;
-
-        if end_match.0.eq(&UNPAIRED_CODE) {
-            for render_index in 0..render_count {
-                let c_code = transform_component(data, render_index, is_nested)?;
-                result.push_str(&c_code);
-            }
-        }
-
-        if end_match.0.eq(&PAIRED_CODE) {
-            let inner_html = end_match.1;
-
-            for render_index in 0..render_count {
-                let c_code = transform_component(data, render_index, is_nested)?;
-                let with_filled_slots = fill_component_slots(&c_code, &inner_html);
-                result.push_str(&with_filled_slots);
-            }
-        }
-
-        // ok, done!
-        return Ok(result);
+    Directive {
+        render_count: 1,
+        props: passed_props,
     }
-
-    if is_paired_inline {
-        let inner_html = consume_inner_html_inline(pre);
-
-        if let Some(inner_html) = inner_html {
-            // no inner html, ship it
-            if inner_html.is_empty() {
-                for render_index in 0..render_count {
-                    let c_html = transform_component(data, render_index, is_nested)?;
-                    result.push_str(&c_html);
-                }
-
-                return Ok(result);
-            }
-
-            for render_index in 0..render_count {
-                let c_html = transform_component(data, render_index, is_nested)?;
-                let with_filled_slots = fill_component_slots(&c_html, &inner_html);
-                result.push_str(&with_filled_slots);
-            }
-        }
-
-        // ok, done!
-        return Ok(result);
-    }
-
-    result.push_str(pre);
-    return Ok(result);
 }
 
 /// The tag name is a ASCII string that may contain dashes
@@ -830,7 +770,7 @@ fn transform_attrs_with_scope(line: &str, tag_name: String, scope: &str) -> Stri
         // edit the class attr with the new scoped values
         attrs
             .entry("class".to_string())
-            .and_modify(|v| *v.value_mut() = Some(class_list));
+            .and_modify(|prop| *prop.value_mut() = Some(class_list));
 
         // attrs back to string
         let attrs = attrs_to_string(attrs);
@@ -857,75 +797,6 @@ fn transform_attrs_with_scope(line: &str, tag_name: String, scope: &str) -> Stri
     }
 
     return line.to_string();
-}
-
-fn scope_component_html(code: &str, scope: &str) -> String {
-    let mut result = String::new();
-    let mut lines = code.lines();
-    let mut line = lines.next();
-
-    if code.is_empty() || is_text_node(code) {
-        return code.to_string();
-    }
-
-    while line.is_some() {
-        let pre = line.unwrap();
-        let trimmed = pre.trim();
-        let is_comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
-
-        if pre.is_empty() || is_comment {
-            result.push_str(pre);
-            line = lines.next();
-            continue;
-        }
-
-        if let Some(tag_name) = get_tag_name(pre) {
-            // don't transform these
-            let skip = vec!["style", "script", "slot"];
-            if !skip.contains(&tag_name.as_ref()) {
-                let transformed = transform_attrs_with_scope(pre, tag_name, scope);
-
-                result.push_str(&transformed);
-                result.push_str(NL);
-                line = lines.next();
-                continue;
-            }
-        }
-
-        result.push_str(pre);
-        result.push_str(NL);
-        line = lines.next();
-    }
-
-    result
-}
-
-fn evaluate_props(
-    list: Option<&String>,
-    props_sep_tok: &str,
-    props_value_tok: &str,
-    handler: fn(name: &str, value: Option<&str>) -> Prop,
-) -> PropMap {
-    let mut map = PropMap::new();
-
-    if let Some(props) = list {
-        let prop_list = props.split(props_sep_tok);
-
-        for prop_item in prop_list {
-            if prop_item.contains(props_value_tok) {
-                let mut prop = prop_item.split(props_value_tok);
-                let name = prop.next().unwrap();
-                let value = prop.next();
-                let prop = handler(name, value);
-                map.insert(name.to_string(), prop);
-            } else {
-                let prop = Prop::new(prop_item.trim());
-                map.insert(prop_item.trim().to_string(), prop);
-            }
-        }
-    }
-
-    return map;
 }
 
 fn get_props_dict(list: Option<&String>) -> PropMap {
@@ -968,6 +839,48 @@ fn attrs_to_string(attrs: PropMap) -> String {
             acc
         })
         .to_string()
+}
+
+/// Adds a scope to every element in the component line by line
+fn scope_component_html(code: &str, scope: &str) -> String {
+    let mut result = String::new();
+    let mut lines = code.lines();
+    let mut line = lines.next();
+
+    if code.is_empty() || is_text_node(code) {
+        return code.to_string();
+    }
+
+    while line.is_some() {
+        let pre = line.unwrap();
+        let trimmed = pre.trim();
+        let is_comment = trimmed.starts_with(HTML_COMMENT_START_TOKEN);
+
+        if pre.is_empty() || is_comment {
+            result.push_str(pre);
+            line = lines.next();
+            continue;
+        }
+
+        if let Some(tag_name) = get_tag_name(pre) {
+            // don't transform these
+            let skip = vec!["style", "script", "slot"];
+            if !skip.contains(&tag_name.as_ref()) {
+                let transformed = transform_attrs_with_scope(pre, tag_name, scope);
+
+                result.push_str(&transformed);
+                result.push_str(NL);
+                line = lines.next();
+                continue;
+            }
+        }
+
+        result.push_str(pre);
+        result.push_str(NL);
+        line = lines.next();
+    }
+
+    result
 }
 
 fn resolve_props(
@@ -1082,12 +995,98 @@ fn resolve_props(
     result
 }
 
-fn transform_component(data: &Proc, render_index: usize, is_nested: bool) -> Result<String> {
+/// Replaces component slots with their placements AKA component children
+fn fill_component_slots(c_code: &String, c_children: &str) -> String {
+    let mut result = String::new();
+    result.push_str(c_code);
+
+    let mut lines = c_children.lines();
+
+    // a dict for all named placements
+    let mut named = HashMap::<String, String>::new();
+    // the rest
+    let mut rest = Vec::<&str>::new();
+
+    // *** Collect placements
+
+    let mut line = lines.next();
+    while line.is_some() {
+        let elem = line.unwrap();
+
+        if is_uncommented(elem, "slot=", |line| line.contains("slot=")) {
+            let tag_name = get_tag_name(elem).unwrap();
+            let attrs = get_attrs_inline(elem);
+
+            if let Some(attr) = attrs.get("slot") {
+                let elem_html = consume_tag_html(elem, &mut lines, &tag_name);
+                let value = attr.value.to_owned().unwrap_or_default();
+                named.insert(value, elem_html);
+            }
+        } else {
+            rest.push(elem);
+        }
+
+        line = lines.next();
+    }
+
+    // *** Fill component slots
+
+    let mut lines = c_code.lines();
+    let mut line = lines.next();
+
+    while line.is_some() {
+        let elem = line.unwrap();
+
+        // join all captured lines for the catch all slot
+        let catch_all_html = rest.join(NL);
+
+        let is_catch_all = is_uncommented(elem, "<slot", |line| {
+            line.contains("<slot") && !line.contains("name=\"")
+        });
+
+        if is_catch_all {
+            let slot_tag_html = consume_tag_html(elem, &mut lines, "slot");
+            result = replace_chunk(&result, &slot_tag_html, &catch_all_html);
+            line = lines.next();
+            continue;
+        }
+
+        let is_named = is_uncommented(elem, "<slot", |line| {
+            line.contains("<slot") && line.contains("name=\"")
+        });
+
+        if is_named {
+            let slot_tag_html = consume_tag_html(elem, &mut lines, "slot");
+            let attrs = get_attrs_inline(elem);
+            let name_attr = attrs.get("name").unwrap();
+            let name_attr_value = name_attr.value.to_owned().unwrap_or_default();
+
+            if let Some(placement) = named.get(&name_attr_value) {
+                // finally replace the slot with the placement
+                result = replace_chunk(&result, &slot_tag_html, placement);
+                line = lines.next();
+                continue;
+            }
+        }
+
+        line = lines.next();
+    }
+
+    return result;
+}
+
+fn resolve_component(data: &Proc, render_index: usize, is_nested: bool) -> Result<String> {
     let file = &data.meta.file;
     let c_id = &data.meta.name;
-    let c_code = &data.html;
     let usage_count = data.usage;
     let passed_props = data.props.as_ref();
+
+    // fill slots if component has children
+    let c_code = if let Some(inner_html) = &data.inner_html {
+        fill_component_slots(&data.html, &inner_html)
+    } else {
+        data.html.to_owned()
+    };
 
     let code = c_code.trim_start();
     let is_template_tag = code.starts_with(TEMPLATE_START_TOKEN);
@@ -1185,66 +1184,139 @@ fn transform_component(data: &Proc, render_index: usize, is_nested: bool) -> Res
     // if the component is not a fragment, check for a root element
     if !is_fragment {
         let rest = tags;
-
-        // let first_line = rest.lines().next().unwrap_or("");
+        // there will be two approaches to handle components with and without root elements
         let has_root_node = has_root_node(&rest);
 
-        let c_attrs = format!(
-            "{}=\"{c_scope}\"{SP}{}=\"{is_nested}\"{SP}{}=\"{c_id}\"{SP}{}=\"{usage_count}\"",
-            DATA_SCOPE_TOKEN, DATA_NESTED_TOKEN, DATA_COMPONENT_NAME, DATA_COMPONENT_INSTANCE
-        );
-
+        // when there is no root node, wrap component elements with a div with scoped attributes
         if !has_root_node {
-            let scoped_code = format!("<div{SP}{c_attrs}>{rest}</div>{parsed_css_and_script}");
-            return Ok(scoped_code);
+            let scoped_attrs = format!(
+                "{}=\"{c_scope}\"{SP}{}=\"{is_nested}\"{SP}{}=\"{c_id}\"{SP}{}=\"{usage_count}\"",
+                DATA_SCOPE_TOKEN, DATA_NESTED_TOKEN, DATA_COMPONENT_NAME, DATA_COMPONENT_INSTANCE
+            );
+
+            // component code has to be scoped to avoid collisions with other components
+            let scoped_code = scope_component_html(&rest, &c_scope);
+            let html = format!("<div{SP}{scoped_attrs}>{scoped_code}</div>{parsed_css_and_script}");
+            return Ok(html);
         }
 
         if has_root_node {
-            // scope every element
-            let scoped_code = scope_component_html(&rest, &c_scope);
-            let scoped_code = format!("{scoped_code}{parsed_css_and_script}");
-            return Ok(scoped_code);
+            let root_node_line = rest.lines().next().unwrap_or_default();
+            let tag_name = get_tag_name(root_node_line).unwrap();
+            let tag_start = format!("<{tag_name}");
+            let tag_end = format!("</{tag_name}");
+
+            let attrs = get_attrs_inline(root_node_line);
+            let mut props = Props::new(attrs);
+
+            props.add_prop(DATA_SCOPE_TOKEN, Some(c_scope.to_string()));
+            props.add_prop(DATA_NESTED_TOKEN, Some(is_nested.to_string()));
+            props.add_prop(DATA_COMPONENT_NAME, Some(c_id.to_string()));
+            props.add_prop(DATA_COMPONENT_INSTANCE, Some(usage_count.to_string()));
+
+            let root_attrs = props.to_string();
+            let inner_html = consume_component_inner_html(&rest);
+            let with_root_attrs =
+                format!("{tag_start}{SP}{root_attrs}{SP}>{NL}{inner_html}{tag_end}>");
+
+            // component code has to be scoped to avoid collisions with other components
+            let html = scope_component_html(&with_root_attrs, &c_scope);
+            return Ok(html);
         }
     }
 
     Ok("".to_string())
 }
 
-fn eval_directives(passed_props: PropMap) -> (usize, PropMap) {
-    // let data = data::get_data().ok();
+/// Replaces the static component with the code generated
+fn transform_component(
+    usage_line: &str,
+    lines: &mut Lines,
+    data: &mut Proc,
+    is_nested: bool,
+) -> Result<String> {
+    // collect all transformed lines
+    let mut result = String::new();
+    // get usage props
+    let passed_props = get_attrs_inline(usage_line);
 
-    if let Ok(data) = data::get_data() {
-        // handle passed props with this mutable var
-        let map = &mut PropMap::from(passed_props.to_owned());
-        // data size
-        let data_count = data.for_each.len();
+    let directive = evaluate_directives(passed_props);
+    // add evald props to processed data
+    *data.props_mut() = Some(directive.props);
 
-        for (prop_name, prop_meta) in passed_props {
-            match prop_name.as_str() {
-                ":each" => {
-                    // remove directive from the original proplist
-                    map.remove(&prop_name);
+    // how many time should render based on a directive
+    let render_count = directive.render_count;
 
-                    let meta = prop_meta.to_owned();
-                    let fn_body = meta.value;
+    let c_id = &data.meta.name;
+    let ctag_open_token = format!("<{}", c_id);
+    let ctag_close_token = format!("</{}", c_id);
 
-                    if let Some(var) = fn_body {
-                        let mut new_prop = Prop::new(&var);
-                        // define it with an empty value for now
-                        *new_prop.value_mut() = Some("".to_string());
-                        // add new prop to the map
-                        map.insert(var.to_string(), new_prop);
-                    }
-                }
-                _ => {}
+    // does this line contain a tag openning
+    let tag_open = usage_line.contains(&ctag_open_token);
+    // should indicate the closing of an open tag
+    let tag_close = usage_line.contains(&ctag_close_token);
+    // for when a component is declared as an unpaired tag
+    let unpaired_close = usage_line.contains(&UNPAIRED_TAG_CLOSE_TOKEN);
+
+    // something line <tag />
+    let is_unpaired_inline = tag_open && unpaired_close;
+    if is_unpaired_inline {
+        for render_index in 0..render_count {
+            let c_code = resolve_component(data, render_index, is_nested)?;
+            result.push_str(&c_code);
+        }
+
+        return Ok(result);
+    }
+
+    // something line <tag \n\n /> or <tag> \n\n </tag>
+    let is_unpaired_tag = tag_open
+        && !usage_line.contains(UNPAIRED_TAG_CLOSE_TOKEN)
+        && !usage_line.contains(&ctag_close_token);
+
+    if is_unpaired_tag {
+        let end_match = consume_until_end_token(lines, c_id);
+
+        // for when it terminates the paired tag with a /> token
+        const UNPAIRED_CODE: i32 = 0;
+        if end_match.0.eq(&UNPAIRED_CODE) {
+            for render_index in 0..render_count {
+                let c_code = resolve_component(data, render_index, is_nested)?;
+                result.push_str(&c_code);
             }
         }
 
-        // props without directives
-        return (data_count, map.to_owned());
+        // fot when it finds a matching paired tag, such as </tag>
+        const PAIRED_CODE: i32 = 1;
+        if end_match.0.eq(&PAIRED_CODE) {
+            *data.inner_html_mut() = Some(end_match.1);
+
+            for render_index in 0..render_count {
+                let c_code = resolve_component(data, render_index, is_nested)?;
+                result.push_str(&c_code);
+            }
+        }
+
+        // ok, done!
+        return Ok(result);
     }
 
-    (0, PropMap::new())
+    // something like <tag></tag> in the same line
+    let is_paired_inline = tag_open && tag_close;
+    if is_paired_inline {
+        *data.inner_html_mut() = consume_inner_html_inline(usage_line);
+
+        for render_index in 0..render_count {
+            let c_html = resolve_component(data, render_index, is_nested)?;
+            result.push_str(&c_html);
+        }
+
+        // ok, done!
+        return Ok(result);
+    }
+
+    result.push_str(usage_line);
+    return Ok(result);
 }
 
 // *** INTERFACE ***
@@ -1253,7 +1325,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
     let code = code.trim_start();
     let mut lines = code.lines();
     let mut line = lines.next();
-    let mut line_number = 0;
+    let mut line_number: usize = 0;
     let mut result = String::new();
 
     let mut processed = HashMap::<String, Proc>::new();
@@ -1386,7 +1458,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                 let c_html = consume_tag_html(trimmed, &mut lines, "template");
 
                 // update line number with the corrent number of lines skiped
-                let len_skipped: i32 = c_html.lines().count().try_into().unwrap_or_default();
+                let len_skipped = c_html.lines().count();
                 line_number.add_assign(len_skipped);
 
                 let mut parsed = transform(&c_html, file)?;
@@ -1401,6 +1473,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                         file: file.to_owned(),
                     },
                     html: c_html.to_owned(),
+                    inner_html: None,
                     usage: 0,
                     props: None,
                 };
@@ -1484,6 +1557,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                             file: c_file.to_owned(),
                         },
                         html: c_html.to_owned(),
+                        inner_html: None,
                         usage: 0,
                         props: None,
                     };
@@ -1543,35 +1617,18 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
 
             // Update the line count
             let tag_inner_html = consume_until_end_token(&mut lines.clone(), &c_name);
-
-            let len: i32 = tag_inner_html
-                .1
-                .lines()
-                .count()
-                .try_into()
-                .unwrap_or_default();
-
+            let len = tag_inner_html.1.lines().count();
             // add to the line number, the number of inner items plus the end tag
             // obvs inline component usage is already accounted for
             if !trimmed.contains(UNPAIRED_TAG_CLOSE_TOKEN) {
                 line_number.add_assign(len + 1);
             }
 
-            let passed_props = get_attrs_inline(trimmed);
-
-            let directive = eval_directives(passed_props);
-            let render_count = directive.0;
-            let passed_props = directive.1;
-            // add props to processed data
-            *data.props_mut() = Some(passed_props);
-
-            let resolved =
-                resolve_component(trimmed, &mut lines, data, render_count, is_component)?;
-
+            let transformed = transform_component(trimmed, &mut lines, data, is_component)?;
             // remove from unlisted
             unlisted.remove_entry(c_name.as_str());
 
-            write(&resolved);
+            write(&transformed);
             line = lines.next();
             continue;
         }
