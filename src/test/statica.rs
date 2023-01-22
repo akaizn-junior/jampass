@@ -2,7 +2,8 @@
 
 mod statica {
     use crate::core_t::Result as R;
-    use crate::util::{file, statica};
+    use crate::statica::statica;
+    use crate::util::file;
     use std::path::PathBuf;
 
     pub struct TestResult {
@@ -33,7 +34,10 @@ mod statica {
         let parsed = statica::transform(&code, &file)?;
         let expected = format_expected(expected);
 
-        Ok(TestResult { result: parsed.code, expected })
+        Ok(TestResult {
+            result: parsed.code,
+            expected,
+        })
     }
 
     #[test]

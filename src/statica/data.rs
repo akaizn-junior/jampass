@@ -6,6 +6,12 @@ use gray_matter::Matter;
 use crate::util::path;
 use std::{fs::read_to_string, path::PathBuf};
 
+struct FileMeta<'m> {
+    name: &'m str,
+    filename: String,
+    raw: String,
+}
+
 pub struct Data {
     pub for_each: Vec<Value>,
     pub for_query: Map<String, Value>,
@@ -13,7 +19,7 @@ pub struct Data {
 }
 
 impl Data {
-    pub fn list_to_string(&self) -> String {
+    pub fn _list_to_string(&self) -> String {
         let mut res = String::new();
         res.push_str("[");
 
@@ -27,13 +33,7 @@ impl Data {
     }
 }
 
-struct Meta<'m> {
-    name: &'m str,
-    filename: String,
-    raw: String,
-}
-
-fn parse_helper<'m>(file: &'m PathBuf) -> Option<Meta<'m>> {
+fn parse_helper<'m>(file: &'m PathBuf) -> Option<FileMeta<'m>> {
     if let Some(filename) = file.file_name() {
         let filename = filename.to_str().unwrap().to_string();
 
@@ -55,7 +55,7 @@ fn parse_helper<'m>(file: &'m PathBuf) -> Option<Meta<'m>> {
 
         let raw = read_to_string(file).ok().unwrap_or_default();
 
-        return Some(Meta {
+        return Some(FileMeta {
             name,
             filename,
             raw,
@@ -65,7 +65,7 @@ fn parse_helper<'m>(file: &'m PathBuf) -> Option<Meta<'m>> {
     None
 }
 
-fn parse_md(file: &PathBuf) -> Value {
+fn md_into_object(file: &PathBuf) -> Value {
     if let Some(meta) = parse_helper(file) {
         let matter = Matter::<YAML>::new();
         let data = matter.parse(&meta.raw);
@@ -88,7 +88,7 @@ fn parse_md(file: &PathBuf) -> Value {
     json!({})
 }
 
-fn parse_json(file: &PathBuf) -> Value {
+fn json_into_object(file: &PathBuf) -> Value {
     if let Some(meta) = parse_helper(file) {
         let data: Value = from_str(&meta.raw).unwrap_or_default();
 
@@ -191,7 +191,7 @@ pub fn get_data() -> SerdeJsonResult<Data> {
 
         match ext {
             Some("md") => {
-                let content = parse_md(&file);
+                let content = md_into_object(&file);
                 let obj = transform_path_into_object(&file, &content);
 
                 // println!("{}", to_string_pretty(&obj.1).ok().unwrap());
@@ -200,7 +200,7 @@ pub fn get_data() -> SerdeJsonResult<Data> {
                 json.insert(obj.0, obj.1);
             }
             Some("json") => {
-                let content = parse_json(&file);
+                let content = json_into_object(&file);
                 let obj = transform_path_into_object(&file, &content);
 
                 // println!("{}", to_string_pretty(&obj.1).ok().unwrap());

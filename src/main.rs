@@ -4,6 +4,7 @@ mod cli_t;
 mod core;
 mod core_t;
 mod env;
+mod statica;
 mod test;
 mod util;
 

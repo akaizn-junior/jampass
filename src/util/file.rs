@@ -10,9 +10,9 @@ use std::{
 use crate::{
     core_t::{Emoji, Result},
     env,
+    statica::statica,
     util::memory::{File, Memory},
     util::path,
-    util::statica,
 };
 
 /// Content checksum Type

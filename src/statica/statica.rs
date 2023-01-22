@@ -11,7 +11,8 @@ use std::{
 use crate::{
     core_t::{Colors, Emoji, Result},
     env,
-    util::{
+    statica::{
+        data,
         statica_c::{
             BODY_TAG_OPEN, COMPONENT_PREFIX_TOKEN, COMPONENT_TAG_START_TOKEN, CSS_AT_TOKEN,
             CSS_OPEN_RULE_TOKEN, DATA_COMPONENT_INSTANCE, DATA_COMPONENT_NAME, DATA_NESTED_TOKEN,
@@ -20,12 +21,12 @@ use crate::{
             LINK_START_TOKEN, NL, QUERY_FACTORY_TOKEN, QUERY_FN_NAME, SP, STATIC_QUERY_FN_TOKEN,
             TEMPLATE_END_TOKEN, TEMPLATE_START_TOKEN, UNPAIRED_TAG_CLOSE_TOKEN,
         },
-        data, path,
         statica_t::{
             Checksum, Cursor, Directive, Linked, Meta, Proc, Prop, PropMap, PropMeta, Props,
             ScopedSelector, TransformOutput, Unlisted,
         },
     },
+    util::path,
 };
 
 // *** HELPERS ***
