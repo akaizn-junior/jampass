@@ -12,7 +12,7 @@ use crate::{
     core_t::{Colors, Emoji, Result},
     env,
     util::{
-        constants::{
+        statica_c::{
             BODY_TAG_OPEN, COMPONENT_PREFIX_TOKEN, COMPONENT_TAG_START_TOKEN, CSS_AT_TOKEN,
             CSS_OPEN_RULE_TOKEN, DATA_COMPONENT_INSTANCE, DATA_COMPONENT_NAME, DATA_NESTED_TOKEN,
             DATA_SCOPE_TOKEN, GLOBAL_CORE_SCRIPT_ID, GLOBAL_CSS_ID, GLOBAL_SCRIPT_ID,
