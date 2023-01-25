@@ -1,5 +1,33 @@
 use crate::statica::statica_c::SP;
+use serde_json::{to_string_pretty, Map, Value};
 use std::{collections::HashMap, ops::AddAssign, path::PathBuf};
+
+pub struct FileMeta<'m> {
+    pub name: &'m str,
+    pub filename: String,
+    pub raw: String,
+}
+
+pub struct Data {
+    pub for_each: Vec<Value>,
+    pub for_query: Map<String, Value>,
+    pub length: usize,
+}
+
+impl Data {
+    pub fn _list_to_string(&self) -> String {
+        let mut res = String::new();
+        res.push_str("[");
+
+        for val in self.for_each.iter() {
+            let formatted = format!("\n{}", to_string_pretty(val).ok().unwrap_or_default());
+            res.push_str(&formatted);
+        }
+
+        res.push_str("]");
+        return res;
+    }
+}
 
 /// Content checksum Type
 pub struct Checksum {

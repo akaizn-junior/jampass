@@ -1,39 +1,14 @@
-use serde_json::{from_str, json, to_string_pretty, Map, Result as SerdeJsonResult, Value};
+use serde_json::{from_str, json, Map, Result as SerdeJsonResult, Value};
 
 use gray_matter::engine::YAML;
 use gray_matter::Matter;
 
+use crate::statica::statica_t::{Data, FileMeta};
 use crate::util::path;
+
 use std::{fs::read_to_string, path::PathBuf};
 
-struct FileMeta<'m> {
-    name: &'m str,
-    filename: String,
-    raw: String,
-}
-
-pub struct Data {
-    pub for_each: Vec<Value>,
-    pub for_query: Map<String, Value>,
-    pub length: usize,
-}
-
-impl Data {
-    pub fn _list_to_string(&self) -> String {
-        let mut res = String::new();
-        res.push_str("[");
-
-        for val in self.for_each.iter() {
-            let formatted = format!("\n{}", to_string_pretty(val).ok().unwrap_or_default());
-            res.push_str(&formatted);
-        }
-
-        res.push_str("]");
-        return res;
-    }
-}
-
-fn parse_helper<'m>(file: &'m PathBuf) -> Option<FileMeta<'m>> {
+fn get_file_meta<'m>(file: &'m PathBuf) -> Option<FileMeta<'m>> {
     if let Some(filename) = file.file_name() {
         let filename = filename.to_str().unwrap().to_string();
 
@@ -66,19 +41,19 @@ fn parse_helper<'m>(file: &'m PathBuf) -> Option<FileMeta<'m>> {
 }
 
 fn md_into_object(file: &PathBuf) -> Value {
-    if let Some(meta) = parse_helper(file) {
+    if let Some(meta) = get_file_meta(file) {
         let matter = Matter::<YAML>::new();
         let data = matter.parse(&meta.raw);
         let content_meta: Value = data.data.unwrap().deserialize().unwrap();
-        let html = markdown::to_html(&data.content);
+        let _html = markdown::to_html(&data.content);
 
         let value = json!({
             "meta": {
                 "filename": meta.filename,
-                "raw_content": meta.raw
+                "raw_content": null// meta.raw
             },
             "name": meta.name,
-            "content": html,
+            "content": null,// html,
             "data": content_meta
         });
 
@@ -89,13 +64,13 @@ fn md_into_object(file: &PathBuf) -> Value {
 }
 
 fn json_into_object(file: &PathBuf) -> Value {
-    if let Some(meta) = parse_helper(file) {
+    if let Some(meta) = get_file_meta(file) {
         let data: Value = from_str(&meta.raw).unwrap_or_default();
 
         let value = json!({
             "meta": {
                 "filename": meta.filename,
-                "raw_content": meta.raw
+                "raw_content": null //meta.raw
             },
             "name": meta.name,
             "content": Value::Null,
@@ -108,72 +83,15 @@ fn json_into_object(file: &PathBuf) -> Value {
     json!({})
 }
 
-/// Transforms a path into a JSON Object
-fn transform_path_into_object(file: &PathBuf, content: &Value) -> (String, Value) {
-    let stripped = if path::is_data_dir(file) {
-        path::strip_data_dir(&file)
-    } else {
-        path::strip_cwd(&file)
-    };
+// fn slugify(name: &str) -> String {
+//     let result = String::from(name);
+//     result
+//         .replace(" ", "-")
+//         .replace("/", "-")
+//         .replace("\n", "-")
+// }
 
-    let parts = stripped.components();
-    let key = &mut String::from("data");
-    let init = &mut json!({});
-
-    let object = parts.fold((key, init), |acc, part| {
-        let part_path = PathBuf::from(part.as_os_str());
-        let part_name = part_path.file_stem();
-
-        if part_name == None {
-            return acc;
-        }
-
-        let name = part_name.unwrap().to_str().unwrap();
-
-        if part_path.extension().is_some() {
-            let key = format!("/{}", acc.0);
-            let val = acc.1.pointer_mut(&key);
-
-            // if it has a parent object
-            if let Some(o) = val {
-                // finally insert the value
-                *o = json!({
-                    {name}: content
-                });
-
-                *acc.1 = o.to_owned();
-            } else {
-                *acc.0 = name.to_owned();
-                *acc.1 = content.to_owned();
-            }
-
-            return acc;
-        }
-
-        if acc.0 == "data" {
-            *acc.1 = json!({
-                {name.to_owned()}: {}
-            });
-
-            // next key
-            *acc.0 = name.to_owned();
-            return acc;
-        }
-
-        // nested object
-        *acc.1 = json!({
-            {acc.0.to_owned()}: {
-                {name.to_owned()}: {}
-            }
-        });
-
-        // build next key
-        *acc.0 = format!("{}/{}", acc.0, name);
-        return acc;
-    });
-
-    (object.0.to_owned(), object.1.to_owned())
-}
+// *** Interface ***
 
 pub fn get_data() -> SerdeJsonResult<Data> {
     let data_files = path::read_data().ok().unwrap();
@@ -192,21 +110,11 @@ pub fn get_data() -> SerdeJsonResult<Data> {
         match ext {
             Some("md") => {
                 let content = md_into_object(&file);
-                let obj = transform_path_into_object(&file, &content);
-
-                // println!("{}", to_string_pretty(&obj.1).ok().unwrap());
-
                 list.push(content);
-                json.insert(obj.0, obj.1);
             }
             Some("json") => {
                 let content = json_into_object(&file);
-                let obj = transform_path_into_object(&file, &content);
-
-                // println!("{}", to_string_pretty(&obj.1).ok().unwrap());
-
                 list.push(content);
-                json.insert(obj.0, obj.1);
             }
             _ => {}
         }
