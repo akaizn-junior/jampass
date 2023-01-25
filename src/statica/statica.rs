@@ -708,6 +708,7 @@ fn resolve_props(code: &str, data: &Proc, render_index: usize) -> Result<String>
 
     fn resolve(
         code: String,
+        proc: &Proc,
         templates: Vec<String>,
         value: &str,
         render_index: usize,
@@ -743,6 +744,16 @@ fn resolve_props(code: &str, data: &Proc, render_index: usize) -> Result<String>
                             result.push_str(&replaced);
                             result.push_str(NL);
                         }
+                    } else {
+                        println!(
+                            "\n{}{SP}{}:{}:{}\nundefined value {:?} did not find prop name\n|\n|>{SP}{}\n|\n",
+                            Emoji::FLAG,
+                            no_cwd_path_as_str(&proc.meta.file),
+                            proc.meta.cursor.line,
+                            proc.meta.cursor.col,
+                            value_tok,
+                            Colors::bold(line)
+                        );
                     }
                 }
 
@@ -800,15 +811,15 @@ fn resolve_props(code: &str, data: &Proc, render_index: usize) -> Result<String>
 
             if used.meta.source.eq("directive") {
                 let value = used.value.to_owned().unwrap_or_default();
-                return resolve(result, prop.templates, &value, render_index);
+                return resolve(result, data, prop.templates, &value, render_index);
             }
 
             if let Some(value) = &used.value {
-                return resolve(result, prop.templates, value, render_index);
+                return resolve(result, data, prop.templates, value, render_index);
             }
 
             if let Some(value) = &used.default {
-                return resolve(result, prop.templates, &value, render_index);
+                return resolve(result, data, prop.templates, &value, render_index);
             }
         } else {
             let usage_html = data.usage_html.to_owned().unwrap_or_default();
