@@ -29,6 +29,8 @@ use crate::{
     util::path,
 };
 
+use super::statica_t::DataEntryList;
+
 // *** HELPERS ***
 
 /// Should be a valid uncomment line containing a given token
@@ -273,22 +275,57 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
 
             let directive_body = &prop.value;
             if let Some(body) = directive_body {
+                // parse directive body
+                let mut body = body.split("in");
+                let data_var = body.next();
+
+                // if no data var defined, our journey ends here
+                if data_var.is_none() {
+                    return Directive {
+                        render_count: 0,
+                        props: map.to_owned(),
+                        data: vec![],
+                    };
+                }
+
+                // directive values, the var should be an actual string
+                let data_var = data_var.unwrap().trim();
+                // and the bin may be empty, to indicate, use all data
+                // let data_bin = body.next().and_then(|s| Some(s.trim().to_string()));
+                let data_bin = body.next().unwrap_or_default().trim();
+
                 // create an actual prop with the data from the directive body
-                let mut new_prop = Prop::new(body);
+                let mut new_prop = Prop::new(data_var);
                 // define it with an empty value for now
                 *new_prop.value_mut() = Some("".to_string());
                 // update prop meta
                 *new_prop.prop_meta_mut() = PropMeta {
                     source: "directive".to_string(),
                 };
+
                 // add new prop to the map
-                map.insert(body.to_string(), new_prop);
+                map.insert(data_var.to_string(), new_prop);
 
                 // check if the prop is in the component's props definition
-                if props_dict.contains_key(body) {
+                if props_dict.contains_key(data_var) {
+                    let bin: DataEntryList = data
+                        .for_each
+                        .into_iter()
+                        .filter(|item| {
+                            let dir = item.file.parent();
+
+                            if let Some(dir) = dir {
+                                return dir.to_str().unwrap().contains(data_bin);
+                            }
+
+                            return false;
+                        })
+                        .collect();
+
                     return Directive {
-                        render_count: data.length,
+                        render_count: bin.len(),
                         props: map.to_owned(),
+                        data: bin,
                     };
                 } else {
                     let usage_html = proc.usage_html.to_owned().unwrap_or_default();
@@ -298,14 +335,15 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
                         no_cwd_path_as_str(&proc.meta.file),
                         proc.meta.cursor.line,
                         proc.meta.cursor.col,
-                        body,
+                        data_var,
                         Colors::bold(usage_html.as_str())
                     );
                 }
 
                 return Directive {
-                    render_count: 1,
+                    render_count: 0,
                     props: map.to_owned(),
+                    data: vec![],
                 };
             }
         }
@@ -314,6 +352,7 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
     Directive {
         render_count: 1,
         props: usage_props,
+        data: vec![],
     }
 }
 
@@ -703,7 +742,12 @@ fn scope_component_html(code: &str, scope: &str) -> String {
     result
 }
 
-fn resolve_props(code: &str, data: &Proc, render_index: usize) -> Result<String> {
+fn resolve_props(
+    code: &str,
+    data: &Proc,
+    render_index: usize,
+    directive: &Directive,
+) -> Result<String> {
     let result = String::from(code);
 
     fn resolve(
@@ -712,9 +756,10 @@ fn resolve_props(code: &str, data: &Proc, render_index: usize) -> Result<String>
         templates: Vec<String>,
         value: &str,
         render_index: usize,
+        directive: &Directive,
     ) -> Result<String> {
         let mut result = String::new();
-        let data = data::get_data().ok().unwrap();
+        let data = directive.data.to_owned();
 
         let dquotes_template = &templates[0];
         let squotes_template = &templates[1];
@@ -736,7 +781,7 @@ fn resolve_props(code: &str, data: &Proc, render_index: usize) -> Result<String>
                     let key = line.get(start..end).unwrap();
 
                     let value_tok = format!("{value_template}{key}\")");
-                    let data_item = &data.for_each[render_index];
+                    let data_item = &data[render_index];
 
                     if let Some(val) = data_item.data.pointer(key) {
                         if let Some(data) = val.as_str() {
@@ -811,15 +856,36 @@ fn resolve_props(code: &str, data: &Proc, render_index: usize) -> Result<String>
 
             if used.meta.source.eq("directive") {
                 let value = used.value.to_owned().unwrap_or_default();
-                return resolve(result, data, prop.templates, &value, render_index);
+                return resolve(
+                    result,
+                    data,
+                    prop.templates,
+                    &value,
+                    render_index,
+                    &directive,
+                );
             }
 
             if let Some(value) = &used.value {
-                return resolve(result, data, prop.templates, value, render_index);
+                return resolve(
+                    result,
+                    data,
+                    prop.templates,
+                    value,
+                    render_index,
+                    &directive,
+                );
             }
 
             if let Some(value) = &used.default {
-                return resolve(result, data, prop.templates, &value, render_index);
+                return resolve(
+                    result,
+                    data,
+                    prop.templates,
+                    &value,
+                    render_index,
+                    &directive,
+                );
             }
         } else {
             let usage_html = data.usage_html.to_owned().unwrap_or_default();
@@ -922,7 +988,12 @@ fn fill_component_slots(c_code: &String, c_children: &str) -> String {
     return result;
 }
 
-fn resolve_component(data: &Proc, render_index: usize, is_nested: bool) -> Result<String> {
+fn resolve_component(
+    data: &Proc,
+    render_index: usize,
+    is_nested: bool,
+    directive: &Directive,
+) -> Result<String> {
     let file = &data.meta.file;
     let c_id = &data.meta.name;
     let usage_count = data.usage;
@@ -958,7 +1029,7 @@ fn resolve_component(data: &Proc, render_index: usize, is_nested: bool) -> Resul
     };
 
     // code with processed props
-    let code = resolve_props(code, &data, render_index)?;
+    let code = resolve_props(code, &data, render_index, directive)?;
 
     // now get the inner html
     let c_inner_html = consume_component_inner_html(&code);
@@ -1063,39 +1134,19 @@ fn resolve_component(data: &Proc, render_index: usize, is_nested: bool) -> Resul
 }
 
 /// Replaces the static component with the code generated
-fn transform_component(lines: &mut Lines, data: &mut Proc, is_nested: bool) -> Result<String> {
+fn transform_component(
+    lines: &mut Lines,
+    data: &mut Proc,
+    is_nested: bool,
+    directive: Directive,
+) -> Result<String> {
     // get usage html
     let usage_html = &data.usage_html.to_owned().unwrap();
     // collect all transformed lines
     let mut result = String::new();
-    // get component attributes
-    let attrs = get_attrs_inline(&data.html);
 
-    let is_fragment = if let Some(frag_attr) = attrs.get("data-fragment") {
-        frag_attr.value.as_ref().unwrap_or(&"false".to_string()) == "true"
-    } else {
-        false
-    };
-
-    // update processed data with is_fragment
-    *data.is_fragment_mut() = Some(is_fragment);
-
-    // read component props
-    let props_dict = if let Some(c_props) = attrs.get("data-props") {
-        get_props_dict(c_props.value.as_ref())
-    } else {
-        PropMap::default()
-    };
-
-    // add component props to processed data
-    *data.props_mut() = Some(props_dict);
-
-    // get usage props
-    let usage_props = get_attrs_inline(usage_html);
-    // check usage props for directives, eval them and then update processed data with the new evald props
-    let directive = evaluate_usage_directives(data, usage_props);
     // add evald props to processed data
-    *data.usage_props_mut() = Some(directive.props);
+    *data.usage_props_mut() = Some(directive.props.to_owned());
 
     // how many time should render based on a directive
     let render_count = directive.render_count;
@@ -1115,7 +1166,7 @@ fn transform_component(lines: &mut Lines, data: &mut Proc, is_nested: bool) -> R
     let is_unpaired_inline = tag_open && unpaired_close;
     if is_unpaired_inline {
         for render_index in 0..render_count {
-            let c_code = resolve_component(data, render_index, is_nested)?;
+            let c_code = resolve_component(data, render_index, is_nested, &directive)?;
             result.push_str(&c_code);
         }
 
@@ -1134,7 +1185,7 @@ fn transform_component(lines: &mut Lines, data: &mut Proc, is_nested: bool) -> R
         const UNPAIRED_CODE: i32 = 0;
         if end_match.0.eq(&UNPAIRED_CODE) {
             for render_index in 0..render_count {
-                let c_code = resolve_component(data, render_index, is_nested)?;
+                let c_code = resolve_component(data, render_index, is_nested, &directive)?;
                 result.push_str(&c_code);
             }
         }
@@ -1145,7 +1196,7 @@ fn transform_component(lines: &mut Lines, data: &mut Proc, is_nested: bool) -> R
             *data.usage_inner_html_mut() = Some(end_match.1);
 
             for render_index in 0..render_count {
-                let c_code = resolve_component(data, render_index, is_nested)?;
+                let c_code = resolve_component(data, render_index, is_nested, &directive)?;
                 result.push_str(&c_code);
             }
         }
@@ -1160,7 +1211,7 @@ fn transform_component(lines: &mut Lines, data: &mut Proc, is_nested: bool) -> R
         *data.usage_inner_html_mut() = consume_inner_html_inline(usage_html);
 
         for render_index in 0..render_count {
-            let c_html = resolve_component(data, render_index, is_nested)?;
+            let c_html = resolve_component(data, render_index, is_nested, &directive)?;
             result.push_str(&c_html);
         }
 
@@ -1492,7 +1543,34 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                 line_number.add_assign(len + 1);
             }
 
-            let transformed = transform_component(&mut lines, data, is_component)?;
+            // get component attributes
+            let attrs = get_attrs_inline(&data.html);
+
+            let is_fragment = if let Some(frag_attr) = attrs.get("data-fragment") {
+                frag_attr.value.as_ref().unwrap_or(&"false".to_string()) == "true"
+            } else {
+                false
+            };
+
+            // update processed data with is_fragment
+            *data.is_fragment_mut() = Some(is_fragment);
+
+            // read component props
+            let props_dict = if let Some(c_props) = attrs.get("data-props") {
+                get_props_dict(c_props.value.as_ref())
+            } else {
+                PropMap::default()
+            };
+
+            // add component props to processed data
+            *data.props_mut() = Some(props_dict);
+
+            // get usage props
+            let usage_props = get_attrs_inline(trimmed);
+            // check usage props for directives, eval them and then update processed data with the new evald props
+            let directive = evaluate_usage_directives(data, usage_props);
+
+            let transformed = transform_component(&mut lines, data, is_component, directive)?;
             // remove from unlisted
             unlisted.remove_entry(c_name.as_str());
 

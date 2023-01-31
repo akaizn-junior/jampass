@@ -268,4 +268,5 @@ impl Props {
 pub struct Directive {
     pub render_count: usize,
     pub props: PropMap,
+    pub data: DataEntryList,
 }

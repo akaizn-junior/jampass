@@ -19,7 +19,7 @@
             </div>
         </template>
 
-        <x-div :for-each="x in zoo">
+        <x-div :for-each="it in data">
             <div slot="content">$value("it/content")</div>
         </x-div>
     </body>
