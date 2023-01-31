@@ -738,7 +738,7 @@ fn resolve_props(code: &str, data: &Proc, render_index: usize) -> Result<String>
                     let value_tok = format!("{value_template}{key}\")");
                     let data_item = &data.for_each[render_index];
 
-                    if let Some(val) = data_item.pointer(key) {
+                    if let Some(val) = data_item.data.pointer(key) {
                         if let Some(data) = val.as_str() {
                             let replaced = line.replace(&value_tok, data);
                             result.push_str(&replaced);

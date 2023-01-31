@@ -25,10 +25,10 @@ fn eval_path_strat(p: &str, strat: Strategy, f: fn() -> Strategy) -> Strategy {
     }
 }
 
-fn strip(prefix: PathBuf, path: &PathBuf) -> &Path {
+fn strip(prefix: PathBuf, path: &PathBuf) -> Option<&Path> {
     let prefix_as_str = prefix.to_str().unwrap_or("");
     // get the file base, aka everything else but the prefix
-    path.strip_prefix(prefix_as_str).unwrap_or(Path::new("."))
+    path.strip_prefix(prefix_as_str).ok()
 }
 
 // *** INTERFACE ***
@@ -64,66 +64,34 @@ pub fn is_valid_path(path: &PathBuf) -> bool {
 }
 
 /// Recursively reads paths from a directory
-pub fn recursive_read_paths(root: PathBuf, with_data: bool) -> Result<PathList> {
-    let mut list = PathList::new();
-
-    fn inner(root: &PathBuf, list: &mut PathList, with_data: bool) {
-        let dir_entries = read_dir(root).unwrap();
-
-        dir_entries.for_each(|res| {
-            let de = res.unwrap();
-            let de_path = de.path();
-
-            if !is_valid_path(&de_path) {
-                return;
-            }
-
-            // Parse subdirectories
-            if de.file_type().is_ok() {
-                let filetype = de.file_type().unwrap();
-                if filetype.is_dir() {
-                    return inner(&de_path, list, with_data);
-                }
-            }
-
-            list.push(de_path);
-        });
-    }
-
-    inner(&root, &mut list, with_data);
-
-    Ok(list)
-}
-
-/// Reads funneled data
-pub fn read_data() -> Result<PathList> {
-    let root = env::current_dir();
+pub fn read_paths(root: PathBuf) -> Result<PathList> {
     let mut list = PathList::new();
 
     fn inner(root: &PathBuf, list: &mut PathList) {
-        let dir_entries = read_dir(root).unwrap();
+        let entries = read_dir(root).unwrap();
 
-        dir_entries.for_each(|res| {
-            let de = res.unwrap();
-            let de_path = de.path();
+        for entry in entries {
+            if let Ok(de) = entry {
+                let de_path = de.path();
 
-            if !is_data(&de_path) {
-                return;
-            }
-
-            // Parse subdirectories
-            if de.file_type().is_ok() {
-                let filetype = de.file_type().unwrap();
-                if filetype.is_dir() {
-                    return inner(&de_path, list);
+                if !is_valid_path(&de_path) {
+                    continue;
                 }
-            }
 
-            list.push(de_path);
-        });
+                // Parse subdirectories
+                if let Ok(filetype) = de.file_type() {
+                    if filetype.is_dir() {
+                        return inner(&de_path, list);
+                    }
+                }
+
+                list.push(de_path);
+            }
+        }
     }
 
     inner(&root, &mut list);
+
     Ok(list)
 }
 
@@ -166,17 +134,17 @@ pub fn prefix_with_owd(file: &PathBuf) -> PathBuf {
 
 /// Strips the cwd from the path
 pub fn strip_cwd(file: &PathBuf) -> &Path {
-    strip(env::current_dir(), file)
+    strip(env::current_dir(), file).unwrap_or(Path::new("."))
 }
 
 /// Strips the original CWD aka crate CWD from the path
 pub fn strip_crate_cwd(file: &PathBuf) -> &Path {
-    strip(env::crate_cwd(), file)
+    strip(env::crate_cwd(), file).unwrap_or(Path::new("."))
 }
 
 /// Strips the data dir from the path
 pub fn strip_data_dir(file: &PathBuf) -> &Path {
-    strip(env::data_dir(), file)
+    strip(env::data_dir(), file).unwrap_or(strip_cwd(file))
 }
 
 /// Strips the cwd or the known src path from the given path.
@@ -186,7 +154,7 @@ pub fn strip_cwd_for_output(file: &PathBuf) -> &Path {
 
     if file.starts_with(&src_path) {
         // strip the known src path
-        return strip(env::src_dir(), file);
+        return strip(env::src_dir(), file).unwrap_or(Path::new("."));
     }
 
     return strip_cwd(&file);
@@ -218,8 +186,8 @@ pub fn is_data(file: &PathBuf) -> bool {
     is_data_dir
 }
 
-/// Check if the file is inside the data dir
-pub fn is_data_dir(file: &PathBuf) -> bool {
-    let data = env::data_dir();
-    file.starts_with(data)
-}
+// Check if the file is inside the data dir
+// pub fn is_data_dir(file: &PathBuf) -> bool {
+//     let data = env::data_dir();
+//     file.starts_with(data)
+// }

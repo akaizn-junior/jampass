@@ -13,14 +13,14 @@
 
         <template id="x-div" data-props="it">
             <div>
-                <b>$value("it/name")</b>
+                <b>$value("it/slug")</b>
                 <b>$value("it/meta/filename")</b>
                 <slot name="content"></slot>
             </div>
         </template>
 
-        <x-div :for-each="it">
-            <div slot="content">$value("ite/content")</div>
+        <x-div :for-each="x in zoo">
+            <div slot="content">$value("it/content")</div>
         </x-div>
     </body>
 

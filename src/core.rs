@@ -20,7 +20,7 @@ use crate::{
 /// Read file paths from the source folder
 fn read_src_path(root: &str) -> Result<PathList> {
     let custom_src = path::canonical(root)?;
-    let paths = path::recursive_read_paths(custom_src, false)?;
+    let paths = path::read_paths(custom_src)?;
     Ok(paths)
 }
 

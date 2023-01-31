@@ -1,5 +1,5 @@
 use crate::statica::statica_c::SP;
-use serde_json::{to_string_pretty, Map, Value};
+use serde_json::{to_string_pretty, Value};
 use std::{collections::HashMap, ops::AddAssign, path::PathBuf};
 
 pub struct FileMeta<'m> {
@@ -8,9 +8,26 @@ pub struct FileMeta<'m> {
     pub raw: String,
 }
 
+pub type DataEntryList = Vec<DataEntry>;
+
+#[derive(Debug, Default, Clone)]
+pub struct DataEntry {
+    pub file: PathBuf,
+    pub data: Value,
+}
+
+impl DataEntry {
+    pub fn new(file: PathBuf, data: Value) -> Self {
+        Self { file, data }
+    }
+
+    // pub fn to_string(self) -> String {
+    //     format!("\nfile: {:?}\ndata: {:?}", self.file, self.data)
+    // }
+}
+
 pub struct Data {
-    pub for_each: Vec<Value>,
-    pub for_query: Map<String, Value>,
+    pub for_each: Vec<DataEntry>,
     pub length: usize,
 }
 
@@ -20,7 +37,7 @@ impl Data {
         res.push_str("[");
 
         for val in self.for_each.iter() {
-            let formatted = format!("\n{}", to_string_pretty(val).ok().unwrap_or_default());
+            let formatted = format!("\n{}", to_string_pretty(&val.data).ok().unwrap_or_default());
             res.push_str(&formatted);
         }
 
