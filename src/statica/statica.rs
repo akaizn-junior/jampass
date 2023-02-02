@@ -263,6 +263,8 @@ fn evaluate_props(
 
 /// Evaluates component directives and passes directive props to the list of props
 fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
+    println!("DIRECTIVE");
+
     let props_dict = proc.props.to_owned().unwrap_or_default();
 
     if let Ok(data) = data::get_data() {
@@ -1134,16 +1136,38 @@ fn resolve_component(
 }
 
 /// Replaces the static component with the code generated
-fn transform_component(
-    lines: &mut Lines,
-    data: &mut Proc,
-    is_nested: bool,
-    directive: Directive,
-) -> Result<String> {
+fn transform_component(lines: &mut Lines, data: &mut Proc, is_nested: bool) -> Result<String> {
     // get usage html
     let usage_html = &data.usage_html.to_owned().unwrap();
     // collect all transformed lines
     let mut result = String::new();
+
+    // get component attributes
+    let component_attrs = get_attrs_inline(&data.html);
+
+    let is_fragment = if let Some(frag_attr) = component_attrs.get("data-fragment") {
+        frag_attr.value.as_ref().unwrap_or(&"false".to_string()) == "true"
+    } else {
+        false
+    };
+
+    // update processed data with is_fragment
+    *data.is_fragment_mut() = Some(is_fragment);
+
+    // read component props
+    let props_dict = if let Some(c_props) = component_attrs.get("data-props") {
+        get_props_dict(c_props.value.as_ref())
+    } else {
+        PropMap::default()
+    };
+
+    // add component props to processed data
+    *data.props_mut() = Some(props_dict);
+
+    // get usage props
+    let usage_props = get_attrs_inline(usage_html);
+    // check usage props for directives, eval them and then update processed data with the new evald props
+    let directive = evaluate_usage_directives(data, usage_props);
 
     // add evald props to processed data
     *data.usage_props_mut() = Some(directive.props.to_owned());
@@ -1543,34 +1567,7 @@ pub fn transform(code: &String, file: &PathBuf) -> Result<TransformOutput> {
                 line_number.add_assign(len + 1);
             }
 
-            // get component attributes
-            let attrs = get_attrs_inline(&data.html);
-
-            let is_fragment = if let Some(frag_attr) = attrs.get("data-fragment") {
-                frag_attr.value.as_ref().unwrap_or(&"false".to_string()) == "true"
-            } else {
-                false
-            };
-
-            // update processed data with is_fragment
-            *data.is_fragment_mut() = Some(is_fragment);
-
-            // read component props
-            let props_dict = if let Some(c_props) = attrs.get("data-props") {
-                get_props_dict(c_props.value.as_ref())
-            } else {
-                PropMap::default()
-            };
-
-            // add component props to processed data
-            *data.props_mut() = Some(props_dict);
-
-            // get usage props
-            let usage_props = get_attrs_inline(trimmed);
-            // check usage props for directives, eval them and then update processed data with the new evald props
-            let directive = evaluate_usage_directives(data, usage_props);
-
-            let transformed = transform_component(&mut lines, data, is_component, directive)?;
+            let transformed = transform_component(&mut lines, data, is_component)?;
             // remove from unlisted
             unlisted.remove_entry(c_name.as_str());
 
