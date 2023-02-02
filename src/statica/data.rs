@@ -58,12 +58,12 @@ fn get_json_value(meta: FileMeta, content: String, data: Value) -> Value {
     json!({
         "meta": {
             "filename": meta.filename,
-            "raw_content": null //meta.raw
+            "raw_content": meta.raw
         },
         "name": meta.name,
         "slug": slugify(meta.name),
-        "content": null, //content,
-        "data": null// data
+        "content": content,
+        "data": data
     })
 }
 
