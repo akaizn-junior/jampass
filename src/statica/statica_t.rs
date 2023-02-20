@@ -1,5 +1,5 @@
 use crate::statica::statica_c::SP;
-use serde_json::{to_string_pretty, Value};
+use serde_json::Value;
 use std::{collections::HashMap, ops::AddAssign, path::PathBuf};
 
 pub struct FileMeta<'m> {
@@ -8,9 +8,7 @@ pub struct FileMeta<'m> {
     pub raw: String,
 }
 
-pub type DataEntryList = Vec<DataEntry>;
-
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct DataEntry {
     pub file: PathBuf,
     pub data: Value,
@@ -26,24 +24,12 @@ impl DataEntry {
     // }
 }
 
+pub type DataEntryList = Vec<DataEntry>;
+pub type DataMap = HashMap<String, DataEntryList>;
+
 pub struct Data {
-    pub for_each: Vec<DataEntry>,
+    pub values: DataMap,
     pub length: usize,
-}
-
-impl Data {
-    pub fn _list_to_string(&self) -> String {
-        let mut res = String::new();
-        res.push_str("[");
-
-        for val in self.for_each.iter() {
-            let formatted = format!("\n{}", to_string_pretty(&val.data).ok().unwrap_or_default());
-            res.push_str(&formatted);
-        }
-
-        res.push_str("]");
-        return res;
-    }
 }
 
 /// Content checksum Type

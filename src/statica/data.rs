@@ -3,14 +3,17 @@ use serde_json::{from_str, json, Result as SerdeJsonResult, Value};
 use gray_matter::engine::YAML;
 use gray_matter::Matter;
 
-use crate::core_t::Result;
 use crate::env;
-use crate::statica::statica_t::{Data, DataEntry, DataEntryList, FileMeta};
+use crate::statica::{
+    statica_c::{NL, SP},
+    statica_t::{Data, DataEntry, DataMap, FileMeta},
+};
+
 use crate::util::path;
 
 use std::{
     fs::{read_dir, read_to_string},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 fn get_data_file_name(file: &PathBuf) -> &str {
@@ -49,9 +52,9 @@ fn get_file_meta<'m>(file: &'m PathBuf) -> Option<FileMeta<'m>> {
 
 fn slugify(name: &str) -> String {
     String::from(name)
-        .replace(" ", "-")
+        .replace(SP, "-")
         .replace("/", "-")
-        .replace("\n", "-")
+        .replace(NL, "-")
 }
 
 fn get_json_value(meta: FileMeta, content: String, data: Value) -> Value {
@@ -104,10 +107,10 @@ fn get_data_as_object(file: &PathBuf) -> Value {
 }
 
 /// Reads funneled data
-fn read_data() -> Result<DataEntryList> {
+fn read_data() -> DataMap {
     let root = env::current_dir();
 
-    fn inner(root: &PathBuf, list: &mut DataEntryList) {
+    fn inner(root: &PathBuf, data: &mut DataMap) -> DataMap {
         let dir_entry = read_dir(root).unwrap();
 
         for entry in dir_entry {
@@ -118,41 +121,67 @@ fn read_data() -> Result<DataEntryList> {
                     continue;
                 }
 
+                fn get_key(p: &PathBuf) -> String {
+                    let data_item_path = path::strip_data_dir(&p).to_path_buf();
+                    let key = data_item_path.to_str().unwrap_or_default();
+                    key.split("/").last().unwrap_or_default().to_string()
+                }
+
                 // Parse subdirectories
                 if let Ok(filetype) = de.file_type() {
                     if filetype.is_dir() {
-                        inner(&de_path, list);
+                        let mut result = inner(&de_path, data);
+
+                        let parent = de_path.parent().unwrap_or(Path::new(".")).to_path_buf();
+                        let pkey = get_key(&parent);
+                        let key = get_key(&de_path);
+
+                        let def = &mut vec![];
+                        let r_list = result.get_mut(&key).unwrap_or(def);
+
+                        // get the parent list and append chidlren data to it
+                        if let Some(list) = data.get_mut(&pkey) {
+                            // only append children data if it does not already exist
+                            for item in r_list {
+                                if !list.contains(item) {
+                                    list.push(item.to_owned())
+                                }
+                            }
+                        } else {
+                            // if parent list does not exis, create it
+                            data.insert(pkey, r_list.to_owned());
+                        }
                     } else {
                         let data_as_object = get_data_as_object(&de_path);
                         let data_item_path = path::strip_data_dir(&de_path).to_path_buf();
-                        let v = DataEntry::new(data_item_path, data_as_object);
-                        list.push(v);
+                        let value = DataEntry::new(data_item_path.to_owned(), data_as_object);
+
+                        let parent = de_path.parent().unwrap_or(Path::new(".")).to_path_buf();
+                        let key = get_key(&parent);
+
+                        if let Some(list) = data.get_mut(&key) {
+                            list.push(value);
+                        } else {
+                            data.insert(key.to_string(), vec![value]);
+                        }
                     }
                 }
             }
         }
+
+        return data.to_owned();
     }
 
-    let mut list = DataEntryList::new();
-    inner(&root, &mut list);
-
-    Ok(list)
+    inner(&root, &mut DataMap::new())
 }
 
 // *** Interface ***
 
 pub fn get_data() -> SerdeJsonResult<Data> {
-    let list = &mut vec![];
-
-    if let Some(data) = read_data().ok() {
-        return Ok(Data {
-            for_each: data.to_owned(),
-            length: data.len(),
-        });
-    }
+    let data = read_data();
 
     Ok(Data {
-        for_each: list.to_owned(),
-        length: list.len(),
+        values: data.to_owned(),
+        length: data.values().len(),
     })
 }

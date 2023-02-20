@@ -29,11 +29,9 @@ use crate::{
     util::path,
 };
 
-use super::statica_t::DataEntryList;
-
 // *** HELPERS ***
 
-/// Should be a valid uncomment line containing a given token
+/// Should be a valid uncommented line containing a given token
 fn is_uncommented(line: &str, token: &str, check: fn(&str, &str) -> bool) -> bool {
     let trimmed = line.trim_start();
     // the default values here dont matter, they are set so that we can unwrap the values in place
@@ -263,8 +261,6 @@ fn evaluate_props(
 
 /// Evaluates component directives and passes directive props to the list of props
 fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
-    println!("DIRECTIVE");
-
     let props_dict = proc.props.to_owned().unwrap_or_default();
 
     if let Ok(data) = data::get_data() {
@@ -293,7 +289,6 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
                 // directive values, the var should be an actual string
                 let data_var = data_var.unwrap().trim();
                 // and the bin may be empty, to indicate, use all data
-                // let data_bin = body.next().and_then(|s| Some(s.trim().to_string()));
                 let data_bin = body.next().unwrap_or_default().trim();
 
                 // create an actual prop with the data from the directive body
@@ -310,25 +305,13 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
 
                 // check if the prop is in the component's props definition
                 if props_dict.contains_key(data_var) {
-                    let bin: DataEntryList = data
-                        .for_each
-                        .into_iter()
-                        .filter(|item| {
-                            let dir = item.file.parent();
-
-                            if let Some(dir) = dir {
-                                return dir.to_str().unwrap().contains(data_bin);
-                            }
-
-                            return false;
-                        })
-                        .collect();
-
-                    return Directive {
-                        render_count: bin.len(),
-                        props: map.to_owned(),
-                        data: bin,
-                    };
+                    if let Some(bin) = data.values.get(data_bin) {
+                        return Directive {
+                            render_count: bin.len(),
+                            props: map.to_owned(),
+                            data: bin.to_owned(),
+                        };
+                    }
                 } else {
                     let usage_html = proc.usage_html.to_owned().unwrap_or_default();
                     println!(

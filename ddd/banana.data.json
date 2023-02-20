@@ -1,4 +1,5 @@
 {
     "foo": "bar",
-    "banana": "rama"
+    "banana": "rama",
+    "fruits": ["Banana", "Papaia", "Ananas", "Orange", "Mango"]
 }
