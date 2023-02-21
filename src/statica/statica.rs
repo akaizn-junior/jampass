@@ -838,7 +838,7 @@ fn resolve_props(
 
                     let value_tok = format!("{value_template}{key}\")");
 
-                    match directive.data.clone() {
+                    match &directive.data {
                         DataKind::EntryList(data) => {
                             let data_item = &data[render_index];
                             let prop_data = data_item.data.pointer(key);
