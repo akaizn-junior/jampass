@@ -10,13 +10,18 @@ pub struct FileMeta<'m> {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct DataEntry {
+    pub name: String,
     pub file: PathBuf,
     pub data: Value,
 }
 
 impl DataEntry {
-    pub fn new(file: PathBuf, data: Value) -> Self {
-        Self { file, data }
+    pub fn new(name: &str, file: PathBuf, data: Value) -> Self {
+        Self {
+            name: name.to_string(),
+            file,
+            data,
+        }
     }
 
     // pub fn to_string(self) -> String {
@@ -251,8 +256,15 @@ impl Props {
     }
 }
 
+#[derive(Clone)]
+pub enum DataKind {
+    EntryList(DataEntryList),
+    ValueList(Vec<Value>),
+}
+
+#[derive(Clone)]
 pub struct Directive {
     pub render_count: usize,
     pub props: PropMap,
-    pub data: DataEntryList,
+    pub data: DataKind,
 }

@@ -1,4 +1,6 @@
 use adler::adler32_slice;
+use serde_json::Value;
+
 use std::{
     collections::HashMap,
     fs::read_to_string,
@@ -22,8 +24,8 @@ use crate::{
             TEMPLATE_END_TOKEN, TEMPLATE_START_TOKEN, UNPAIRED_TAG_CLOSE_TOKEN,
         },
         statica_t::{
-            Checksum, Cursor, Directive, Linked, Meta, Proc, Prop, PropMap, PropMeta, Props,
-            ScopedSelector, TransformOutput, Unlisted,
+            Checksum, Cursor, DataKind, Directive, Linked, Meta, Proc, Prop, PropMap, PropMeta,
+            Props, ScopedSelector, TransformOutput, Unlisted,
         },
     },
     util::path,
@@ -282,7 +284,7 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
                     return Directive {
                         render_count: 0,
                         props: map.to_owned(),
-                        data: vec![],
+                        data: DataKind::EntryList(vec![]),
                     };
                 }
 
@@ -290,6 +292,8 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
                 let data_var = data_var.unwrap().trim();
                 // and the bin may be empty, to indicate, use all data
                 let data_bin = body.next().unwrap_or_default().trim();
+                // read a possible single file where the data is coming from
+                let data_source = body.next().unwrap_or_default().trim();
 
                 // create an actual prop with the data from the directive body
                 let mut new_prop = Prop::new(data_var);
@@ -303,13 +307,42 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
                 // add new prop to the map
                 map.insert(data_var.to_string(), new_prop);
 
+                if !data_source.is_empty() {
+                    // get all data
+                    if let Some(all) = data.values.get("") {
+                        let dataset = all.into_iter().find(|de| de.name.eq(&data_source));
+
+                        if let Some(dataset) = dataset {
+                            let bin_key = format!("/data/{data_bin}");
+                            let bin = dataset.data.pointer(&bin_key);
+
+                            if let Some(bin) = bin {
+                                if bin.is_array() {
+                                    let array = bin.as_array().unwrap();
+                                    return Directive {
+                                        render_count: array.len(),
+                                        props: map.to_owned(),
+                                        data: DataKind::ValueList(array.to_owned()),
+                                    };
+                                }
+                            }
+                        }
+
+                        return Directive {
+                            render_count: 0,
+                            props: map.to_owned(),
+                            data: DataKind::EntryList(vec![]),
+                        };
+                    }
+                }
+
                 // check if the prop is in the component's props definition
                 if props_dict.contains_key(data_var) {
                     if let Some(bin) = data.values.get(data_bin) {
                         return Directive {
                             render_count: bin.len(),
                             props: map.to_owned(),
-                            data: bin.to_owned(),
+                            data: DataKind::EntryList(bin.to_owned()),
                         };
                     }
                 } else {
@@ -328,7 +361,7 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
                 return Directive {
                     render_count: 0,
                     props: map.to_owned(),
-                    data: vec![],
+                    data: DataKind::EntryList(vec![]),
                 };
             }
         }
@@ -337,7 +370,7 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
     Directive {
         render_count: 1,
         props: usage_props,
-        data: vec![],
+        data: DataKind::EntryList(vec![]),
     }
 }
 
@@ -735,6 +768,32 @@ fn resolve_props(
 ) -> Result<String> {
     let result = String::from(code);
 
+    fn handle_prop_data(
+        proc: &Proc,
+        prop_data: Option<&Value>,
+        value_tok: String,
+        result: &mut String,
+        line: &str,
+    ) {
+        if let Some(val) = prop_data {
+            if let Some(data) = val.as_str() {
+                let replaced = line.replace(&value_tok, data);
+                result.push_str(&replaced);
+                result.push_str(NL);
+            }
+        } else {
+            println!(
+                "\n{}{SP}{}:{}:{}\nundefined value {:?}\n|\n|>{SP}{}\n|\n",
+                Emoji::FLAG,
+                no_cwd_path_as_str(&proc.meta.file),
+                proc.meta.cursor.line,
+                proc.meta.cursor.col,
+                value_tok,
+                Colors::bold(line)
+            );
+        }
+    }
+
     fn resolve(
         code: String,
         proc: &Proc,
@@ -744,7 +803,6 @@ fn resolve_props(
         directive: &Directive,
     ) -> Result<String> {
         let mut result = String::new();
-        let data = directive.data.to_owned();
 
         let dquotes_template = &templates[0];
         let squotes_template = &templates[1];
@@ -766,24 +824,18 @@ fn resolve_props(
                     let key = line.get(start..end).unwrap();
 
                     let value_tok = format!("{value_template}{key}\")");
-                    let data_item = &data[render_index];
 
-                    if let Some(val) = data_item.data.pointer(key) {
-                        if let Some(data) = val.as_str() {
-                            let replaced = line.replace(&value_tok, data);
-                            result.push_str(&replaced);
-                            result.push_str(NL);
+                    match directive.data.clone() {
+                        DataKind::EntryList(data) => {
+                            let data_item = &data[render_index];
+                            let prop_data = data_item.data.pointer(key);
+                            handle_prop_data(proc, prop_data, value_tok, &mut result, line);
                         }
-                    } else {
-                        println!(
-                            "\n{}{SP}{}:{}:{}\nundefined value {:?} did not find prop name\n|\n|>{SP}{}\n|\n",
-                            Emoji::FLAG,
-                            no_cwd_path_as_str(&proc.meta.file),
-                            proc.meta.cursor.line,
-                            proc.meta.cursor.col,
-                            value_tok,
-                            Colors::bold(line)
-                        );
+                        DataKind::ValueList(data) => {
+                            let data_item = &data[render_index];
+                            let prop_data = data_item.pointer(key);
+                            handle_prop_data(proc, prop_data, value_tok, &mut result, line);
+                        }
                     }
                 }
 

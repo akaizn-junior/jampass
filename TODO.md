@@ -2,3 +2,4 @@
 - [x] revise component script logic, a component's script only applies to one usage of the component
 - [x] revise watch logic, when watch happens the source is generated but there are still bugs
 - [] Add explanation for closing static tags with "/>" statica is foreign content in html, "/>" do close the tag, users should rely on it for closing actual HTML, because browsers ignore the / before the >
+- [] loop items in an array inside a json file

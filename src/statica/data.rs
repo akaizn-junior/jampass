@@ -154,10 +154,13 @@ fn read_data() -> DataMap {
                     } else {
                         let data_as_object = get_data_as_object(&de_path);
                         let data_item_path = path::strip_data_dir(&de_path).to_path_buf();
-                        let value = DataEntry::new(data_item_path.to_owned(), data_as_object);
 
                         let parent = de_path.parent().unwrap_or(Path::new(".")).to_path_buf();
                         let key = get_key(&parent);
+
+                        let data_name = get_data_file_name(&data_item_path);
+                        let value =
+                            DataEntry::new(data_name, data_item_path.to_owned(), data_as_object);
 
                         if let Some(list) = data.get_mut(&key) {
                             list.push(value);
