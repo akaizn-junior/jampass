@@ -81,11 +81,11 @@ pub fn read_paths(root: PathBuf) -> Result<PathList> {
                 // Parse subdirectories
                 if let Ok(filetype) = de.file_type() {
                     if filetype.is_dir() {
-                        return inner(&de_path, list);
+                        inner(&de_path, list);
+                    } else {
+                        list.push(de_path);
                     }
                 }
-
-                list.push(de_path);
             }
         }
     }
@@ -186,8 +186,12 @@ pub fn is_data(file: &PathBuf) -> bool {
     is_data_dir
 }
 
-// Check if the file is inside the data dir
-// pub fn is_data_dir(file: &PathBuf) -> bool {
-//     let data = env::data_dir();
-//     file.starts_with(data)
+// /// Evaluates template filename
+// fn eval_template_name(file: &PathBuf) {
+//     let filename = file.file_name();
+
+//     if let Some(name) = filename {
+//         let name = name.to_str().unwrap_or_default();
+//         println!("name {:?}", name);
+//     }
 // }
