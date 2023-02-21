@@ -1,41 +1,47 @@
 {
     "foo": "bar",
     "banana": "rama",
-    "fruits": [
-        {
-            "meta": {
-                "filename": "Banana file"
-            },
-            "content": "Banana",
-            "slug": "banana"
-        },
-        {
-            "meta": {
-                "filename": "Papaia file"
-            },
-            "content": "Papaia",
-            "slug": "papaia"
-        },
-        {
-            "meta": {
-                "filename": "Ananas file"
-            },
-            "content": "Ananas",
-            "slug": "ananas"
-        },
-        {
-            "meta": {
-                "filename": "Orange file"
-            },
-            "content": "Orange",
-            "slug": "orange"
-        },
-        {
-            "meta": {
-                "filename": "Mango file"
-            },
-            "content": "Mango",
-            "slug": "mango"
+    "zoo": {
+        "car": {
+            "zar": {
+                "fruits": [
+                    {
+                        "meta": {
+                            "filename": "Banana file"
+                        },
+                        "content": "Banana",
+                        "slug": "banana"
+                    },
+                    {
+                        "meta": {
+                            "filename": "Papaia file"
+                        },
+                        "content": "Papaia",
+                        "slug": "papaia"
+                    },
+                    {
+                        "meta": {
+                            "filename": "Ananas file"
+                        },
+                        "content": "Ananas",
+                        "slug": "ananas"
+                    },
+                    {
+                        "meta": {
+                            "filename": "Orange file"
+                        },
+                        "content": "Orange",
+                        "slug": "orange"
+                    },
+                    {
+                        "meta": {
+                            "filename": "Mango file"
+                        },
+                        "content": "Mango",
+                        "slug": "mango"
+                    }
+                ]
+            }
         }
-    ]
+    }
 }

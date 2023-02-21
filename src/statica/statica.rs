@@ -310,7 +310,7 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
                 if !data_source.is_empty() {
                     // get all data
                     if let Some(all) = data.values.get("") {
-                        let dataset = all.into_iter().find(|de| de.name.eq(&data_source));
+                        let dataset = all.iter().find(|de| de.name.eq(&data_source));
 
                         if let Some(dataset) = dataset {
                             let bin_key = format!("/data/{data_bin}");
@@ -325,6 +325,19 @@ fn evaluate_usage_directives(proc: &Proc, usage_props: PropMap) -> Directive {
                                         data: DataKind::ValueList(array.to_owned()),
                                     };
                                 }
+                            } else {
+                                let usage_html = proc.usage_html.to_owned().unwrap_or_default();
+
+                                println!(
+                                    "\n{}{SP}{}:{}:{}\nundefined bin {:?} in file {:?}\n|\n|>{SP}{}\n|\n",
+                                    Emoji::FLAG,
+                                    no_cwd_path_as_str(&proc.meta.file),
+                                    proc.meta.cursor.line,
+                                    proc.meta.cursor.col,
+                                    data_bin,
+                                    data_source,
+                                    Colors::bold(usage_html.as_str())
+                                );
                             }
                         }
 
